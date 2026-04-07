@@ -1,0 +1,147 @@
+//! Server settings, damage settings, and home position models.
+//!
+//! C++ Reference: `_SERVER_SETTING`, `_DAMAGE_SETTING` in `GameDefine.h`
+//! Source: MSSQL `SERVER_SETTINGS`, `DAMAGE_SETTINGS`, `HOME` tables
+
+/// Server-wide configuration (single row).
+///
+/// C++ Reference: `_SERVER_SETTING` struct in `GameDefine.h:3859`
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ServerSettingsRow {
+    pub server_no: i16,
+    pub maximum_level: i16,
+    pub drop_notice: i16,
+    pub upgrade_notice: i16,
+    pub user_max_upgrade: i16,
+    pub merchant_view: i16,
+    pub clan_bank_premium: i16,
+    pub auto_royal_g1: i16,
+    pub auto_basic_skill: i16,
+    pub auto_master_skill: i16,
+    pub auto_quest_skill: i16,
+    pub auto_wanted: i16,
+    pub loot_genie_premium: i16,
+    pub merchant_min_cash: i16,
+    pub trash_item: bool,
+    pub online_give_cash: bool,
+    pub online_cash_time: i32,
+    pub flash_time: i32,
+    pub free_skill_stat: i16,
+    pub merchant_level: i16,
+    pub trade_level: i16,
+    pub chaotic_coins: i32,
+    pub mute_level: i16,
+    pub monsterstone_status: bool,
+    pub new_monsterstone: i16,
+    pub etrafa_item1: i32,
+    pub etrafa_count1: i32,
+    pub etrafa_item2: i32,
+    pub etrafa_count2: i32,
+    pub etrafa_item3: i32,
+    pub etrafa_count3: i32,
+    pub max_player_hp: i16,
+    pub welcome_msg: String,
+    pub perk_coins: i32,
+    pub premium_id: i16,
+    pub premium_time: i16,
+    pub max_blessing_up: i16,
+    pub max_blessing_up_reb: i16,
+    pub give_genie_hour: i16,
+    pub game_version: i16,
+    pub patch_url: String,
+    pub patch_path: String,
+}
+
+/// Damage balance multipliers (single row).
+///
+/// All values are `f32` multipliers applied to base damage.
+/// Naming: `attacker_to_target` (e.g. `warrior_to_rogue`).
+///
+/// C++ Reference: `_DAMAGE_SETTING` struct in `GameDefine.h:293`
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct DamageSettingsRow {
+    pub id: i32,
+    // Class vs class PvP
+    pub priest_to_warrior: f32,
+    pub priest_to_mage: f32,
+    pub priest_to_priest: f32,
+    pub priest_to_rogue: f32,
+    pub priest_to_kurian: f32,
+    pub warrior_to_rogue: f32,
+    pub warrior_to_mage: f32,
+    pub warrior_to_warrior: f32,
+    pub warrior_to_priest: f32,
+    pub warrior_to_kurian: f32,
+    pub rogue_to_mage: f32,
+    pub rogue_to_warrior: f32,
+    pub rogue_to_rogue: f32,
+    pub rogue_to_priest: f32,
+    pub rogue_to_kurian: f32,
+    pub kurian_to_mage: f32,
+    pub kurian_to_warrior: f32,
+    pub kurian_to_rogue: f32,
+    pub kurian_to_priest: f32,
+    pub kurian_to_kurian: f32,
+    pub mage_to_warrior: f32,
+    pub mage_to_mage: f32,
+    pub mage_to_priest: f32,
+    pub mage_to_rogue: f32,
+    pub mage_to_kurian: f32,
+    // Monster multipliers
+    pub mon_def: f32,
+    pub mon_take_damage: f32,
+    pub mage_magic_damage: f32,
+    // Item class multipliers
+    pub unique_item: f32,
+    pub low_class_item: f32,
+    pub middle_class_item: f32,
+    pub high_class_item: f32,
+    pub rare_item: f32,
+    pub magic_item: f32,
+    // R-attack damage
+    pub r_damage: f32,
+}
+
+/// Per-nation home/respawn coordinates by zone type.
+///
+/// Source: MSSQL `HOME` table (2 rows: nation 1=Karus, 2=Elmorad)
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct HomeRow {
+    pub nation: i16,
+    pub elmo_zone_x: i16,
+    pub elmo_zone_z: i16,
+    pub elmo_zone_lx: i16,
+    pub elmo_zone_lz: i16,
+    pub karus_zone_x: i16,
+    pub karus_zone_z: i16,
+    pub karus_zone_lx: i16,
+    pub karus_zone_lz: i16,
+    pub free_zone_x: i16,
+    pub free_zone_z: i16,
+    pub free_zone_lx: i16,
+    pub free_zone_lz: i16,
+    pub battle_zone_x: i16,
+    pub battle_zone_z: i16,
+    pub battle_zone_lx: i16,
+    pub battle_zone_lz: i16,
+    pub battle_zone2_x: i16,
+    pub battle_zone2_z: i16,
+    pub battle_zone2_lx: i16,
+    pub battle_zone2_lz: i16,
+    pub battle_zone3_x: i16,
+    pub battle_zone3_z: i16,
+    pub battle_zone3_lx: i16,
+    pub battle_zone3_lz: i16,
+    pub battle_zone4_x: i16,
+    pub battle_zone4_z: i16,
+    pub battle_zone4_lx: i16,
+    pub battle_zone4_lz: i16,
+    pub battle_zone5_x: i16,
+    pub battle_zone5_z: i16,
+    pub battle_zone5_lx: i16,
+    pub battle_zone5_lz: i16,
+    pub battle_zone6_x: i16,
+    pub battle_zone6_z: i16,
+    pub battle_zone6_lx: i16,
+    pub battle_zone6_lz: i16,
+}

@@ -1,0 +1,22 @@
+[package]
+name = "ko-game"
+version.workspace = true
+edition.workspace = true
+description = "Game logic, session management, and packet handlers for the Knight Online server"
+
+[dependencies]
+ko-core = { workspace = true }
+ko-protocol = { workspace = true }
+ko-db = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+dashmap = { workspace = true }
+parking_lot = { workspace = true }
+smallvec = { workspace = true }
+chrono = { workspace = true }
+rand = { workspace = true }
+mlua = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }

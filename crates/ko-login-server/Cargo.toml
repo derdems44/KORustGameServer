@@ -1,0 +1,21 @@
+[package]
+name = "ko-login-server"
+version.workspace = true
+edition.workspace = true
+description = "Login server binary for the Knight Online Rust server"
+
+[[bin]]
+name = "ko-login-server"
+path = "src/main.rs"
+
+[dependencies]
+ko-core = { workspace = true }
+ko-protocol = { workspace = true }
+ko-db = { workspace = true }
+ko-game = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }

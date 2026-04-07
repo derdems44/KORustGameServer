@@ -1,0 +1,16 @@
+[package]
+name = "ko-quest-gen"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "ko-quest-gen"
+path = "src/main.rs"
+
+[dependencies]
+ko-quest-audit = { path = "../ko-quest-audit" }
+ko-tbl-import = { path = "../ko-tbl-import" }
+anyhow = { workspace = true }
+clap = { version = "4", features = ["derive", "env"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

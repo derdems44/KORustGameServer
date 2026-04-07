@@ -1,0 +1,87 @@
+# syntax=docker/dockerfile:1
+# ── Stage 1: Build ────────────────────────────────────────────────────────────
+# Unified server: login + game in a single binary (ko-server)
+FROM rust:1.93-bookworm AS builder
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+
+# Copy workspace manifest + lock
+COPY Cargo.toml Cargo.lock ./
+
+# Copy ALL crate manifests for dependency resolution
+COPY crates/ko-core/Cargo.toml crates/ko-core/Cargo.toml
+COPY crates/ko-protocol/Cargo.toml crates/ko-protocol/Cargo.toml
+COPY crates/ko-db/Cargo.toml crates/ko-db/Cargo.toml
+COPY crates/ko-game/Cargo.toml crates/ko-game/Cargo.toml
+COPY crates/ko-server/Cargo.toml crates/ko-server/Cargo.toml
+COPY crates/ko-login-server/Cargo.toml crates/ko-login-server/Cargo.toml
+COPY crates/ko-game-server/Cargo.toml crates/ko-game-server/Cargo.toml
+COPY crates/ko-tbl-import/Cargo.toml crates/ko-tbl-import/Cargo.toml
+COPY crates/ko-quest-audit/Cargo.toml crates/ko-quest-audit/Cargo.toml
+COPY crates/ko-quest-gen/Cargo.toml crates/ko-quest-gen/Cargo.toml
+
+# Dummy sources for dependency pre-build
+RUN mkdir -p crates/ko-core/src && echo "" > crates/ko-core/src/lib.rs && \
+    mkdir -p crates/ko-protocol/src && echo "" > crates/ko-protocol/src/lib.rs && \
+    mkdir -p crates/ko-db/src && echo "" > crates/ko-db/src/lib.rs && \
+    mkdir -p crates/ko-game/src && echo "" > crates/ko-game/src/lib.rs && \
+    mkdir -p crates/ko-server/src && echo "fn main(){}" > crates/ko-server/src/main.rs && \
+    mkdir -p crates/ko-login-server/src && echo "fn main(){}" > crates/ko-login-server/src/main.rs && \
+    mkdir -p crates/ko-game-server/src && echo "fn main(){}" > crates/ko-game-server/src/main.rs && \
+    mkdir -p crates/ko-tbl-import/src && echo "fn main(){}" > crates/ko-tbl-import/src/main.rs && \
+    mkdir -p crates/ko-quest-audit/src && echo "" > crates/ko-quest-audit/src/lib.rs && \
+    mkdir -p crates/ko-quest-gen/src && echo "fn main(){}" > crates/ko-quest-gen/src/main.rs
+
+# Pre-build dependencies with BuildKit cache (survives between deploys)
+ENV CARGO_BUILD_JOBS=2
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target \
+    cargo build --release -p ko-server 2>/dev/null || true
+
+# Copy real source + game data
+COPY crates/ crates/
+COPY Quests/ Quests/
+COPY Map/ Map/
+
+# Build with cached target dir — only changed crates recompile
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target \
+    find crates -name "*.rs" -exec touch {} + && \
+    cargo build --release -p ko-server && \
+    cp /build/target/release/ko-server /build/ko-server
+
+# ── Stage 2: Minimal runtime ─────────────────────────────────────────────────
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --shell /bin/bash koserver
+WORKDIR /opt/koserver
+
+# Single binary (copied from outside cache mount)
+COPY --from=builder --chown=koserver:koserver /build/ko-server ./ko-server
+
+# Migrations (sqlx runtime migrate)
+COPY --chown=koserver:koserver crates/ko-db/migrations/ ./migrations/
+
+# Game data
+COPY --chown=koserver:koserver Quests/ ./Quests/
+COPY --chown=koserver:koserver Map/ ./Map/
+
+USER koserver
+
+ENV RUST_LOG=info \
+    DATABASE_URL=postgresql://$DB_USER:$DB_PASSWORD@db:5432/ko_server \
+    BIND_IP=0.0.0.0 \
+    BIND_ADDR=0.0.0.0:15001 \
+    BASE_PORT=15100 \
+    GAME_SERVER_IP=0.0.0.0 \
+    GAME_SERVER_PORT=15001 \
+    MAP_DIR=./Map
+
+EXPOSE 15001 15100 15101 15102 15103 15104 15105 15106 15107 15108 15109
+
+CMD ["./ko-server"]

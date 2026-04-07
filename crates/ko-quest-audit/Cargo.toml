@@ -1,0 +1,19 @@
+[package]
+name = "ko-quest-audit"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "ko_quest_audit"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ko-quest-audit"
+path = "src/main.rs"
+
+[dependencies]
+ko-tbl-import = { path = "../ko-tbl-import" }
+anyhow = { workspace = true }
+clap = { version = "4", features = ["derive", "env"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

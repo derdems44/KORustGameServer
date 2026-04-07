@@ -1,0 +1,17 @@
+target/
+.git/
+.gitea/
+.idea/
+.vscode/
+.claude/
+.env*
+Binary/
+KOOriginalGameServer/
+docs/
+scripts/
+tools/
+tests/
+*.md
+*.log
+*.swp
+*.swo

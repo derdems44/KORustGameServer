@@ -1,0 +1,12 @@
+[package]
+name = "ko-db"
+version.workspace = true
+edition.workspace = true
+description = "Database layer (PostgreSQL) with repository pattern for the Knight Online server"
+
+[dependencies]
+ko-core = { workspace = true }
+sqlx = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

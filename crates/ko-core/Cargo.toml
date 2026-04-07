@@ -1,0 +1,9 @@
+[package]
+name = "ko-core"
+version.workspace = true
+edition.workspace = true
+description = "Common types, constants, and error types for the Knight Online Rust server"
+
+[dependencies]
+thiserror = { workspace = true }
+tracing = { workspace = true }

@@ -1,0 +1,21 @@
+[package]
+name = "ko-tbl-import"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "ko_tbl_import"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ko-tbl-import"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true }
+sqlx = { workspace = true }
+anyhow = { workspace = true }
+clap = { version = "4", features = ["derive", "env"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+encoding_rs = "0.8"

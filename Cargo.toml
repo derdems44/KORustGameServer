@@ -1,0 +1,80 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ko-core",
+    "crates/ko-protocol",
+    "crates/ko-db",
+    "crates/ko-game",
+    "crates/ko-server",
+    "crates/ko-login-server",
+    "crates/ko-game-server",
+    "crates/ko-tbl-import",
+    "crates/ko-quest-audit",
+    "crates/ko-quest-gen",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+# Internal crates
+ko-core = { path = "crates/ko-core" }
+ko-protocol = { path = "crates/ko-protocol" }
+ko-db = { path = "crates/ko-db" }
+ko-game = { path = "crates/ko-game" }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+
+# Config serialization
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+# Database
+sqlx = { version = "0.8", features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "macros",
+    "migrate",
+    "chrono",
+] }
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Compression
+lzf = "1"
+
+# Concurrent collections
+dashmap = "6"
+
+# Poison-free synchronization primitives
+parking_lot = "0.12"
+
+# Stack-allocated small collections
+smallvec = "1"
+
+# Random number generation
+rand = "0.8"
+
+# AES-128-CBC encryption (RustCrypto)
+aes = "0.8"
+cbc = "0.1"
+
+# Lua scripting
+mlua = { version = "0.10", features = ["lua51", "vendored", "send"] }
+
+# Logging / Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[profile.release]
+strip = true
+lto = false  # disabled: thin LTO OOM-kills on 16GB server (ko-game 165K lines)

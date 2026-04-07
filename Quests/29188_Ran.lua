@@ -1,0 +1,64 @@
+local NPC = 29188;
+
+if (EVENT == 100) then
+	SelectMsg(UID, 3, -1, 10502, NPC,7586,101,7636,-1,7587,-1);
+end
+
+if (EVENT == 101) then
+	Check = CheckUnderTheCastleOpen(UID);
+	if (Check == true) then
+		EVENT = 102
+		else
+		SelectMsg(UID, 2, -1, 11792, NPC, 10, -1);
+	end
+end
+
+if (EVENT == 102) then
+	Count = CheckUnderTheCastleUserCount(UID);
+	if (Count < 300) then
+		ZoneChange(UID, 86, 69, 64);
+		else
+		SelectMsg(UID, 2, -1, 10542, NPC, 10, -1);
+	end
+end
+
+-- ═══════════════════════════════════════════════════════════════════
+-- AUTO-GENERATED EVENT HANDLERS (ko-quest-gen)
+-- ═══════════════════════════════════════════════════════════════════
+
+-- [AUTO-GEN] quest=929 status=0 n_index=6730
+if (EVENT == 1000) then
+	SelectMsg(UID, 4, 929, 10220, NPC, 462, 1001, 23, -1);
+end
+
+-- [AUTO-GEN] quest=929 status=0 n_index=6730
+if (EVENT == 1001) then
+	SaveEvent(UID, 6731);
+end
+
+-- [AUTO-GEN] quest=929 status=1 n_index=6731
+if (EVENT == 1002) then
+	ItemA = HowmuchItem(UID, 900417000);
+	if (ItemA < 1) then
+		SelectMsg(UID, 2, 929, 10220, NPC, 18, 1004);
+	else
+		SelectMsg(UID, 4, 929, 10220, NPC, 41, 1003, 27, -1);
+	end
+end
+
+-- [AUTO-GEN] quest=929 status=1 n_index=6731
+if (EVENT == 1003) then
+	QuestStatusCheck = GetQuestStatus(UID, 929)
+	if(QuestStatusCheck == 2) then
+		SelectMsg(UID, 2, -1, 8779, NPC, 10, -1);
+	else
+		RunQuestExchange(UID, 5013);
+		SaveEvent(UID, 6732);
+	end
+end
+
+-- [AUTO-GEN] quest=929 status=1 n_index=6731
+if (EVENT == 1004) then
+	ShowMap(UID, 21);
+end
+

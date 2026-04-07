@@ -1,0 +1,1026 @@
+//! WIZ_ATTENDANCE (0xB7) handler — daily login attendance calendar.
+//!
+//! v2525 client's native attendance panel (Table G dispatch at `0x8300E0`).
+//! Replaces ext_hook (0xE9) daily_reward which is outside the v2525 dispatch range.
+//!
+//! ## Client RE
+//!
+//! - Panel object: `[esi+0x600]` — created on UI open, null-checked before dispatch
+//! - Dispatch: Table G jump table `0x8300E0` (wire sub-types 1–9, index 0–8)
+//! - C2S: sub=1 (open panel / request data), sub=8 (claim today's reward)
+//! - S2C: sub=1 (result/control), sub=2 (calendar init), sub=3 (board data),
+//!   sub=4 (reward notify), sub=5 (item slot), sub=6 (day entry), sub=7 (full refresh),
+//!   sub=8 (claim result), sub=9 (special NPC reward)
+//!
+//! ## DB
+//!
+//! Reuses `daily_reward` (25 items + counts), `daily_reward_user` (per-user progress),
+//! and `daily_reward_cumulative` (milestone rewards at day 7/14/21).
+//!
+//! ## Binary/ Reference
+//!
+//! `HandleDailyRewardGive` @ 0x140285200 — daily claim logic.
+//! `HandleDailyCumRewardGive` @ 0x140286180 — cumulative milestone claim.
+//! Both use ext_hook 0xE9 (unusable in v2525). Our handler uses native 0xB7.
+
+use chrono::Datelike;
+use ko_protocol::{Opcode, Packet, PacketReader};
+use tracing::{debug, info, warn};
+
+use crate::session::{ClientSession, SessionState};
+
+// ── S2C Sub-type constants ────────────────────────────────────────────────
+
+/// Sub 1: Result / panel control (inner switch on result_code 0–6).
+const ATT_SUB_RESULT: u8 = 1;
+
+/// Sub 2: Calendar init — `[u8 sub_result=1][u8 month][u16 current_day][u16 total_days]`.
+const ATT_SUB_CALENDAR_INIT: u8 = 2;
+
+/// Sub 3: Board data / progress update.
+#[cfg(test)]
+const ATT_SUB_BOARD_DATA: u8 = 3;
+
+/// Sub 4: Reward item notification — `[u8 sub_result=1][string item_name][u8 tier]`.
+const ATT_SUB_REWARD_NOTIFY: u8 = 4;
+
+/// Sub 5: Item slot populate — `[i32 item_id][u16 slot][i32 data][u16 dur]`.
+const ATT_SUB_ITEM_SLOT: u8 = 5;
+
+/// Sub 6: Calendar grid day entry — `[u8 slot][i32 item_id][u16 day_num][u16 reward][u8 status]`.
+const ATT_SUB_DAY_ENTRY: u8 = 6;
+
+/// Sub 7: Full board refresh — `[u8 mode][i64 start][i64 end]`.
+const ATT_SUB_FULL_REFRESH: u8 = 7;
+
+/// Sub 8: Claim result — `[u8 flag]` (1=success, 0=refresh).
+const ATT_SUB_CLAIM_RESULT: u8 = 8;
+
+// ── Result codes for Sub 1 ───────────────────────────────────────────────
+
+/// result_code=0: Open/refresh panel — `[u8 day_index]`.
+const RESULT_OPEN_PANEL: u8 = 0;
+
+/// result_code=1: Item added to list — `[u8 day_index][u16 count][u8 complete]`.
+const RESULT_ITEM_ADDED: u8 = 1;
+
+/// result_code=3: Timer/cooldown message (string 0x464F = 17999).
+const RESULT_TIMER: u8 = 3;
+
+/// result_code=4: Already claimed message (string 0x4650 = 18000).
+const RESULT_ALREADY_CLAIMED: u8 = 4;
+
+/// result_code=5: Inventory full / cannot give item.
+const RESULT_INVENTORY_FULL: u8 = 5;
+
+/// result_code=6: Event not available (string 0xAD86 = 44422).
+const RESULT_NOT_AVAILABLE: u8 = 6;
+
+/// Maximum attendance calendar slots (client validates 0–8).
+const MAX_SLOTS: usize = 9;
+
+/// Total daily reward days in a cycle.
+const TOTAL_DAYS: usize = 25;
+
+/// Cumulative reward milestone: first bonus at day 7.
+const CUM_MILESTONE_1: usize = 7;
+/// Cumulative reward milestone: second bonus at day 14.
+const CUM_MILESTONE_2: usize = 14;
+/// Cumulative reward milestone: third bonus at day 21.
+const CUM_MILESTONE_3: usize = 21;
+
+// ── S2C Packet Builders ──────────────────────────────────────────────────
+
+/// Build a Sub 7 (full board refresh) packet.
+///
+/// Client RE: `0x6FE810` — initializes panel, sets name color 0xFF64D2FF,
+/// stores display_mode and start/end timestamps for calendar layout.
+///
+/// Wire: `[0xB7][0x07][u8 display_mode][i32 start_lo][i32 start_hi][i32 end_lo][i32 end_hi]`
+fn build_full_refresh(display_mode: u8, start_ts: i64, end_ts: i64) -> Packet {
+    let mut pkt = Packet::new(Opcode::WizAttendance as u8);
+    pkt.write_u8(ATT_SUB_FULL_REFRESH);
+    pkt.write_u8(display_mode);
+    // i64 written as two i32 words (lo, hi) matching client's read pattern
+    pkt.write_i32(start_ts as i32);
+    pkt.write_i32((start_ts >> 32) as i32);
+    pkt.write_i32(end_ts as i32);
+    pkt.write_i32((end_ts >> 32) as i32);
+    pkt
+}
+
+/// Build a Sub 2 (calendar init) packet.
+///
+/// Client RE: `0x702180` — only processes sub_result=1. Stores month_type
+/// at `[+0x6C0]`, current_day as i64 at `[+0xBD8]`, total_days as i64 at `[+0xBD0]`.
+///
+/// Wire: `[0xB7][0x02][u8 sub_result=1][u8 month][u16 current_day][u16 total_days]`
+fn build_calendar_init(month: u8, current_day: u16, total_days: u16) -> Packet {
+    let mut pkt = Packet::new(Opcode::WizAttendance as u8);
+    pkt.write_u8(ATT_SUB_CALENDAR_INIT);
+    pkt.write_u8(1); // sub_result = 1 (required)
+    pkt.write_u8(month);
+    pkt.write_u16(current_day);
+    pkt.write_u16(total_days);
+    pkt
+}
+
+/// Build a Sub 6 (calendar day entry) packet.
+///
+/// Client RE: `0x6FFAA0` — slot_index 0–8, validates `item_id % 1e9 != 9e8`.
+/// Calls `add_day_entry(item_id, slot, day_num, reward, status)`.
+///
+/// Wire: `[0xB7][0x06][u8 slot][i32 item_id][u16 day_num][u16 reward_id][u8 status]`
+fn build_day_entry(slot: u8, item_id: i32, day_num: u16, reward_id: u16, status: u8) -> Packet {
+    let mut pkt = Packet::new(Opcode::WizAttendance as u8);
+    pkt.write_u8(ATT_SUB_DAY_ENTRY);
+    pkt.write_u8(slot);
+    pkt.write_i32(item_id);
+    pkt.write_u16(day_num);
+    pkt.write_u16(reward_id);
+    pkt.write_u8(status);
+    pkt
+}
+
+/// Build a Sub 5 (item slot populate) packet.
+///
+/// Client RE: `0x6FFCC0` — populates 3D item display. Slots 0–8 normal,
+/// 0xFFF9 = clear slot. Looks up item model via `0x8FDC80`.
+///
+/// Wire: `[0xB7][0x05][i32 item_id][u16 slot_index][i32 item_data][u16 durability]`
+fn build_item_slot(item_id: i32, slot: u16, item_data: i32, durability: u16) -> Packet {
+    let mut pkt = Packet::new(Opcode::WizAttendance as u8);
+    pkt.write_u8(ATT_SUB_ITEM_SLOT);
+    pkt.write_i32(item_id);
+    pkt.write_u16(slot);
+    pkt.write_i32(item_data);
+    pkt.write_u16(durability);
+    pkt
+}
+
+/// Build a Sub 1 result_code=0 (open/refresh panel) packet.
+///
+/// Client RE: `0x7023A0` case 0 — sets header text (string 0xA88D or 0xA88E),
+/// stores day_index at panel `[+0x150]`.
+///
+/// Wire: `[0xB7][0x01][u8 result=0][u8 day_index]`
+fn build_open_panel(day_index: u8) -> Packet {
+    let mut pkt = Packet::new(Opcode::WizAttendance as u8);
+    pkt.write_u8(ATT_SUB_RESULT);
+    pkt.write_u8(RESULT_OPEN_PANEL);
+    pkt.write_u8(day_index);
+    pkt
+}
+
+/// Build a Sub 1 result_code=1 (item added to list) packet.
+///
+/// Client RE: `0x7023A0` case 1 — adds entry to list widget, plays sound 0x53092.
+///
+/// Wire: `[0xB7][0x01][u8 result=1][u8 day_index][u16 item_count][u8 complete_flag]`
+fn build_item_added(day_index: u8, item_count: u16, complete_flag: u8) -> Packet {
+    let mut pkt = Packet::new(Opcode::WizAttendance as u8);
+    pkt.write_u8(ATT_SUB_RESULT);
+    pkt.write_u8(RESULT_ITEM_ADDED);
+    pkt.write_u8(day_index);
+    pkt.write_u16(item_count);
+    pkt.write_u8(complete_flag);
+    pkt
+}
+
+/// Build a Sub 1 error message packet (result_code=3/4/5/6).
+///
+/// Client RE: result_code 3–6 show localized notice strings as yellow text.
+///
+/// Wire: `[0xB7][0x01][u8 result_code]`
+fn build_result_msg(result_code: u8) -> Packet {
+    let mut pkt = Packet::new(Opcode::WizAttendance as u8);
+    pkt.write_u8(ATT_SUB_RESULT);
+    pkt.write_u8(result_code);
+    pkt
+}
+
+/// Build a Sub 4 (reward notification) packet.
+///
+/// Client RE: `0x700080` — shows yellow notice: "string_0xA892 + item_name".
+/// Only processes sub_result=1.
+///
+/// Wire: `[0xB7][0x04][u8 sub_result=1][string item_name][u8 tier_flag]`
+fn build_reward_notify(item_name: &str, tier_flag: u8) -> Packet {
+    let mut pkt = Packet::new(Opcode::WizAttendance as u8);
+    pkt.write_u8(ATT_SUB_REWARD_NOTIFY);
+    pkt.write_u8(1); // sub_result = 1 (required)
+    pkt.write_string(item_name);
+    pkt.write_u8(tier_flag);
+    pkt
+}
+
+/// Build a Sub 8 (claim result) packet.
+///
+/// Client RE: inline at `0x82F7DD` — flag=1 destroys panel (success),
+/// flag=0 refreshes 3D display.
+///
+/// Wire: `[0xB7][0x08][u8 result_flag]`
+fn build_claim_result(result_flag: u8) -> Packet {
+    let mut pkt = Packet::new(Opcode::WizAttendance as u8);
+    pkt.write_u8(ATT_SUB_CLAIM_RESULT);
+    pkt.write_u8(result_flag);
+    pkt
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+/// Calculate the 9-slot window start centered on the first unclaimed day.
+fn calc_window_start(first_unclaimed: usize) -> usize {
+    if first_unclaimed < 4 {
+        0
+    } else if first_unclaimed + 5 > TOTAL_DAYS {
+        TOTAL_DAYS.saturating_sub(MAX_SLOTS)
+    } else {
+        first_unclaimed - 4
+    }
+}
+
+/// Check if progress needs monthly reset.
+///
+/// Returns true if any claimed day has a `last_claim_month` that doesn't
+/// match the current month — indicating a new month has started.
+fn needs_monthly_reset(
+    user_rows: &[ko_db::models::daily_reward::DailyRewardUserRow],
+    current_month: i16,
+) -> bool {
+    for row in user_rows {
+        if row.claimed && row.last_claim_month != 0 && row.last_claim_month != current_month {
+            return true;
+        }
+    }
+    false
+}
+
+// ── C2S Handler ──────────────────────────────────────────────────────────
+
+/// Handle WIZ_ATTENDANCE (0xB7) from the client.
+///
+/// Client sends:
+/// - sub=1: Open attendance panel / request calendar data
+/// - sub=8: Claim today's reward
+///
+/// The panel at `[esi+0x600]` is created client-side when the user opens
+/// the attendance UI. Before that, all S2C packets are dropped (null check).
+pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
+    if session.state() != SessionState::InGame {
+        return Ok(());
+    }
+
+    let mut reader = PacketReader::new(&pkt.data);
+    let sub = reader.read_u8().unwrap_or(0);
+
+    match sub {
+        1 => handle_open(session).await,
+        8 => handle_claim(session).await,
+        _ => {
+            debug!(
+                "[{}] WIZ_ATTENDANCE unknown C2S sub={} ({}B)",
+                session.addr(),
+                sub,
+                reader.remaining()
+            );
+            Ok(())
+        }
+    }
+}
+
+/// Handle C2S sub=1: Open panel — load and send calendar state.
+///
+/// Sequence:
+/// 1. Sub 7 (full refresh) — initialize panel with time bounds
+/// 2. Sub 6 × N (day entries) — populate calendar grid slots
+/// 3. Sub 5 × N (item slots) — populate 3D item display
+/// 4. Sub 2 (calendar init) — finalize with month/day/total
+/// 5. Sub 1 result=0 (panel open) — set active day pointer
+async fn handle_open(session: &mut ClientSession) -> anyhow::Result<()> {
+    let pool = session.pool().clone();
+    let repo = ko_db::repositories::daily_reward::DailyRewardRepository::new(&pool);
+
+    // Load reward config (25 items)
+    let reward_config = match repo.load_all().await {
+        Ok(v) => v,
+        Err(e) => {
+            warn!("[{}] attendance load_all DB error: {e}", session.addr());
+            Vec::new()
+        }
+    };
+    if reward_config.is_empty() {
+        // No attendance data configured — send "not available"
+        let msg = build_result_msg(RESULT_NOT_AVAILABLE);
+        session.send_packet(&msg).await?;
+        return Ok(());
+    }
+
+    // Build 25-item arrays from config
+    let mut item_ids = [0i32; TOTAL_DAYS];
+    let mut item_counts = [1i16; TOTAL_DAYS];
+    for row in &reward_config {
+        let idx = row.day_index as usize;
+        if idx < TOTAL_DAYS {
+            item_ids[idx] = row.item_id;
+            item_counts[idx] = row.item_count.max(1);
+        }
+    }
+
+    // Load user progress
+    let char_name = session
+        .world()
+        .get_character_info(session.session_id())
+        .map(|c| c.name.clone())
+        .unwrap_or_default();
+    if char_name.is_empty() {
+        return Ok(());
+    }
+
+    let mut user_rows = match repo.load_user_progress(&char_name).await {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(
+                "[{}] attendance load_user_progress DB error: {e}",
+                session.addr()
+            );
+            Vec::new()
+        }
+    };
+
+    // Monthly reset: if claimed days are from a previous month, reset
+    let now = chrono::Utc::now();
+    let current_month = now.month() as i16;
+    if needs_monthly_reset(&user_rows, current_month) {
+        if let Err(e) = repo.reset_user_progress(&char_name).await {
+            warn!("Failed to reset attendance for {}: {}", char_name, e);
+        }
+        // Re-fetch fresh state
+        user_rows = match repo.load_user_progress(&char_name).await {
+            Ok(v) => v,
+            Err(e) => {
+                warn!(
+                    "[{}] attendance load_user_progress (post-reset) DB error: {e}",
+                    session.addr()
+                );
+                Vec::new()
+            }
+        };
+    }
+
+    let mut claimed = [false; TOTAL_DAYS];
+    for row in &user_rows {
+        let idx = row.day_index as usize;
+        if idx < TOTAL_DAYS {
+            claimed[idx] = row.claimed;
+        }
+    }
+
+    // Find first unclaimed day
+    let first_unclaimed = claimed.iter().position(|&c| !c).unwrap_or(TOTAL_DAYS);
+
+    // Determine the 9-slot window: center on first_unclaimed, clamp to bounds
+    let window_start = calc_window_start(first_unclaimed);
+
+    let month = now.month() as u8;
+    let today_day = now.day() as u8;
+    let _ = today_day; // used in debug below
+
+    // Calculate month start/end timestamps for calendar bounds
+    let start_of_month = now
+        .with_day(1)
+        .unwrap_or(now)
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .unwrap_or_default();
+    let start_ts = start_of_month.and_utc().timestamp();
+
+    // End of month: start of next month
+    let next_month = if month == 12 {
+        chrono::NaiveDate::from_ymd_opt(now.year() + 1, 1, 1)
+    } else {
+        chrono::NaiveDate::from_ymd_opt(now.year(), month as u32 + 1, 1)
+    };
+    let end_ts = next_month
+        .and_then(|d| d.and_hms_opt(0, 0, 0))
+        .map(|dt| dt.and_utc().timestamp())
+        .unwrap_or(start_ts + 30 * 86400);
+
+    // 1. Sub 7: Full board refresh
+    let refresh = build_full_refresh(1, start_ts, end_ts);
+    session.send_packet(&refresh).await?;
+
+    // 2. Sub 6: Calendar day entries (9 slots)
+    for slot_idx in 0..MAX_SLOTS {
+        let day_idx = window_start + slot_idx;
+        if day_idx >= TOTAL_DAYS {
+            break;
+        }
+        let status = if claimed[day_idx] { 1u8 } else { 0u8 };
+        let day_num = (day_idx + 1) as u16; // 1-based day number
+        let entry = build_day_entry(
+            slot_idx as u8,
+            item_ids[day_idx],
+            day_num,
+            day_num, // reward_id = day_num for mapping
+            status,
+        );
+        session.send_packet(&entry).await?;
+    }
+
+    // 3. Sub 5: Item slot 3D display
+    for slot_idx in 0..MAX_SLOTS {
+        let day_idx = window_start + slot_idx;
+        if day_idx >= TOTAL_DAYS {
+            break;
+        }
+        let item = build_item_slot(
+            item_ids[day_idx],
+            slot_idx as u16,
+            0, // item_data (no upgrade tier)
+            0, // durability (not applicable)
+        );
+        session.send_packet(&item).await?;
+    }
+
+    // 4. Sub 2: Calendar status
+    let claimed_count = claimed.iter().filter(|&&c| c).count() as u16;
+    let status = build_calendar_init(month, claimed_count, TOTAL_DAYS as u16);
+    session.send_packet(&status).await?;
+
+    // 5. Sub 1 result=0: Open panel at first unclaimed day
+    let slot_for_unclaimed =
+        if first_unclaimed >= window_start && first_unclaimed < window_start + MAX_SLOTS {
+            (first_unclaimed - window_start) as u8
+        } else {
+            0
+        };
+    let open = build_open_panel(slot_for_unclaimed);
+    session.send_packet(&open).await?;
+
+    debug!(
+        "[{}] WIZ_ATTENDANCE open: {} claimed/{}, window={}-{}, today={}",
+        session.addr(),
+        claimed_count,
+        TOTAL_DAYS,
+        window_start,
+        (window_start + MAX_SLOTS).min(TOTAL_DAYS),
+        today_day,
+    );
+
+    Ok(())
+}
+
+/// Handle C2S sub=8: Claim today's reward.
+///
+/// Validation (ported from Binary/ `HandleDailyRewardGive`):
+/// 1. Find first unclaimed day
+/// 2. If day > 0: previous day must be claimed (sequential)
+/// 3. If day > 0: previous day must not be same calendar day (one per day)
+/// 4. Give item, mark claimed, save to DB
+/// 5. If milestone (day 7/14/21): also give cumulative reward
+async fn handle_claim(session: &mut ClientSession) -> anyhow::Result<()> {
+    let pool = session.pool().clone();
+    let repo = ko_db::repositories::daily_reward::DailyRewardRepository::new(&pool);
+
+    // Load reward config
+    let reward_config = match repo.load_all().await {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(
+                "[{}] attendance claim load_all DB error: {e}",
+                session.addr()
+            );
+            Vec::new()
+        }
+    };
+    if reward_config.is_empty() {
+        return Ok(());
+    }
+
+    let mut item_ids = [0i32; TOTAL_DAYS];
+    let mut item_counts = [1i16; TOTAL_DAYS];
+    for row in &reward_config {
+        let idx = row.day_index as usize;
+        if idx < TOTAL_DAYS {
+            item_ids[idx] = row.item_id;
+            item_counts[idx] = row.item_count.max(1);
+        }
+    }
+
+    // Load user progress
+    let char_name = session
+        .world()
+        .get_character_info(session.session_id())
+        .map(|c| c.name.clone())
+        .unwrap_or_default();
+    if char_name.is_empty() {
+        return Ok(());
+    }
+
+    let mut user_rows = match repo.load_user_progress(&char_name).await {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(
+                "[{}] attendance claim load_user_progress DB error: {e}",
+                session.addr()
+            );
+            Vec::new()
+        }
+    };
+
+    // Monthly reset check
+    let now = chrono::Utc::now();
+    let current_month = now.month() as i16;
+    let today_day = now.day() as u8;
+
+    if needs_monthly_reset(&user_rows, current_month) {
+        if let Err(e) = repo.reset_user_progress(&char_name).await {
+            warn!("Failed to reset attendance for {}: {}", char_name, e);
+        }
+        user_rows = match repo.load_user_progress(&char_name).await {
+            Ok(v) => v,
+            Err(e) => {
+                warn!(
+                    "[{}] attendance claim load_user_progress (post-reset) DB error: {e}",
+                    session.addr()
+                );
+                Vec::new()
+            }
+        };
+    }
+
+    let mut sb_type = [0u8; TOTAL_DAYS]; // 0=unclaimed, 1=claimed
+    let mut s_get_day = [0u8; TOTAL_DAYS]; // day-of-month when claimed
+    for row in &user_rows {
+        let idx = row.day_index as usize;
+        if idx < TOTAL_DAYS {
+            sb_type[idx] = if row.claimed { 1 } else { 0 };
+            s_get_day[idx] = row.day_of_month as u8;
+        }
+    }
+
+    // Find the first unclaimed day
+    let claim_idx = match sb_type.iter().position(|&t| t == 0) {
+        Some(idx) => idx,
+        None => {
+            // All 25 days claimed — cycle complete
+            let msg = build_result_msg(RESULT_ALREADY_CLAIMED);
+            session.send_packet(&msg).await?;
+            return Ok(());
+        }
+    };
+
+    // Validate sequential: previous day must be claimed (except day 0)
+    if claim_idx > 0 && sb_type[claim_idx - 1] == 0 {
+        let msg = build_result_msg(RESULT_TIMER);
+        session.send_packet(&msg).await?;
+        return Ok(());
+    }
+
+    // Validate same-day: previous day must not be claimed on the same calendar day
+    // Binary/ Reference: HandleDailyRewardGive — "can only claim once per calendar day"
+    if claim_idx > 0 && s_get_day[claim_idx - 1] == today_day {
+        let msg = build_result_msg(RESULT_ALREADY_CLAIMED);
+        session.send_packet(&msg).await?;
+        return Ok(());
+    }
+
+    // Valid claim!
+    let item_id = item_ids[claim_idx] as u32;
+    let count = item_counts[claim_idx] as u16;
+    let day_index = claim_idx as u8;
+    let complete = if claim_idx == TOTAL_DAYS - 1 {
+        1u8
+    } else {
+        0u8
+    };
+
+    // Give item to player — check for inventory full
+    let world = session.world().clone();
+    let gave = world.give_item(session.session_id(), item_id, count);
+    if !gave {
+        // Inventory full — send error, do NOT mark as claimed
+        let msg = build_result_msg(RESULT_INVENTORY_FULL);
+        session.send_packet(&msg).await?;
+        return Ok(());
+    }
+
+    // Send success: Sub 1 result=1 (item added)
+    let added = build_item_added(day_index, count, complete);
+    session.send_packet(&added).await?;
+
+    // Send reward notification: Sub 4
+    let item_name = world
+        .get_item(item_id)
+        .and_then(|i| i.str_name.clone())
+        .unwrap_or_else(|| format!("Item #{}", item_id));
+    let notify = build_reward_notify(&item_name, 0);
+    session.send_packet(&notify).await?;
+
+    // Send claim success: Sub 8 result=1 (close panel)
+    let result = build_claim_result(1);
+    session.send_packet(&result).await?;
+
+    // Cumulative milestone check: give bonus items at days 7, 14, 21
+    let claimed_so_far = claim_idx + 1; // 1-based count after this claim
+    let cum_config = match repo.load_cumulative().await {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(
+                "[{}] attendance load_cumulative DB error: {e}",
+                session.addr()
+            );
+            None
+        }
+    };
+    if let Some(cum) = cum_config {
+        let bonus_item = match claimed_so_far {
+            CUM_MILESTONE_1 => cum.item1,
+            CUM_MILESTONE_2 => cum.item2,
+            CUM_MILESTONE_3 => cum.item3,
+            _ => None,
+        };
+        if let Some(bonus_id) = bonus_item {
+            let bonus_gave = world.give_item(session.session_id(), bonus_id as u32, 1);
+            if bonus_gave {
+                let bonus_name = world
+                    .get_item(bonus_id as u32)
+                    .and_then(|i| i.str_name.clone())
+                    .unwrap_or_else(|| format!("Bonus #{}", bonus_id));
+                let bonus_notify = build_reward_notify(&bonus_name, 1);
+                session.send_packet(&bonus_notify).await?;
+                info!(
+                    "[{}] WIZ_ATTENDANCE cumulative milestone day {}: item {} ({})",
+                    session.addr(),
+                    claimed_so_far,
+                    bonus_id,
+                    char_name,
+                );
+            }
+        }
+    }
+
+    // Save to DB (fire-and-forget)
+    let char_name_db = char_name.clone();
+    let day_idx_db = claim_idx as i16;
+    let month_db = current_month;
+    let pool_db = pool.clone();
+    tokio::spawn(async move {
+        let repo = ko_db::repositories::daily_reward::DailyRewardRepository::new(&pool_db);
+        if let Err(e) = repo
+            .update_user_day_with_month(&char_name_db, day_idx_db, true, today_day as i16, month_db)
+            .await
+        {
+            warn!(
+                "Failed to save attendance claim for {}: {}",
+                char_name_db, e
+            );
+        }
+    });
+
+    info!(
+        "[{}] WIZ_ATTENDANCE claimed: day {} item {}×{} ({})",
+        session.addr(),
+        claim_idx,
+        item_id,
+        count,
+        char_name,
+    );
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ko_protocol::{Opcode, PacketReader};
+
+    #[test]
+    fn test_attendance_opcode_value() {
+        assert_eq!(Opcode::WizAttendance as u8, 0xB7);
+        assert_eq!(Opcode::from_byte(0xB7), Some(Opcode::WizAttendance));
+    }
+
+    #[test]
+    fn test_build_full_refresh() {
+        let pkt = build_full_refresh(1, 1_700_000_000, 1_702_600_000);
+        assert_eq!(pkt.opcode, 0xB7);
+
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_FULL_REFRESH)); // sub=7
+        assert_eq!(r.read_u8(), Some(1)); // display_mode
+
+        // i64 start_ts = 1_700_000_000 written as lo+hi i32
+        let lo = r.read_i32().unwrap();
+        let hi = r.read_i32().unwrap();
+        let start = (lo as i64) | ((hi as i64) << 32);
+        assert_eq!(start, 1_700_000_000);
+
+        // i64 end_ts
+        let lo2 = r.read_i32().unwrap();
+        let hi2 = r.read_i32().unwrap();
+        let end = (lo2 as i64) | ((hi2 as i64) << 32);
+        assert_eq!(end, 1_702_600_000);
+
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_calendar_init() {
+        let pkt = build_calendar_init(3, 7, 25);
+        assert_eq!(pkt.opcode, 0xB7);
+
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_CALENDAR_INIT)); // sub=2
+        assert_eq!(r.read_u8(), Some(1)); // sub_result (must be 1)
+        assert_eq!(r.read_u8(), Some(3)); // month
+        assert_eq!(r.read_u16(), Some(7)); // current_day
+        assert_eq!(r.read_u16(), Some(25)); // total_days
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_day_entry() {
+        let pkt = build_day_entry(3, 900145000, 4, 4, 1);
+        assert_eq!(pkt.opcode, 0xB7);
+
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_DAY_ENTRY)); // sub=6
+        assert_eq!(r.read_u8(), Some(3)); // slot
+        assert_eq!(r.read_i32(), Some(900145000)); // item_id
+        assert_eq!(r.read_u16(), Some(4)); // day_num
+        assert_eq!(r.read_u16(), Some(4)); // reward_id
+        assert_eq!(r.read_u8(), Some(1)); // status (claimed)
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_day_entry_anti_tamper_valid() {
+        // Client validates: item_id % 1_000_000_000 != 900_000_000
+        // All our reward items should pass this check.
+        let test_items = [900145000i32, 910252000, 700085000, 811095000];
+        for &id in &test_items {
+            assert_ne!(
+                id % 1_000_000_000,
+                900_000_000,
+                "Item {} fails anti-tamper check",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn test_build_item_slot() {
+        let pkt = build_item_slot(910252000, 2, 0, 0);
+        assert_eq!(pkt.opcode, 0xB7);
+
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_ITEM_SLOT)); // sub=5
+        assert_eq!(r.read_i32(), Some(910252000)); // item_id
+        assert_eq!(r.read_u16(), Some(2)); // slot
+        assert_eq!(r.read_i32(), Some(0)); // item_data
+        assert_eq!(r.read_u16(), Some(0)); // durability
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_open_panel() {
+        let pkt = build_open_panel(5);
+        assert_eq!(pkt.opcode, 0xB7);
+
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_RESULT)); // sub=1
+        assert_eq!(r.read_u8(), Some(RESULT_OPEN_PANEL)); // result=0
+        assert_eq!(r.read_u8(), Some(5)); // day_index
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_item_added() {
+        let pkt = build_item_added(10, 1, 0);
+        assert_eq!(pkt.opcode, 0xB7);
+
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_RESULT)); // sub=1
+        assert_eq!(r.read_u8(), Some(RESULT_ITEM_ADDED)); // result=1
+        assert_eq!(r.read_u8(), Some(10)); // day_index
+        assert_eq!(r.read_u16(), Some(1)); // item_count
+        assert_eq!(r.read_u8(), Some(0)); // complete_flag
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_item_added_complete() {
+        let pkt = build_item_added(24, 1, 1);
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_RESULT));
+        assert_eq!(r.read_u8(), Some(RESULT_ITEM_ADDED));
+        assert_eq!(r.read_u8(), Some(24));
+        assert_eq!(r.read_u16(), Some(1));
+        assert_eq!(r.read_u8(), Some(1)); // complete on last day
+    }
+
+    #[test]
+    fn test_build_item_added_with_count() {
+        let pkt = build_item_added(5, 3, 0);
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_RESULT));
+        assert_eq!(r.read_u8(), Some(RESULT_ITEM_ADDED));
+        assert_eq!(r.read_u8(), Some(5));
+        assert_eq!(r.read_u16(), Some(3)); // count = 3
+        assert_eq!(r.read_u8(), Some(0));
+    }
+
+    #[test]
+    fn test_build_result_msg_timer() {
+        let pkt = build_result_msg(RESULT_TIMER);
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_RESULT));
+        assert_eq!(r.read_u8(), Some(3)); // timer message
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_result_msg_already_claimed() {
+        let pkt = build_result_msg(RESULT_ALREADY_CLAIMED);
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_RESULT));
+        assert_eq!(r.read_u8(), Some(4)); // already claimed
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_result_msg_inventory_full() {
+        let pkt = build_result_msg(RESULT_INVENTORY_FULL);
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_RESULT));
+        assert_eq!(r.read_u8(), Some(5)); // inventory full
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_reward_notify() {
+        let pkt = build_reward_notify("Test Item", 0);
+        assert_eq!(pkt.opcode, 0xB7);
+
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_REWARD_NOTIFY)); // sub=4
+        assert_eq!(r.read_u8(), Some(1)); // sub_result (must be 1)
+        let name = r.read_string();
+        assert!(name.is_some());
+        assert_eq!(name.unwrap(), "Test Item");
+        assert_eq!(r.read_u8(), Some(0)); // tier_flag
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_reward_notify_cumulative() {
+        let pkt = build_reward_notify("Milestone Reward", 1);
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_REWARD_NOTIFY));
+        assert_eq!(r.read_u8(), Some(1));
+        assert_eq!(r.read_string().unwrap(), "Milestone Reward");
+        assert_eq!(r.read_u8(), Some(1)); // tier=1 for cumulative
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_claim_result_success() {
+        let pkt = build_claim_result(1);
+        assert_eq!(pkt.opcode, 0xB7);
+
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_CLAIM_RESULT)); // sub=8
+        assert_eq!(r.read_u8(), Some(1)); // success — destroy panel
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_build_claim_result_refresh() {
+        let pkt = build_claim_result(0);
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(ATT_SUB_CLAIM_RESULT));
+        assert_eq!(r.read_u8(), Some(0)); // refresh 3D display
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_c2s_open_format() {
+        // Client sends: [0xB7][0x01] — 1 byte payload
+        let mut pkt = Packet::new(Opcode::WizAttendance as u8);
+        pkt.write_u8(1);
+
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(1)); // sub=1 open
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_c2s_claim_format() {
+        // Client sends: [0xB7][0x08] — 1 byte payload
+        let mut pkt = Packet::new(Opcode::WizAttendance as u8);
+        pkt.write_u8(8);
+
+        let mut r = PacketReader::new(&pkt.data);
+        assert_eq!(r.read_u8(), Some(8)); // sub=8 claim
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_slot_window_calculation() {
+        // Test window centering logic
+        // first_unclaimed=0: window starts at 0
+        assert_eq!(calc_window_start(0), 0);
+        // first_unclaimed=3: window starts at 0 (< 4)
+        assert_eq!(calc_window_start(3), 0);
+        // first_unclaimed=4: window starts at 0 (4 - 4 = 0)
+        assert_eq!(calc_window_start(4), 0);
+        // first_unclaimed=10: window starts at 6 (10 - 4)
+        assert_eq!(calc_window_start(10), 6);
+        // first_unclaimed=23: window starts at 16 (25 - 9)
+        assert_eq!(calc_window_start(23), 16);
+        // first_unclaimed=24: window starts at 16
+        assert_eq!(calc_window_start(24), 16);
+    }
+
+    #[test]
+    fn test_sub_type_constants() {
+        // Verify sub-type constants match wire values 1-8
+        assert_eq!(ATT_SUB_RESULT, 1);
+        assert_eq!(ATT_SUB_CALENDAR_INIT, 2);
+        assert_eq!(ATT_SUB_BOARD_DATA, 3);
+        assert_eq!(ATT_SUB_REWARD_NOTIFY, 4);
+        assert_eq!(ATT_SUB_ITEM_SLOT, 5);
+        assert_eq!(ATT_SUB_DAY_ENTRY, 6);
+        assert_eq!(ATT_SUB_FULL_REFRESH, 7);
+        assert_eq!(ATT_SUB_CLAIM_RESULT, 8);
+    }
+
+    #[test]
+    fn test_cumulative_milestones() {
+        // Verify milestone days
+        assert_eq!(CUM_MILESTONE_1, 7);
+        assert_eq!(CUM_MILESTONE_2, 14);
+        assert_eq!(CUM_MILESTONE_3, 21);
+    }
+
+    #[test]
+    fn test_needs_monthly_reset_no_claims() {
+        // No claims: no reset needed
+        let rows: Vec<ko_db::models::daily_reward::DailyRewardUserRow> = vec![];
+        assert!(!needs_monthly_reset(&rows, 3));
+    }
+
+    #[test]
+    fn test_needs_monthly_reset_same_month() {
+        let rows = vec![ko_db::models::daily_reward::DailyRewardUserRow {
+            user_id: "test".to_string(),
+            day_index: 0,
+            claimed: true,
+            day_of_month: 5,
+            last_claim_month: 3,
+        }];
+        // Same month (3) — no reset
+        assert!(!needs_monthly_reset(&rows, 3));
+    }
+
+    #[test]
+    fn test_needs_monthly_reset_different_month() {
+        let rows = vec![ko_db::models::daily_reward::DailyRewardUserRow {
+            user_id: "test".to_string(),
+            day_index: 0,
+            claimed: true,
+            day_of_month: 15,
+            last_claim_month: 2,
+        }];
+        // Different month (2 vs 3) — needs reset
+        assert!(needs_monthly_reset(&rows, 3));
+    }
+
+    #[test]
+    fn test_needs_monthly_reset_unclaimed_old_month() {
+        let rows = vec![ko_db::models::daily_reward::DailyRewardUserRow {
+            user_id: "test".to_string(),
+            day_index: 0,
+            claimed: false,
+            day_of_month: 0,
+            last_claim_month: 2,
+        }];
+        // Unclaimed row with old month — no reset (only check claimed rows)
+        assert!(!needs_monthly_reset(&rows, 3));
+    }
+
+    #[test]
+    fn test_needs_monthly_reset_zero_month() {
+        let rows = vec![ko_db::models::daily_reward::DailyRewardUserRow {
+            user_id: "test".to_string(),
+            day_index: 0,
+            claimed: true,
+            day_of_month: 5,
+            last_claim_month: 0,
+        }];
+        // Month=0 means never set — skip (don't reset)
+        assert!(!needs_monthly_reset(&rows, 3));
+    }
+}

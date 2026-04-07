@@ -1,0 +1,17 @@
+[package]
+name = "ko-server"
+version.workspace = true
+edition.workspace = true
+description = "Knight Online unified server — login + game in a single binary"
+
+[[bin]]
+name = "ko-server"
+path = "src/main.rs"
+
+[dependencies]
+ko-db = { workspace = true }
+ko-game = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }

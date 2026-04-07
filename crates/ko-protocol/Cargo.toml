@@ -1,0 +1,14 @@
+[package]
+name = "ko-protocol"
+version.workspace = true
+edition.workspace = true
+description = "Packet definitions, serialization, and encryption for the Knight Online protocol"
+
+[dependencies]
+ko-core = { workspace = true }
+lzf = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+aes = { workspace = true }
+cbc = { workspace = true }
+rand = { workspace = true }

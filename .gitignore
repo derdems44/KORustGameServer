@@ -1,0 +1,85 @@
+# Rust / Cargo
+/target/
+**/*.rs.bk
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment and secrets
+.env
+.env.local
+.env.production
+.mcp.json
+
+# Logs
+/logs/
+*.log
+
+# Claude Code
+.claude/
+
+# Memory files (session state, not for public)
+memory/
+
+# Windows artifacts
+nul
+
+# Packet captures (large binary files, local analysis only)
+captures/
+*.pcap
+*.bin
+
+# IDA / Ghidra decompilation output
+IdaClientOutput/
+
+# Decompiled client C++ source (local reference only)
+client_src/
+
+# Original C++ server source (reference only, not part of this project)
+KOOriginalGameServer/
+
+# Binary reference files
+Binary/
+*.exe
+*.dll
+
+# Config with secrets (template is committed, actual is not)
+config/server.local.toml
+
+# Decompilation output
+docs/decompiled/
+
+# Temporary scripts
+tmp_*.py
+scripts/re_*.py
+scripts/analyze_training*.py
+scripts/analyze_opcodes*.py
+scripts/disasm_*.py
+
+# Generated analysis files
+docs/re_*.txt
+docs/mssql_*.txt
+docs/quest_menu_patch_*.tsv
+
+# Backups
+backups/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Frida output
+tools/frida_output.txt
