@@ -1,17 +1,11 @@
 //! WIZ_DEL_CHAR (0x03) handler — character deletion.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CharacterSelectionHandler.cpp:622-642`
-//!
 //! ## Request (C->S)
-//!
 //! | Offset | Type   | Description |
 //! |--------|--------|-------------|
 //! | 0      | u8     | Character index (0-2) |
 //! | 1      | string | Character name |
 //! | N      | string | Social security number (max 15) |
-//!
 //! ## Response (S->C)
-//!
 //! | Offset | Type | Description |
 //! |--------|------|-------------|
 //! | 0      | u8   | Result (1=success, 0=fail) |
@@ -44,7 +38,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let _ssn = reader.read_string().unwrap_or_default();
 
     // Validate index and SSN length
-    // C++ Reference: CharacterSelectionHandler.cpp:630-637 — strSocNo.empty() || strSocNo.size() > 15
     if char_index > 2 || char_name.is_empty() || _ssn.is_empty() || _ssn.len() > 15 {
         {
             let mut r = Packet::new(Opcode::WizDelChar as u8);
@@ -59,7 +52,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let char_repo = CharacterRepository::new(session.pool());
 
     // Clan leader cannot delete their character
-    // C++ Reference: CharacterSelectionHandler.cpp:632 — isClanLeader() check
     // CHIEF (fame=1) must transfer leadership before deleting
     match char_repo.load(&char_name).await {
         Ok(Some(ch)) => {
@@ -222,7 +214,6 @@ mod tests {
 
     #[test]
     fn test_delchar_index_validation() {
-        // C++ Reference: char_index must be 0-2 (3 slots). Index > 2 fails.
         // (C++ has 3 char slots max in CharacterSelectionHandler.cpp:630)
         for idx in 0..=2u8 {
             assert!(idx <= 2, "index {idx} should be accepted");

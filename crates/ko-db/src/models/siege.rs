@@ -1,16 +1,11 @@
 //! Siege warfare model -- maps to the `knights_siege_warfare` PostgreSQL table.
-//!
-//! C++ Reference:
-//! - `_KNIGHTS_SIEGE_WARFARE` struct in `GameDefine.h:1986-2072`
+//! - `_KNIGHTS_SIEGE_WARFARE` struct
 //! - `KnightsSiegeWarFare.h` — OdbcRecordset columns
 //! - MSSQL `KNIGHTS_SIEGE_WARFARE` table (38 columns, 1 row)
-//!
 //! One row per castle (castle_index=1 for Delos). Stores war schedule,
 //! challenge/request clan lists, tariffs, tax revenue, and dungeon charges.
 
 /// A single siege warfare row from the database.
-///
-/// C++ equivalent: `_KNIGHTS_SIEGE_WARFARE` struct fields.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct KnightsSiegeWarfareRow {
     /// Castle identifier (1 = Delos).

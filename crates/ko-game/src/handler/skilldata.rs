@@ -1,11 +1,7 @@
 //! WIZ_SKILLDATA (0x79) handler — skill shortcut bar save/load.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/UserSkillShortcutSystem.cpp`
-//!
 //! Sub-opcodes:
 //! - 1 = SKILL_DATA_SAVE: Client sends skill bar data → save to DB (no response)
 //! - 2 = SKILL_DATA_LOAD: Client requests saved skill bar data → load from DB, send response
-//!
 //! Binary format: each skill slot is a little-endian uint32 (4 bytes).
 //! Max 80 slots = 320 bytes, but count is capped at 64 per C++ validation.
 
@@ -53,12 +49,8 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle SKILL_DATA_SAVE — client sends skill bar layout to persist.
-///
-/// C++ Reference: `CUser::SkillDataSave` in `UserSkillShortcutSystem.cpp:32-44`
 /// and `CUser::ReqSkillDataSave` in `DatabaseThread.cpp:1342-1361`.
-///
 /// Packet format: u16(count) + u32[count] (skill IDs)
-///
 /// The C++ server does NOT send a response for save — it only persists to DB.
 async fn handle_save(
     session: &mut ClientSession,
@@ -109,12 +101,8 @@ async fn handle_save(
 }
 
 /// Handle SKILL_DATA_LOAD — client requests saved skill bar layout.
-///
-/// C++ Reference: `CUser::SkillDataLoad` in `UserSkillShortcutSystem.cpp:49-53`
 /// and `CUser::ReqSkillDataLoad` in `DatabaseThread.cpp:1333-1340`.
-///
 /// Response: WIZ_SKILLDATA + u8(SKILL_DATA_LOAD) + u16(count) + u32[count]
-///
 /// If no data exists, sends count = 0.
 async fn handle_load(session: &mut ClientSession) -> anyhow::Result<()> {
     let char_name = match session.world().get_character_info(session.session_id()) {
@@ -133,7 +121,6 @@ async fn handle_load(session: &mut ClientSession) -> anyhow::Result<()> {
 
     match row {
         Some(r) => {
-            // C++ Reference: DatabaseThread.cpp:1348 — count is `short` (signed i16)
             // Validate before casting to avoid negative → huge u16 overflow
             let count = if r.count > 0 && r.count <= 64 {
                 r.count as u16
@@ -297,7 +284,6 @@ mod tests {
 
     #[test]
     fn test_skill_count_negative_clamped_to_zero() {
-        // C++ Reference: DatabaseThread.cpp:1348 — count stored as `short` (signed i16)
         // If DB returns a negative count, it must be clamped to 0 to avoid
         // overflow when cast to u16 (e.g., -1 → 65535).
         let negative_count: i16 = -1;

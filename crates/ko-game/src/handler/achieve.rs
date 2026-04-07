@@ -1,9 +1,5 @@
 //! WIZ_USER_ACHIEVE (0x99) handler — achievement system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/AchieveHandler.cpp`
-//!
 //! Manages user achievements, titles, and rewards.
-//!
 //! Sub-opcodes:
 //! - 2: AchieveGiftRequest — claim reward item for a completed achievement
 //! - 3: AchieveDetailShow — view achievement detail status
@@ -19,7 +15,6 @@ use ko_protocol::{Opcode, Packet, PacketReader};
 
 use crate::session::{ClientSession, SessionState};
 
-/// C++ Reference: `GameDefine.h:4349` — `UserAchieveOpcodes`
 #[repr(u8)]
 #[allow(dead_code)]
 enum AchieveOpcode {
@@ -39,7 +34,6 @@ enum AchieveOpcode {
     SkillTitleReset = 19,
 }
 
-/// C++ Reference: `GameDefine.h:4427` — `UserAchieveStatus`
 #[repr(u8)]
 enum AchieveStatus {
     ChallengeIncomplete = 0,
@@ -84,9 +78,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Sub-opcode 2: AchieveGiftRequest — claim reward for a finished achievement.
-///
-/// C++ Reference: `CUser::HandleUserAchieveGiftRequest()`
-///
 /// Client sends: [u8 opcode=2][u16 s_index]
 /// Server responds: [u8 opcode=2][u16 s_index][u16 result] (1=success, 0=fail)
 async fn handle_gift_request(
@@ -169,9 +160,6 @@ async fn handle_gift_request(
 }
 
 /// Sub-opcode 3: AchieveDetailShow — view achievement detail.
-///
-/// C++ Reference: `CUser::HandleUserAchieveUserDetail()`
-///
 /// Client sends: [u8 opcode=3][u16 count][u16 achieve_id * count]
 /// Server responds: [u8 opcode=3][u16 count]([u16 id][u8 status][u32 count] * count)
 async fn handle_detail_show(
@@ -227,9 +215,6 @@ async fn handle_detail_show(
 }
 
 /// Sub-opcode 4: AchieveSummary — summary stats screen.
-///
-/// C++ Reference: `CUser::HandleUserAchieveSummary()`
-///
 /// Server responds: [u8 opcode=4][u32 play_time_minutes][u32 monster_kills]
 ///   [u32 user_kills][u32 user_deaths][u32 total_medal]
 ///   [u16 recent1][u16 recent2][u16 recent3]
@@ -240,7 +225,6 @@ async fn handle_summary(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
 
     // Update play_time before reading summary.
-    // C++ Reference: AchieveHandler.cpp:53-63 — UpdateAchievePlayTime()
     world.update_session(sid, |h| {
         if h.achieve_login_time > 0 {
             let now = std::time::SystemTime::now()
@@ -308,9 +292,6 @@ async fn handle_summary(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Sub-opcode 6: AchieveStart — start a timed challenge.
-///
-/// C++ Reference: `CUser::HandleUserAchieveStart()`
-///
 /// Client sends: [u8 opcode=6][u16 s_index]
 /// Server responds: [u8 opcode=6][u16 s_index][u16 result][u16 req_time]
 async fn handle_start(session: &mut ClientSession, r: &mut PacketReader<'_>) -> anyhow::Result<()> {
@@ -414,9 +395,6 @@ async fn handle_start(session: &mut ClientSession, r: &mut PacketReader<'_>) -> 
 }
 
 /// Sub-opcode 7: AchieveStop — cancel a timed challenge.
-///
-/// C++ Reference: `CUser::HandleUserAchieveStop()`
-///
 /// Client sends: [u8 opcode=7][u16 s_index]
 /// Server responds: [u8 opcode=7][u16 s_index][u16 result]
 async fn handle_stop(session: &mut ClientSession, r: &mut PacketReader<'_>) -> anyhow::Result<()> {
@@ -482,9 +460,6 @@ async fn handle_stop(session: &mut ClientSession, r: &mut PacketReader<'_>) -> a
 }
 
 /// Sub-opcode 16: AchieveCoverTitle — equip a cover (display) title.
-///
-/// C++ Reference: `CUser::HandleUserAchieveCoverTitle()`
-///
 /// Client sends: [u8 opcode=16][u16 cover_id][u16 skill_id]
 /// Server responds: [u8 opcode][u16 cover_id][u16 skill_id][u8 result][u8 0]
 async fn handle_cover_title(
@@ -550,9 +525,6 @@ async fn handle_cover_title(
 }
 
 /// Sub-opcode 17: AchieveSkillTitle — equip a skill title (with stat bonuses).
-///
-/// C++ Reference: `CUser::HandleUserAchieveSkillTitle()`
-///
 /// Client sends: [u8 opcode=17][u16 cover_id][u16 skill_id]
 async fn handle_skill_title(
     session: &mut ClientSession,
@@ -631,14 +603,11 @@ async fn handle_skill_title(
     session.send_packet(&resp).await?;
 
     // Recalculate stats with new title bonuses
-    // C++ Reference: SetUserAbility(true) after SkillTitle equip
     world.set_user_ability(sid);
     Ok(())
 }
 
 /// Sub-opcode 18: AchieveCoverTitleReset — unequip cover title.
-///
-/// C++ Reference: `CUser::HandleUserAchieveCoverTitleReset()`
 async fn handle_cover_title_reset(session: &mut ClientSession) -> anyhow::Result<()> {
     let sid = session.session_id();
     let world = session.world().clone();
@@ -661,8 +630,6 @@ async fn handle_cover_title_reset(session: &mut ClientSession) -> anyhow::Result
 }
 
 /// Sub-opcode 19: AchieveSkillTitleReset — unequip skill title (clear stat bonuses).
-///
-/// C++ Reference: `CUser::HandleUserAchieveSkillTitleReset()`
 async fn handle_skill_title_reset(session: &mut ClientSession) -> anyhow::Result<()> {
     let sid = session.session_id();
     let world = session.world().clone();
@@ -680,18 +647,15 @@ async fn handle_skill_title_reset(session: &mut ClientSession) -> anyhow::Result
     session.send_packet(&resp).await?;
 
     // Recalculate stats after clearing title bonuses
-    // C++ Reference: SetUserAbility(true) after SkillTitleReset
     world.set_user_ability(sid);
     Ok(())
 }
 
 /// Send completed achievement notifications on game entry.
-///
 /// Sniffer-verified (session 3, seq 38-39): original server sends
 /// `[sub=1][achieve_id:u16][status:u8]` for each completed achievement.
 /// Called from Phase 2 game entry after achievements are loaded into session.
 /// Send completed achievement notifications on game entry.
-///
 /// Sniffer-verified (session 3, seq 38-39): original server sends
 /// `[sub=1][achieve_id:u16][status:u8]` for each completed achievement.
 pub fn send_achieve_status_on_login(
@@ -724,7 +688,7 @@ mod tests {
 
     /// Build a summary response packet from the given data.
     ///
-    /// Matches the C++ `CUser::HandleUserAchieveSummary()` wire format exactly.
+    /// Matches the `CUser::HandleUserAchieveSummary()` wire format exactly.
     fn build_summary_packet(
         summary: &AchieveSummary,
         type_counts: (u16, u16, u16, u16, u16),
@@ -749,7 +713,7 @@ mod tests {
 
     /// Build a detail show response packet.
     ///
-    /// Matches C++ `CUser::HandleUserAchieveUserDetail()` wire format.
+    /// Matches `CUser::HandleUserAchieveUserDetail()` wire format.
     fn build_detail_show_packet(details: &[(u16, u8, u32)]) -> Packet {
         let mut resp = Packet::new(Opcode::WizUserAchieve as u8);
         resp.write_u8(AchieveOpcode::DetailShow as u8);

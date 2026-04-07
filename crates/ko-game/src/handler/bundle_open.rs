@@ -1,12 +1,8 @@
 //! WIZ_BUNDLE_OPEN_REQ (0x24) handler — open a ground item bundle.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/BundleSystem.cpp:6-39`
-//!
 //! Packet format (from client):
 //! ```text
 //! [u32 bundle_id]
 //! ```
-//!
 //! Response (WIZ_BUNDLE_OPEN_REQ):
 //! ```text
 //! [u32 bundle_id] [u8 result]
@@ -40,7 +36,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Check player state — must be alive and not in a busy state
-    // C++ Reference: BundleSystem.cpp:15-16
     if world.is_player_dead(sid)
         || world.is_trading(sid)
         || world.is_merchanting(sid)
@@ -71,7 +66,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Range check: within 50m (squared distance)
-    // C++ Reference: BundleSystem.cpp:22 — isInRange(pBundle->x, pBundle->z, RANGE_50M)
     let dx = pos.x - bundle.x;
     let dz = pos.z - bundle.z;
     if dx * dx + dz * dz > 50.0 * 50.0 {

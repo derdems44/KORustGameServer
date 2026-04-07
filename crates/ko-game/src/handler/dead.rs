@@ -1,36 +1,21 @@
 //! WIZ_DEAD (0x11) handler — death notification.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/Unit.cpp:2121-2126`
-//!
 //! ## Death Animation Broadcast
-//!
 //! When a unit dies, the server broadcasts the death to the 3x3 region:
-//!
 //! `[u32 dead_unit_id]`
-//!
 //! The client may also send WIZ_DEAD in some edge cases (e.g., auto-death
 //! items). The handler ignores client-initiated death packets since death
 //! is always server-authoritative.
-//!
 //! ## Helper: `broadcast_death`
-//!
 //! Other handlers (combat, HP change) call `broadcast_death()` to notify
 //! nearby players when a player dies.
-//!
 //! ## Gold Drop on Death
-//!
-//! C++ Reference: `UserGoldSystem.cpp:3-77` (CUser::GoldChange)
-//!
 //! When a player is killed by another player in a zone with `gold_lose` enabled:
 //! - Victim loses 50% of their gold
 //! - Killer gains 40% of victim's gold (solo kill)
 //! - If killer is in a party, 40% is distributed by level ratio
 //! - 10% is destroyed (gold sink)
-//!
 //! ## WIZ_GOLD_CHANGE (0x4A) Packet
-//!
 //! `[u8 type] [u32 amount] [u32 total_gold]`
-//!
 //! Type constants:
 //! - `COIN_GAIN` (1): gold gained
 //! - `COIN_LOSS` (2): gold lost
@@ -54,8 +39,6 @@ use crate::magic_constants::{MAGIC_CANCEL_TRANSFORMATION, TRANSFORMATION_NPC};
 use crate::state_change_constants::STATE_CHANGE_ABNORMAL;
 
 /// Chaos dungeon skill item IDs to be removed on death (and on login).
-///
-/// C++ Reference: `Define.h:336-338`
 pub(crate) const ITEM_LIGHT_PIT: u32 = 700041000;
 pub(crate) const ITEM_DRAIN_RESTORE: u32 = 700040000;
 pub(crate) const ITEM_KILLING_BLADE: u32 = 700037000;
@@ -65,20 +48,13 @@ use crate::world::USER_DEAD;
 use crate::attack_constants::MAX_DAMAGE;
 
 /// WIZ_GOLD_CHANGE sub-type: gold gained.
-///
-/// C++ Reference: `packets.h:269` — `CoinGain = 1`
 pub const COIN_GAIN: u8 = 1;
 /// WIZ_GOLD_CHANGE sub-type: gold lost.
-///
-/// C++ Reference: `packets.h:270` — `CoinLoss = 2`
 pub const COIN_LOSS: u8 = 2;
 
 /// Handle WIZ_DEAD from the client.
-///
 /// Death is server-authoritative, so the client should not normally send
 /// this packet. We log and ignore it.
-///
-/// C++ Reference: `Unit.cpp:2121-2126` (Unit::SendDeathAnimation)
 pub fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -93,19 +69,13 @@ pub fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
 }
 
 /// Broadcast a death animation to the 3x3 region grid and apply XP loss.
-///
 /// This is called by combat/HP handlers when a player's HP reaches 0.
-///
-/// C++ Reference: `Unit.cpp:2121-2126` (Unit::SendDeathAnimation)
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:858-871` (OnDeathLostExpCalc)
-///
 /// Packet format: `WIZ_DEAD [u32 dead_unit_id]`
 pub fn broadcast_death(world: &WorldState, dead_sid: SessionId) {
     // Mark player as dead
     world.update_res_hp_type(dead_sid, USER_DEAD);
     world.update_character_hp(dead_sid, 0);
 
-    // C++ Reference: UserHealtMagicSpSystem.cpp:935-951 — InitOnDeath()
     // Clear all DOTs (InitType3), buffs (InitType4), stealth (Type9), transform (Type6).
     world.clear_durational_skills(dead_sid);
     world.clear_all_buffs(dead_sid, false);
@@ -114,7 +84,6 @@ pub fn broadcast_death(world: &WorldState, dead_sid: SessionId) {
     // clear_all_buffs removes map entries but doesn't call per-type cleanup,
     // so we must manually reset every session field that any buff_type_cleanup
     // would have restored.
-    // C++ Reference: InitOnDeath() resets all skill/potion/teleport block flags.
     world.update_session(dead_sid, |h| {
         // BUFF_TYPE_SILENCE_TARGET / FREEZE / KAUL
         h.can_use_skills = true;
@@ -156,11 +125,9 @@ pub fn broadcast_death(world: &WorldState, dead_sid: SessionId) {
         h.drop_scroll_amount = 0;
     });
 
-    // C++ Reference: UserHealtMagicSpSystem.cpp:943 — Type9Duration(true)
     // Cancel stealth/invisibility on death
     world.set_invisibility_type(dead_sid, 0);
 
-    // C++ Reference: UserHealtMagicSpSystem.cpp:945-949
     //   if (isTransformed() && !isNPCTransformation()) Type6Cancel(true)
     // Cancel non-NPC transformations on death
     let transform_type = world
@@ -168,7 +135,6 @@ pub fn broadcast_death(world: &WorldState, dead_sid: SessionId) {
         .unwrap_or(0);
     if transform_type != 0 && transform_type != TRANSFORMATION_NPC {
         world.clear_transformation(dead_sid);
-        // C++ Reference: MagicInstance.cpp:6774 — Type6Cancel sends cancel packet
         //   Packet result(WIZ_MAGIC_PROCESS, uint8(MAGIC_CANCEL_TRANSFORMATION=7));
         //   pUser->Send(&result);
         let mut cancel_pkt = Packet::new(Opcode::WizMagicProcess as u8);
@@ -176,20 +142,17 @@ pub fn broadcast_death(world: &WorldState, dead_sid: SessionId) {
         world.send_to_session_owned(dead_sid, cancel_pkt);
     }
 
-    // C++ Reference: User.cpp:3639-3649 — ItemWoreOut(WORE_TYPE_DEFENCE, 0) on death
     // Armour slots (HEAD, BREAST, LEG, GLOVE, FOOT) lose rand(2..=5) durability.
     world.item_wore_out(dead_sid, super::durability::WORE_TYPE_DEFENCE, 0);
 
     world.set_user_ability(dead_sid);
 
     // ── Zone-specific death cleanup ─────────────────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:450-482 — OnDeathitDoesNotMatter()
     {
         let pos_check = world.get_position(dead_sid);
         if let Some(ref p) = pos_check {
             match p.zone_id {
                 // ── Chaos Dungeon death ──────────────────────────────
-                // C++ Reference: UserHealtMagicSpSystem.cpp:454-459
                 //   if (isInTempleEventZone && isEventUser) RobChaosSkillItems();
                 ZONE_CHAOS_DUNGEON => {
                     let is_event_user = world
@@ -200,24 +163,19 @@ pub fn broadcast_death(world: &WorldState, dead_sid: SessionId) {
                     }
                 }
                 // ── BDW flag carrier death ────────────────────────────
-                // C++ Reference: UserHealtMagicSpSystem.cpp:462
                 bdw::ZONE_BDW => {
                     bdw_flag_carrier_death(world, dead_sid);
                 }
                 // ── Tower owner death in ZONE_BATTLE6 ────────────────
-                // C++ Reference: UserHealtMagicSpSystem.cpp:464-466
                 //   if (isTowerOwner()) TowerExitsFunciton(true);
                 ZONE_BATTLE6 => {
                     tower_exits_on_death(world, dead_sid);
                 }
                 // ── Draki Tower death ────────────────────────────────
-                // C++ Reference: UserHealtMagicSpSystem.cpp:468-469
-                //   DrakiTowerKickOuts() — send OUT1, start kick timer
                 ZONE_DRAKI_TOWER => {
                     draki_tower_kickouts_on_death(world, dead_sid);
                 }
                 // ── FT / Delos Castellan / Dungeon Defence death ─────
-                // C++ Reference: UserHealtMagicSpSystem.cpp:471-474
                 //   KickOutZoneUser(true, ZONE_MORADON);
                 ZONE_FORGOTTEN_TEMPLE | ZONE_DELOS_CASTELLAN | ZONE_DUNGEON_DEFENCE => {
                     let nation = world
@@ -227,7 +185,6 @@ pub fn broadcast_death(world: &WorldState, dead_sid: SessionId) {
                     crate::systems::war::kick_out_zone_user(world, dead_sid, nation);
                 }
                 // ── Under Castle death ───────────────────────────────
-                // C++ Reference: UserHealtMagicSpSystem.cpp:476-478
                 //   ItemWoreOut(UTC_ATTACK, -MAX_DAMAGE);
                 //   ItemWoreOut(UTC_DEFENCE, -MAX_DAMAGE);
                 // Effectively destroys all equipped weapons and armour.
@@ -248,7 +205,6 @@ pub fn broadcast_death(world: &WorldState, dead_sid: SessionId) {
         }
 
         // ── Wanted user death cleanup ────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:481
         //   if (isWantedUser()) NewWantedEventLoqOut(pKiller);
         let is_wanted = world
             .with_session(dead_sid, |h| h.is_wanted)
@@ -289,13 +245,9 @@ pub fn broadcast_death(world: &WorldState, dead_sid: SessionId) {
     // NOTE: XP loss is NOT applied here — it is only applied for NPC kills
     // via `apply_npc_death_xp_loss()`. C++ calls OnDeathLostExpCalc() only
     // inside OnDeathKilledNpc(), not for PvP, DOT, or self-inflicted deaths.
-    // C++ Reference: UserHealtMagicSpSystem.cpp:878-891
 }
 
 /// Dismount and release a tower NPC when the owner dies in ZONE_BATTLE6.
-///
-/// C++ Reference: `TowerTransformationProcess.cpp:4-25` — `CUser::TowerExitsFunciton(true)`
-///
 /// Steps:
 /// 1. Show the NPC (broadcast INOUT_IN)
 /// 2. Clear tower ownership on NPC and player
@@ -309,7 +261,6 @@ fn tower_exits_on_death(world: &WorldState, dead_sid: SessionId) {
 
     let npc_nid = tower_npc_id as u32;
 
-    // C++: pNpc = GetNpcPtr(GetTowerID(), GetZoneID());
     let npc = match world.get_npc_instance(npc_nid) {
         Some(n) => n,
         None => return,
@@ -319,7 +270,6 @@ fn tower_exits_on_death(world: &WorldState, dead_sid: SessionId) {
         _ => return,
     };
 
-    // C++: if (!pNpc->m_isTowerOwner) return;
     let is_owned = world
         .get_npc_ai(npc_nid)
         .map(|ai| ai.is_tower_owner)
@@ -328,7 +278,6 @@ fn tower_exits_on_death(world: &WorldState, dead_sid: SessionId) {
         return;
     }
 
-    // C++: pNpc->StateChange(NPC_SHOW) — broadcast NPC reappear
     let show_pkt = crate::npc::build_npc_inout(crate::npc::NPC_IN, &npc, &tmpl);
     if let Some(pos) = world.get_position(dead_sid) {
         let event_room = world.get_event_room(dead_sid);
@@ -342,19 +291,15 @@ fn tower_exits_on_death(world: &WorldState, dead_sid: SessionId) {
         );
     }
 
-    // C++: pNpc->m_isTowerOwner = false;
     world.update_npc_ai(npc_nid, |ai| {
         ai.is_tower_owner = false;
     });
 
-    // C++: m_TowerOwnerID = -1;
     world.set_tower_owner_id(dead_sid, -1);
 
-    // C++: Send WIZ_MOVING_TOWER(17, 1, user_id, npc_id)
     let dismount_pkt = super::moving_tower::build_tower_death_dismount(dead_sid as u32, npc_nid);
     world.send_to_session_owned(dead_sid, dismount_pkt);
 
-    // C++: StateChangeServerDirect(3, abnormal_type)
     //   if (isGM() && ABNORMAL_INVISIBLE) preserve; else ABNORMAL_NORMAL=1
     let is_gm = world
         .get_character_info(dead_sid)
@@ -380,9 +325,6 @@ fn tower_exits_on_death(world: &WorldState, dead_sid: SessionId) {
 }
 
 /// Trigger Draki Tower kickout when a player dies in ZONE_DRAKI_TOWER.
-///
-/// C++ Reference: `DrakiTowerSystem.cpp:411-426` — `CUser::DrakiTowerKickOuts()`
-///
 /// Steps:
 /// 1. Send OUT1 packet to the dying player
 /// 2. Set kick timer on the room (20 seconds)
@@ -393,7 +335,6 @@ fn draki_tower_kickouts_on_death(world: &WorldState, dead_sid: SessionId) {
         return;
     }
 
-    // C++: Send WIZ_EVENT(TEMPLE_DRAKI_TOWER_OUT1) packet
     //   [0x0C] [0x04] [0x00] [0x14] [u16(0)] [u8(0)]
     let mut out1_pkt = Packet::new(Opcode::WizEvent as u8);
     out1_pkt.write_u8(0x0C); // TEMPLE_DRAKI_TOWER_OUT1
@@ -404,7 +345,6 @@ fn draki_tower_kickouts_on_death(world: &WorldState, dead_sid: SessionId) {
     out1_pkt.write_u8(0);
     world.send_to_session_owned(dead_sid, out1_pkt);
 
-    // C++: pRoomInfo->m_tDrakiOutTimer = UNIXTIME + 20;
     //      pRoomInfo->m_bOutTimer = true;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -417,29 +357,19 @@ fn draki_tower_kickouts_on_death(world: &WorldState, dead_sid: SessionId) {
 }
 
 /// NPC type: rolling stone (environmental hazard, no XP loss).
-///
-/// C++ Reference: `GameDefine.h:3890` — `#define NPC_ROLLINGSTONE 214`
 const NPC_TYPE_ROLLINGSTONE: u8 = 214;
 
 /// NPC type: guard summon (fortress turret, no XP loss).
-///
-/// C++ Reference: `GameDefine.h:3884` — `#define NPC_GUARD_SUMMON 172`
 const NPC_TYPE_GUARD_SUMMON: u8 = 172;
 
 /// NPC proto: saw blade (trap NPC, no XP loss).
-///
-/// C++ Reference: `GameDefine.h:3892` — `#define SAW_BLADE_SSID 2107`
 const SAW_BLADE_PROTO: u16 = 2107;
 
 /// Apply XP loss for NPC-killed death (PvE only).
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:878-891` — `OnDeathKilledNpc()`
-///
 /// XP loss is ONLY applied when:
 /// - Zone has `exp_lost` enabled and is NOT a war zone
 /// - Killer NPC is NOT rolling stone (type 214), saw blade (proto 2107),
 ///   or guard summon (type 172)
-///
 /// Call this AFTER `broadcast_death()` from NPC AI kill paths only.
 pub async fn apply_npc_death_xp_loss(
     world: &WorldState,
@@ -447,7 +377,6 @@ pub async fn apply_npc_death_xp_loss(
     npc_type: u8,
     npc_proto: u16,
 ) {
-    // C++ Reference: UserHealtMagicSpSystem.cpp:883-885
     // Exclude specific NPC types from causing XP loss
     if npc_type == NPC_TYPE_ROLLINGSTONE
         || npc_proto == SAW_BLADE_PROTO
@@ -461,7 +390,6 @@ pub async fn apply_npc_death_xp_loss(
         None => return,
     };
 
-    // C++ Reference: UserHealtMagicSpSystem.cpp:878 — `if (GetMap() && GetMap()->m_bExpLost != 0)`
     // C++ checks ONLY m_bExpLost — war_zone flag is independent (Unit.cpp:2162,2174).
     let should_lose_exp = world.get_zone(pos.zone_id).is_some_and(|zone| {
         zone.zone_info
@@ -479,13 +407,11 @@ pub async fn apply_npc_death_xp_loss(
     };
 
     // Check premium status for XP loss reduction
-    // C++ Reference: `CUser::OnDeathLostExpCalc()` — uses PremiumExpRestorePercent
     let premium_restore = world.get_premium_exp_restore(dead_sid) as f32;
 
     let lost_exp = super::level::on_death_lost_exp_calc(ch.max_exp, premium_restore);
     if lost_exp > 0 {
         // Store for resurrection skill EXP recovery
-        // C++ Reference: UserHealtMagicSpSystem.cpp:870 — `m_iLostExp = nExp`
         world.update_session(dead_sid, |h| {
             h.lost_exp = lost_exp;
         });
@@ -494,11 +420,8 @@ pub async fn apply_npc_death_xp_loss(
 }
 
 /// Mark who killed this player (for resurrection EXP recovery gating).
-///
 /// Call after `broadcast_death()` when the attacker is another player.
 /// PvE deaths leave `who_killed_me` at -1 (the default).
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:741` — `m_sWhoKilledMe = pAttacker->GetSocketID()`
 pub fn set_who_killed_me(world: &WorldState, dead_sid: SessionId, killer_sid: SessionId) {
     world.update_session(dead_sid, |h| {
         h.who_killed_me = killer_sid as i16;
@@ -506,8 +429,6 @@ pub fn set_who_killed_me(world: &WorldState, dead_sid: SessionId, killer_sid: Se
 }
 
 /// Check if a zone blocks gold loss on death.
-///
-/// C++ Reference: `UserGoldSystem.cpp:5-11` — Arena/event zones never lose gold.
 fn is_no_gold_loss_zone(zone_id: u16) -> bool {
     matches!(
         zone_id,
@@ -522,27 +443,20 @@ fn is_no_gold_loss_zone(zone_id: u16) -> bool {
 }
 
 /// Handle gold change on player-vs-player death.
-///
 /// Called by combat handlers after `broadcast_death()` when a player is
 /// killed by another player in a zone with `gold_lose` enabled.
-///
-/// C++ Reference: `UserGoldSystem.cpp:3-77` (CUser::GoldChange)
-///
 /// Gold distribution:
 /// - Victim loses 50% of their gold
 /// - Killer gains 40% of victim's gold (solo, no party)
 /// - Remaining 10% is destroyed (gold sink)
-///
 /// Sends WIZ_GOLD_CHANGE packets to both victim and killer.
 pub fn gold_change_on_death(world: &WorldState, killer_sid: SessionId, victim_sid: SessionId) {
     // Check that the zone has gold_lose enabled
-    // C++ Reference: UserHealtMagicSpSystem.cpp:730 — `pKiller->GetMap()->m_bGoldLose`
     let victim_zone = world
         .get_position(victim_sid)
         .map(|p| p.zone_id)
         .unwrap_or(0);
 
-    // C++ Reference: UserGoldSystem.cpp:5-11 — Arena zones never lose gold on death
     if is_no_gold_loss_zone(victim_zone) {
         return;
     }
@@ -566,17 +480,14 @@ pub fn gold_change_on_death(world: &WorldState, killer_sid: SessionId, victim_si
         return;
     }
 
-    // C++ Reference: UserGoldSystem.cpp:24-25
     // Killer gains 40%: `GoldGain((pTUser->m_iGold * 4) / 10)`
     // Victim loses 50%: `GoldLose(pTUser->m_iGold / 2)`
     let gold_lost = victim_gold / 2; // 50% destroyed from victim
     let gold_gained = (victim_gold as u64 * 4 / 10) as u32; // 40% to killer
 
     // Apply gold loss to victim first (also sends WIZ_GOLD_CHANGE packet)
-    // C++ Reference: UserGoldSystem.cpp:34 — `pTUser->GoldLose(pTUser->m_iGold / 2)`
     world.gold_lose(victim_sid, gold_lost);
 
-    // C++ Reference: UserGoldSystem.cpp:19-60
     // If killer is in a party, distribute gold proportionally by level among members.
     // Otherwise solo killer gets the full 40%.
     let distributed_to_party = if world.is_in_party(killer_sid) {
@@ -651,12 +562,8 @@ pub fn gold_change_on_death(world: &WorldState, killer_sid: SessionId, victim_si
 }
 
 /// Calculate gold distribution for a party kill on death.
-///
 /// When the killer is in a party, 40% of the victim's gold is distributed
 /// among party members proportional to their level.
-///
-/// C++ Reference: `UserGoldSystem.cpp:30-60`
-///
 /// Returns a list of `(session_id, gold_amount)` pairs for each party member.
 pub fn calculate_party_gold_shares(
     total_gold: u32,
@@ -671,7 +578,6 @@ pub fn calculate_party_gold_shares(
         return Vec::new();
     }
 
-    // C++ Reference: UserGoldSystem.cpp:58
     // `pUser->GoldGain((int)(temp_gold * (float)(pUser->GetLevel() / (float)levelSum)))`
     party_members
         .iter()
@@ -683,13 +589,9 @@ pub fn calculate_party_gold_shares(
 }
 
 /// Track a BDW player kill with full C++ scoring and scoreboard broadcast.
-///
-/// C++ Reference: `CUser::BDWUpdateRoomKillCount()` in `JuraidBdwFragSystem.cpp:372-468`
-///
 /// Scoring formula: `score += 1 * nation_user_count_in_room`
 /// After scoring, broadcasts TEMPLE_SCREEN to all room users.
 /// Checks win condition: if score >= threshold (based on total players), triggers early finish.
-///
 /// Thresholds (C++ lines 399-402):
 /// - total >= 16 → 600 points to win
 /// - total >= 10 → 400
@@ -753,7 +655,6 @@ pub fn track_bdw_player_kill(world: &WorldState, killer_sid: SessionId, _dead_si
             room.karus_kill_count += 1;
         }
 
-        // C++ Reference: JuraidBdwFragSystem.cpp:392
         // Per-user BDW points (+1 per kill)
         if killer_nation == 1 {
             if let Some(u) = room.karus_users.get_mut(&killer_name) {
@@ -764,7 +665,6 @@ pub fn track_bdw_player_kill(world: &WorldState, killer_sid: SessionId, _dead_si
         }
 
         // Check win condition (using shared bdw module function)
-        // C++ Reference: JuraidBdwFragSystem.cpp:396-409
         let winner = bdw::check_win_condition(&mut room);
         let finished = winner.is_some();
 
@@ -785,7 +685,6 @@ pub fn track_bdw_player_kill(world: &WorldState, killer_sid: SessionId, _dead_si
         )
     }; // room lock dropped
 
-    // C++ Reference: JuraidBdwFragSystem.cpp:412-418
     // Clear altar respawn state on kill-triggered finish.
     if finished {
         if let Some(state) = world.bdw_manager_write().get_room_state_mut(room_id) {
@@ -832,7 +731,6 @@ pub fn track_bdw_player_kill(world: &WorldState, killer_sid: SessionId, _dead_si
 }
 
 /// Broadcast a packet to all active users in a BDW room.
-///
 /// Clones the packet once and shares via Arc to avoid per-recipient cloning.
 pub(super) fn broadcast_to_bdw_room(world: &WorldState, room_id: u8, pkt: &Packet) {
     let Some(room) = world
@@ -851,10 +749,7 @@ pub(super) fn broadcast_to_bdw_room(world: &WorldState, room_id: u8, pkt: &Packe
 }
 
 /// Handle BDW flag carrier death — clear room flag and start altar respawn.
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:462`
 ///   `if (m_bHasAlterOptained) BDWUserHasObtainedLoqOut();`
-///
 /// Called from `broadcast_death()` when the dead player is in BDW zone 84.
 /// The buff is already removed by `clear_all_buffs()`, so this only needs to
 /// clear the room-level `has_altar_obtained` flag and start the respawn timer.
@@ -916,15 +811,11 @@ fn bdw_flag_carrier_death(world: &WorldState, dead_sid: SessionId) {
 }
 
 /// Broadcast a PvP death notice to all players in the zone.
-///
-/// C++ Reference: `CUser::SendNewDeathNotice(Unit* pKiller)` in `User.cpp:3440-3521`
-///
 /// Sends WIZ_EXT_HOOK (0xE9) with sub-opcode DeathNotice (0xD7) to every player
 /// in the same zone. The `killtype` field varies per recipient:
 /// - 1: the recipient IS the killer or victim (direct participants)
 /// - 2: the recipient is in the killer's party
 /// - 3: bystander (everyone else)
-///
 /// Packet format (SByte mode):
 /// `[u8 WIZ_EXT_HOOK(0xE9)] [u8 0xD7] [u8 killtype] [string killer_name] [string victim_name] [u16 x] [u16 z]`
 pub fn send_death_notice(world: &WorldState, killer_sid: SessionId, victim_sid: SessionId) {
@@ -973,10 +864,7 @@ pub fn send_death_notice(world: &WorldState, killer_sid: SessionId, victim_sid: 
 }
 
 /// Apply loyalty (NP) changes when a player kills another player.
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:726-728`
 ///   - If zone has `m_bGiveLoyalty`, call `LoyaltyChange` (solo) or `LoyaltyDivide` (party).
-///
 /// This function checks the zone flag and delegates to the appropriate loyalty function.
 pub fn pvp_loyalty_on_death(world: &WorldState, killer_sid: SessionId, victim_sid: SessionId) {
     use crate::systems::loyalty::{self, LoyaltyRates};
@@ -1010,9 +898,6 @@ pub fn pvp_loyalty_on_death(world: &WorldState, killer_sid: SessionId, victim_si
 }
 
 /// Remove Chaos Dungeon skill items from a player on death.
-///
-/// C++ Reference: `CUser::RobChaosSkillItems()` in `User.cpp:4576-4584`
-///
 /// Called on death in the Chaos Dungeon zone (85). Removes all copies of:
 /// - ITEM_LIGHT_PIT (700041000)
 /// - ITEM_DRAIN_RESTORE (700040000)
@@ -1037,15 +922,11 @@ pub fn rob_chaos_skill_items(world: &WorldState, sid: SessionId) {
 }
 
 /// Track a Juraid Mountain monster kill.
-///
 /// Called from NPC death handlers (attack.rs, npc_ai.rs, magic_process.rs) when
 /// a monster is killed in zone 87 by a player. Records the kill for the player's
 /// nation in the appropriate Juraid room.
-///
 /// This is a public helper that other handlers can call. The actual wiring in
 /// attack.rs::handle_npc_death should call this when the NPC dies in zone 87.
-///
-/// C++ Reference: Juraid monster kill tracking in EventMainSystem.cpp
 pub fn track_juraid_monster_kill(world: &WorldState, killer_sid: SessionId) {
     // Check if Juraid is active
     let is_juraid_active = world
@@ -1103,9 +984,6 @@ pub fn track_juraid_monster_kill(world: &WorldState, killer_sid: SessionId) {
 }
 
 /// Track a Juraid PvP kill — updates room kill count and broadcasts scoreboard.
-///
-/// C++ Reference: `CUser::JRUpdateRoomKillCount()` in `JuraidBdwFragSystem.cpp:471-491`
-///
 /// Unlike `track_juraid_monster_kill` which is for NPC kills, this is for
 /// player-vs-player kills in Juraid Mountain (zone 87).
 pub fn track_juraid_pvp_kill(world: &WorldState, killer_sid: SessionId) {
@@ -1148,7 +1026,6 @@ pub fn track_juraid_pvp_kill(world: &WorldState, killer_sid: SessionId) {
             return;
         }
 
-        // C++: nation == ELMORAD ? pRoomInfo->m_iElmoradKillCount++ : pRoomInfo->m_iKarusKillCount++
         if killer_nation == 2 {
             room.elmorad_score += 1;
         } else {
@@ -1184,11 +1061,8 @@ pub fn track_juraid_pvp_kill(world: &WorldState, killer_sid: SessionId) {
 }
 
 /// Track a Chaos Dungeon PvP kill and death.
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:506-510`
 ///   - Victim: `m_ChaosExpansionDeadCount++`
 ///   - Killer: `m_ChaosExpansionKillCount++`
-///
 /// These feed into rank updates and the final EXP formula at event finish.
 pub fn track_chaos_pvp_kill(world: &WorldState, killer_sid: SessionId, dead_sid: SessionId) {
     let is_chaos_active = world
@@ -1263,7 +1137,6 @@ mod tests {
     #[test]
     fn test_gold_change_packet_format() {
         // WIZ_GOLD_CHANGE: [u8 type] [u32 amount] [u32 total_gold]
-        // C++ Reference: UserGoldSystem.cpp:110-111
         let mut pkt = Packet::new(Opcode::WizGoldChange as u8);
         pkt.write_u8(COIN_LOSS);
         pkt.write_u32(5000); // lost 5000 gold
@@ -1295,7 +1168,6 @@ mod tests {
 
     #[test]
     fn test_gold_drop_calculation() {
-        // C++ Reference: UserGoldSystem.cpp:24-25
         // Victim has 10000 gold:
         // - Loses 50%: 10000 / 2 = 5000
         // - Killer gains 40%: (10000 * 4) / 10 = 4000
@@ -1367,7 +1239,6 @@ mod tests {
 
     #[test]
     fn test_party_gold_shares_different_levels() {
-        // C++ Reference: UserGoldSystem.cpp:58
         // Level ratio: member1=60, member2=40 → 60/100=0.6, 40/100=0.4
         let total = 4000_u32;
         let members = vec![(1_u16, 60_u8), (2_u16, 40_u8)];
@@ -1386,7 +1257,6 @@ mod tests {
 
     #[test]
     fn test_death_xp_loss_calculation() {
-        // C++ Reference: UserHealtMagicSpSystem.cpp:861
         // nExpLost = maxexp / 20
         let max_exp: i64 = 100_000;
         let lost = super::super::level::on_death_lost_exp_calc(max_exp, 0.0);
@@ -1486,7 +1356,6 @@ mod tests {
 
     #[test]
     fn test_death_notice_ext_sub_opcode() {
-        // C++ Reference: packets.h:243 — DeathNotice = 0xD7
         assert_eq!(crate::handler::ext_hook::EXT_SUB_DEATH_NOTICE, 0xD7);
     }
 
@@ -1569,25 +1438,21 @@ mod tests {
 
     #[test]
     fn test_chaos_dungeon_zone_constant() {
-        // C++ Reference: Define.h:204 — ZONE_CHAOS_DUNGEON 85
         assert_eq!(super::ZONE_CHAOS_DUNGEON, 85);
     }
 
     #[test]
     fn test_chaos_skill_item_light_pit() {
-        // C++ Reference: Define.h:336 — ITEM_LIGHT_PIT 700041000
         assert_eq!(super::ITEM_LIGHT_PIT, 700041000);
     }
 
     #[test]
     fn test_chaos_skill_item_drain_restore() {
-        // C++ Reference: Define.h:337 — ITEM_DRAIN_RESTORE 700040000
         assert_eq!(super::ITEM_DRAIN_RESTORE, 700040000);
     }
 
     #[test]
     fn test_chaos_skill_item_killing_blade() {
-        // C++ Reference: Define.h:338 — ITEM_KILLING_BLADE 700037000
         assert_eq!(super::ITEM_KILLING_BLADE, 700037000);
     }
 
@@ -1610,13 +1475,11 @@ mod tests {
 
     #[test]
     fn test_transformation_npc_constant() {
-        // C++ Reference: Unit.h:325 — TransformationNPC = 2
         assert_eq!(super::TRANSFORMATION_NPC, 2);
     }
 
     #[test]
     fn test_death_clears_stealth() {
-        // C++ Reference: UserHealtMagicSpSystem.cpp:943 — Type9Duration(true)
         let world = WorldState::new();
         let sid = world.allocate_session_id();
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -1633,7 +1496,6 @@ mod tests {
 
     #[test]
     fn test_death_clears_non_npc_transformation() {
-        // C++ Reference: UserHealtMagicSpSystem.cpp:945-949
         // isTransformed() && !isNPCTransformation() → Type6Cancel
         let world = WorldState::new();
         let sid = world.allocate_session_id();
@@ -1656,7 +1518,6 @@ mod tests {
 
     #[test]
     fn test_death_preserves_npc_transformation() {
-        // C++ Reference: UserHealtMagicSpSystem.cpp:945
         // !isNPCTransformation() — NPC transformations are NOT cancelled on death
         let world = WorldState::new();
         let sid = world.allocate_session_id();
@@ -1683,13 +1544,11 @@ mod tests {
 
     #[test]
     fn test_magic_cancel_transformation_constant() {
-        // C++ Reference: packets.h:566 — MAGIC_CANCEL_TRANSFORMATION = 7
         assert_eq!(super::MAGIC_CANCEL_TRANSFORMATION, 7);
     }
 
     #[test]
     fn test_type6cancel_packet_format() {
-        // C++ Reference: MagicInstance.cpp:6774
         //   Packet result(WIZ_MAGIC_PROCESS, uint8(MAGIC_CANCEL_TRANSFORMATION));
         //   pUser->Send(&result);
         let mut pkt = Packet::new(Opcode::WizMagicProcess as u8);
@@ -1749,14 +1608,12 @@ mod tests {
 
     #[test]
     fn test_wore_type_defence_constant() {
-        // C++ Reference: GameDefine.h:1266 — WORE_TYPE_DEFENCE = 0x02
         assert_eq!(super::super::durability::WORE_TYPE_DEFENCE, 0x02);
     }
 
     #[test]
     fn test_death_durability_loss_armour_slots() {
         // Verify that WORE_TYPE_DEFENCE targets armour slots (HEAD, BREAST, LEG, GLOVE, FOOT)
-        // C++ Reference: User.cpp:3639-3649 — ItemWoreOut(WORE_TYPE_DEFENCE) on death
         let wore_type = super::super::durability::WORE_TYPE_DEFENCE;
         assert_eq!(wore_type, 2); // DEFENCE = armour slots
     }
@@ -2347,7 +2204,6 @@ mod tests {
 
     // ── Sprint 284: NPC XP loss exclusions ──────────────────────────────
 
-    /// C++ Reference: UserHealtMagicSpSystem.cpp:878-891
     /// Rolling stone (type 214), guard summon (type 172), and saw blade (proto 2107)
     /// should NOT cause XP loss when they kill a player.
     #[test]
@@ -2375,7 +2231,6 @@ mod tests {
 
     #[test]
     fn test_xp_loss_checks_only_exp_lost_not_war_zone() {
-        // C++ Reference: UserHealtMagicSpSystem.cpp:878
         // `if (GetMap() && GetMap()->m_bExpLost != 0)` — ONLY checks m_bExpLost.
         // m_bExpLost and m_kWarZone are set independently (Unit.cpp:2162,2174).
         // War zones with exp_lost=true SHOULD still lose XP.
@@ -2400,7 +2255,6 @@ mod tests {
 
     #[test]
     fn test_max_damage_constant() {
-        // C++ Reference: Define.h:30 — MAX_DAMAGE 32000
         assert_eq!(super::MAX_DAMAGE, 32000);
     }
 
@@ -2408,7 +2262,6 @@ mod tests {
     fn test_utc_death_durability_wipe() {
         // In ZONE_UNDER_CASTLE (86), death should destroy all equipped gear
         // via ItemWoreOut(UTC_ATTACK, -MAX_DAMAGE) + ItemWoreOut(UTC_DEFENCE, -MAX_DAMAGE).
-        // C++ Reference: UserHealtMagicSpSystem.cpp:476-478
         let world = WorldState::new();
         let sid = world.allocate_session_id();
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -2473,7 +2326,6 @@ mod tests {
     #[test]
     fn test_wanted_death_cleanup() {
         // When a wanted player dies, is_wanted should be cleared
-        // C++ Reference: UserHealtMagicSpSystem.cpp:481
         let world = WorldState::new();
         let sid = world.allocate_session_id();
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -2495,7 +2347,6 @@ mod tests {
     #[test]
     fn test_kick_zones_on_death() {
         // Verify FT/Delos/DD death uses same kick function as war system
-        // C++ Reference: UserHealtMagicSpSystem.cpp:471-474
         //   KickOutZoneUser(true, ZONE_MORADON);
         let world = WorldState::new();
         let sid = world.allocate_session_id();

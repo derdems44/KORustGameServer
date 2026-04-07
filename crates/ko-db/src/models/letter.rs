@@ -1,6 +1,4 @@
 //! Letter (mail) model — maps to `letter` table.
-//!
-//! C++ Reference: `MAIL_BOX` table in MSSQL.
 
 /// A letter row from the database.
 #[derive(Debug, Clone, sqlx::FromRow)]

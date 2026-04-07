@@ -1,12 +1,8 @@
 //! Event scheduling model structs — maps to PostgreSQL event_schedule_* tables.
-//!
-//! C++ Reference: `GameDefine.h` — `EVENT_OPENTIMELIST`, `EventType`, `EventLocalID`
 
 use sqlx::FromRow;
 
 /// Core schedule entry for an event (main list).
-///
-/// C++ Reference: `EVENT_OPENTIMELIST` struct in `GameDefine.h`
 #[derive(Debug, Clone, FromRow)]
 pub struct EventScheduleMainRow {
     pub eventid: i16,
@@ -31,8 +27,6 @@ pub struct EventScheduleMainRow {
 }
 
 /// Day-of-week enablement for an event schedule.
-///
-/// C++ Reference: Day flags in `EVENT_OPENTIMELIST::iday[7]`
 #[derive(Debug, Clone, FromRow)]
 pub struct EventScheduleDayRow {
     pub eventid: i16,
@@ -46,8 +40,6 @@ pub struct EventScheduleDayRow {
 }
 
 /// Virtual room event timing options.
-///
-/// C++ Reference: `CGameServerDlg::pEventTimeOpt.pvroomop[]`
 #[derive(Debug, Clone, FromRow)]
 pub struct EventOptVroomRow {
     pub zoneid: i16,
@@ -60,8 +52,6 @@ pub struct EventOptVroomRow {
 }
 
 /// Room-based event detailed play timer.
-///
-/// C++ Reference: `eventroomscheduleplaytimerset.h`
 #[derive(Debug, Clone, FromRow)]
 pub struct EventRoomPlayTimerRow {
     pub event_local_id: i16,
@@ -75,8 +65,6 @@ pub struct EventRoomPlayTimerRow {
 }
 
 /// Event rewards for winners/losers.
-///
-/// C++ Reference: `CGameServerDlg::m_EventRewardArray`
 #[derive(Debug, Clone, FromRow)]
 pub struct EventRewardRow {
     pub s_index: i32,
@@ -100,8 +88,6 @@ pub struct EventRewardRow {
 }
 
 /// Event trigger mapping (NPC type/ID → trigger number).
-///
-/// C++ Reference: `CGameServerDlg::m_EventTriggerArray`
 #[derive(Debug, Clone, FromRow)]
 pub struct EventTriggerRow {
     pub n_index: i32,
@@ -111,8 +97,6 @@ pub struct EventTriggerRow {
 }
 
 /// Timer display entry for the client UI.
-///
-/// C++ Reference: `_EVENT_TIMER_SHOW_LIST` in `GameDefine.h`
 #[derive(Debug, Clone, FromRow)]
 pub struct EventTimerShowRow {
     pub id: i32,
@@ -124,8 +108,6 @@ pub struct EventTimerShowRow {
 }
 
 /// Forgotten Temple specific timing options.
-///
-/// C++ Reference: `CGameServerDlg::pForgettenTemple.ptimeopt`
 #[derive(Debug, Clone, FromRow)]
 pub struct EventOptFtRow {
     pub playing_time: i32,
@@ -138,7 +120,6 @@ pub struct EventOptFtRow {
 
 /// A row from the `event_start_schedule` table — defines a schedulable
 /// event with day-of-week activation pattern.
-///
 /// Source: MSSQL `EVENT_START_SCHEDULE` table — event master list with day filters.
 #[derive(Debug, Clone, FromRow)]
 pub struct EventStartScheduleRow {
@@ -158,7 +139,6 @@ pub struct EventStartScheduleRow {
 
 /// A row from the `event_start_time_slot` table — defines a specific
 /// time slot for an event schedule entry.
-///
 /// Source: MSSQL `EVENT_START_TIME_SLOT` table — multiple time slots per event.
 #[derive(Debug, Clone, FromRow)]
 pub struct EventStartTimeSlotRow {

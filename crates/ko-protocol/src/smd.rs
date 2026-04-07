@@ -1,13 +1,8 @@
 //! SMD file parser — Knight Online map terrain data.
-//!
-//! C++ Reference: `shared/SMDFile.cpp`, `N3BASE/N3ShapeMgr.cpp`
-//!
 //! SMD files contain terrain heights, collision data, event tile grids,
 //! spawn points, and warp gate definitions. The server uses the event grid
 //! for walkability checks and warp gate triggering.
-//!
 //! ## Binary Format (sequential reads)
-//!
 //! 1. Terrain: `i32 map_size`, `f32 unit_dist`, `f32[map_size²] heights`
 //! 2. Collision: `f32 width`, `f32 height`, faces, cell grid (variable)
 //! 3. Object events: `i32 count`, `[24 bytes × count]`
@@ -39,8 +34,6 @@ pub struct SmdFile {
 }
 
 /// Warp gate definition.
-///
-/// C++ Reference: `shared/database/structs.h` — `_WARP_INFO` (320 bytes, packed)
 #[derive(Debug, Clone)]
 pub struct WarpInfo {
     pub warp_id: i16,
@@ -58,8 +51,6 @@ pub struct WarpInfo {
 }
 
 /// NPC/monster spawn point.
-///
-/// C++ Reference: `shared/database/structs.h` — `_REGENE_EVENT`
 #[derive(Debug, Clone)]
 pub struct RegeneEvent {
     pub pos_x: f32,
@@ -205,14 +196,12 @@ impl SmdFile {
 
     /// Check if a world position is within map boundaries.
     ///
-    /// C++ Reference: `SMDFile::IsValidPosition` — `x < Width() && z < Height()`
     pub fn is_valid_position(&self, x: f32, z: f32) -> bool {
         x >= 0.0 && z >= 0.0 && x < self.map_width && z < self.map_height
     }
 
     /// Get the event ID for a tile grid position.
     ///
-    /// C++ Reference: `SMDFile::GetEventID`
     /// Note: x and z are grid indices (world pos / unit_dist), NOT world coordinates.
     pub fn get_event_id(&self, x: i32, z: i32) -> i16 {
         if x < 0 || x >= self.map_size || z < 0 || z >= self.map_size {
@@ -223,7 +212,6 @@ impl SmdFile {
 
     /// Check if a tile is walkable (event ID == 0).
     ///
-    /// C++ Reference: `C3DMap::IsMovable` — `GetEventID(dest_x, dest_y) == 0`
     /// Note: x and z are grid indices, NOT world coordinates.
     pub fn is_movable(&self, x: i32, z: i32) -> bool {
         self.get_event_id(x, z) == 0
@@ -231,7 +219,6 @@ impl SmdFile {
 
     /// Get the event ID for a world-space position, converting to grid indices.
     ///
-    /// C++ Reference: `Map.cpp:164` — `GetEventID((int)(x / unit_dist), (int)(z / unit_dist))`
     pub fn get_event_id_at(&self, world_x: f32, world_z: f32) -> i16 {
         let gx = (world_x / self.unit_dist) as i32;
         let gz = (world_z / self.unit_dist) as i32;
@@ -245,7 +232,6 @@ impl SmdFile {
 
     /// Skip collision data (CN3ShapeMgr::LoadCollisionData), extracting map dimensions.
     ///
-    /// C++ Reference: `N3ShapeMgr.cpp:52-105`
     fn skip_collision_data<R: Read + Seek>(reader: &mut R) -> io::Result<(f32, f32)> {
         let map_width = read_f32(reader)?;
         let map_length = read_f32(reader)?;
@@ -297,7 +283,6 @@ impl SmdFile {
 
     /// Read the warp list section.
     ///
-    /// C++ Reference: `SMDFile::LoadWarpList` — reads `sizeof(_WARP_INFO)` per entry.
     ///
     /// `_WARP_INFO` layout (320 bytes, `#pragma pack(push, 1)`):
     /// ```text
@@ -331,7 +316,6 @@ impl SmdFile {
             match reader.read_exact(&mut buf) {
                 Ok(()) => {}
                 Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                    // C++: "Some SMDs are so horribly broken warps are incomplete"
                     break;
                 }
                 Err(e) => return Err(e),

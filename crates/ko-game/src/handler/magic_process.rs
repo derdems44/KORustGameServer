@@ -1,10 +1,5 @@
 //! WIZ_MAGIC_PROCESS (0x31) handler — skill casting & execution.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/MagicProcess.cpp`
-//!                `KOOriginalGameServer/GameServer/MagicInstance.cpp`
-//!
 //! ## Client Request (C→S)
-//!
 //! | Type   | Description                              |
 //! |--------|------------------------------------------|
 //! | u8     | bOpcode (MagicOpcode enum)               |
@@ -15,9 +10,7 @@
 //! | i32le  | sData[1] (reserved)                      |
 //! | i32le  | sData[2] (mouse Z / area data)           |
 //! | i32le  | sData[3..6] (extra data)                 |
-//!
 //! ## Server Broadcast (S→C, to 3×3 region)
-//!
 //! Same structure as incoming, but with server-computed values.
 
 use std::time::Instant;
@@ -64,7 +57,6 @@ use crate::npc_type_constants::{
 use crate::state_change_constants::{STATE_CHANGE_ABNORMAL, STATE_CHANGE_WEAPONS_DISABLED};
 
 /// Snow Battle event snowball skill — only this skill is allowed during Snow Battle.
-/// C++ Reference: `Define.h:82` — `#define SNOW_EVENT_SKILL 490077`
 const SNOW_EVENT_SKILL: u32 = 490077;
 
 use crate::npc::NPC_BAND;
@@ -73,8 +65,7 @@ use crate::magic_constants::{TRANSFORMATION_MONSTER, TRANSFORMATION_NPC, TRANSFO
 
 // ── Parsed skill instance ─────────────────────────────────────────────────
 
-/// Parsed WIZ_MAGIC_PROCESS packet — mirrors C++ `MagicInstance`.
-///
+/// Parsed WIZ_MAGIC_PROCESS packet — mirrors `MagicInstance`.
 /// C++ stores caster/target as `int32` — we must preserve the full 32-bit values
 /// to avoid truncation when broadcasting back to clients.
 struct MagicInstance {
@@ -89,7 +80,6 @@ struct MagicInstance {
 impl MagicInstance {
     /// Build the skill packet for broadcasting.
     ///
-    /// C++ Reference: `MagicInstance::BuildSkillPacket()` in MagicInstance.cpp:2542
     fn build_packet(&self, opcode: u8) -> Packet {
         let mut pkt = Packet::new(Opcode::WizMagicProcess as u8);
         pkt.write_u8(opcode);
@@ -111,11 +101,8 @@ impl MagicInstance {
 // ── Main handler ──────────────────────────────────────────────────────────
 
 /// Handle WIZ_MAGIC_PROCESS (0x31) from the client.
-///
 /// Parses the magic packet, validates prerequisites, and routes to
 /// the appropriate handler based on the magic opcode and skill type.
-///
-/// C++ Reference: `CMagicProcess::MagicPacket()` in MagicProcess.cpp
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -145,7 +132,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Block skills during zone change
-    // C++ Reference: MagicProcess.cpp:17 — m_bZoneChangeFlag && bOpcode < 5
     if b_opcode < 5 && world.is_zone_changing(sid) {
         return Ok(());
     }
@@ -163,7 +149,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let target_id = target_id_raw;
 
     // ── Special skill target validation ──────────────────────────────
-    // C++ Reference: MagicProcess.cpp:34-52
     // Skills 109035/110035/209035/210035 must have target=-1 (no target).
     // Skills 109015/110015/209015/210015 must target self (target == caster).
     if target_id != -1 && matches!(skill_id, 109035 | 110035 | 209035 | 210035) {
@@ -201,13 +186,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Dead players cannot cast — except Type 5 (resurrection/self-revive) skills.
-    // C++ Reference: MagicInstance.cpp:846 — `pSkillCaster->isDead() && pSkill.bType[0] != 5`
     if (caster.res_hp_type == USER_DEAD || caster.hp <= 0) && skill.type1.unwrap_or(0) != 5 {
         return Ok(());
     }
 
     // Sitting players can only cast non-offensive magic (heal, self-buff, cancel).
-    // C++ Reference: MagicInstance.cpp:462-464 — sitting blocks MORAL_ENEMY(7)
     // and MORAL_AREA_ENEMY(10) ONLY during EFFECTING phase.
     if caster.res_hp_type == USER_SITDOWN {
         let moral = skill.moral.unwrap_or(0);
@@ -216,7 +199,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         }
     }
 
-    // C++ Reference: MagicInstance.cpp:822-823 — isBlinking() blocks casting
     // (checked in UserCanCast, before opcode routing)
     // Exceptions: Cancel, CancelTransformation, Type4Extend, Fail are allowed.
     if b_opcode != MAGIC_TYPE4_EXTEND
@@ -235,7 +217,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // GM attack ban blocks all skill casting.
-    // C++ Reference: MagicInstance.cpp:138 — if (pUser->isAttackDisabled()) return SendSkillFailed();
     if world.is_attack_disabled(sid) {
         let fail_pkt = instance.build_fail_packet();
         world.send_to_session_owned(sid, fail_pkt);
@@ -243,7 +224,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Shopping mall open blocks all magic.
-    // C++ Reference: MagicInstance.cpp:925 — if (pSkillCaster->isStoreOpen()) return SkillUseFail
     if world.is_store_open(sid) {
         let fail_pkt = instance.build_fail_packet();
         world.send_to_session_owned(sid, fail_pkt);
@@ -254,7 +234,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let caster_pos = world.get_position(sid).unwrap_or_default();
 
     // Snow Battle event blocks all magic except the snowball skill.
-    // C++ Reference: MagicInstance.cpp:951-952
     // if (zone == ZONE_SNOW_BATTLE && battle_open == SNOW_BATTLE && skill != SNOW_EVENT_SKILL) fail
     {
         if caster_pos.zone_id == ZONE_SNOW_BATTLE
@@ -267,7 +246,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         }
     }
 
-    // C++ Reference: MagicInstance.cpp:1844 — FREEZE blocks all skill use
     // GrantType4Buff sets m_bCanUseSkills = false for BUFF_TYPE_FREEZE (22)
     // Exceptions: Type4Extend, Cancel, CancelTransformation can still be used.
     if b_opcode != MAGIC_TYPE4_EXTEND
@@ -281,7 +259,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Special event zone magic block ──────────────────────────────
-    // C++ Reference: MagicInstance.cpp:36-46
     // Block offensive magic in SPBATTLE zones when event NOT opened,
     // and in Cinderella zones when war is ON but NOT started.
     {
@@ -309,14 +286,10 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Temple event attack gate ────────────────────────────────────
-    // C++ Reference: MagicInstance.cpp:2668 — IsAvailable() broad gate
-    // C++ Reference: MagicInstance.cpp:1655-1659 — moral-gated event attack check
-    // C++ Reference: MagicInstance.cpp:1842 — same-room check for all targeted spells
     {
         use crate::systems::event_room;
         if event_room::is_in_temple_event_zone(caster_pos.zone_id) {
             // ── IsAvailable: broad is_attackable gate — blocks ALL magic for ALL zone users
-            // C++ Reference: MagicInstance.cpp:2668
             //   if (pSkillCaster->isInTempleEventZone()
             //       && !g_pMain->pTempleEvent.isAttackable)
             //       goto fail_return;
@@ -340,7 +313,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             let skill_moral = skill.moral.unwrap_or(0);
 
             // virt_eventattack_check — only for offensive morals
-            // C++ Reference: MagicInstance.cpp:1655-1659
             if (skill_moral == MORAL_ENEMY
                 || skill_moral == MORAL_ALL
                 || skill_moral == MORAL_AREA_ALL)
@@ -356,7 +328,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // isSameEventRoom — applies to ALL targeted player spells
-            // C++ Reference: MagicInstance.cpp:1842
             //   if (pCaster->isInTempleEventZone() && !pCaster->isSameEventRoom(pSkillTarget))
             //       return SkillUseFail;
             if target_id >= 0 && (target_id as u32) < NPC_BAND {
@@ -386,9 +357,7 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Monster Stone event room isolation (magic spells) ────────────
-    // C++ Reference: MagicInstance.cpp:914 — single-target offensive spells
     //   isInTempleQuestEventZone() && (!isSameEventRoom(pSkillTarget) && m_sMonsterStoneStatus)
-    // C++ Reference: MagicInstance.cpp:1843 — effecting phase
     //   isInTempleQuestEventZone() && !isSameEventRoom(pSkillTarget)
     // Players in Monster Stone zones with an active Monster Stone room must
     // be in the same event room for targeted spells to succeed.
@@ -409,13 +378,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Busy state checks: cannot cast while trading or merchanting
-    // C++ Reference: MagicInstance.cpp:919-926
     if world.is_trading(sid) || world.is_merchanting(sid) {
         return Ok(());
     }
 
     // Safety area check: cannot cast offensive magic in enemy safety areas
-    // C++ Reference: MagicInstance.cpp:1838-1844 — CheckSkillPrerequisites
     //   if (pCaster && (pCaster->isInEnemySafetyArea() && nSkillID < 400000))
     //       return SkillUseFail;
     if skill_id < 400000
@@ -427,10 +394,8 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Cooldown check ────────────────────────────────────────────────
-    // C++ Reference: MagicInstance.cpp:1848-1888 — m_sCoolDownList check
     // Applies to all opcodes EXCEPT: TYPE4_EXTEND, CANCEL, CANCEL_TRANSFORMATION, FAIL.
     // Type-9 skills (stealth) are also excluded per C++ (bType[0] != 9).
-    // C++ Reference: MagicInstance.cpp:483-524 — BUFF_TYPE_INSTANT_MAGIC bypasses cooldowns
     let skill_type = skill.type1.unwrap_or(0) as u8;
     let (has_instant_cast, on_cooldown) = world
         .with_session(sid, |h| {
@@ -456,7 +421,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Type cooldown check ────────────────────────────────────────────
-    // C++ Reference: MagicInstance.cpp:1966-2072 — m_sMagicTypeCooldownList
     // Minimum time between casts of the same magic type. Default 575ms.
     // Checked AFTER per-skill cooldown. Only for types 1,3,4,5,6,7.
     // NOTE: C++ does NOT gate this on instant_cast (is_buff). instant_cast
@@ -494,7 +458,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Nation validation ─────────────────────────────────────────────
-    // C++ Reference: MagicInstance.cpp:1661-1666
     // Skill ID encodes nation (1xxxx=Karus, 2xxxx=Elmorad). Skills < 300000
     // must match the caster's nation. Cancel/cancel2/cancel_transform excluded.
     if b_opcode != MAGIC_CANCEL
@@ -509,7 +472,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── use_standing validation ──────────────────────────────────────
-    // C++ Reference: MagicInstance.cpp:1692-1693
     // Skills with sUseStanding == 1 fail if the player is moving.
     // Only checked on FLYING / EFFECTING opcodes (C++ line 1668 returns early otherwise).
     if (b_opcode == MAGIC_FLYING || b_opcode == MAGIC_EFFECTING)
@@ -526,7 +488,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Class validation (CheckSkillClass) ─────────────────────────
-    // C++ Reference: MagicInstance.cpp:1695-1700
     // The skill's `sSkill` field encodes the class requirement.
     // `iclass = sSkill / 10` gives the class constant (101=KaruWarrior, etc.)
     // The caster's classType = class % 100 must match the expected type.
@@ -544,7 +505,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Target resolution and validation ─────────────────────────────
-    // C++ Reference: MagicInstance.cpp:59-88 — Run() top-level target checks.
     // These apply to ALL magic opcodes (CASTING, FLYING, EFFECTING, etc.).
     //
     // 1. If a target was specified (target_id != -1), verify it exists.
@@ -552,13 +512,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     //    - Player target (< NPC_BAND): send fail packet if session gone.
     if instance.target_id != -1 {
         if (instance.target_id as u32) >= NPC_BAND {
-            // C++ Reference: MagicInstance.cpp:67-70 — NPC isDead() → silent return
             let npc_id = instance.target_id as u32;
             if world.is_npc_dead(npc_id) {
                 return Ok(());
             }
         } else {
-            // C++ Reference: MagicInstance.cpp:62-63 — target not found → SendSkillFailed
             let target_sid = instance.target_id as SessionId;
             if world.get_character_info(target_sid).is_none() {
                 let fail_pkt = instance.build_fail_packet();
@@ -569,7 +527,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // 1.5. Neutral NPC target rejection — OrgNation==3 NPCs cannot be attacked.
-    // C++ Reference: MagicInstance.cpp:72-74
     //   if ((pSkill.bMoral == MORAL_ENEMY || pSkill.bMoral == MORAL_AREA_ENEMY)
     //       && (pSkillCaster->isPlayer() && TO_NPC(pSkillTarget)->m_OrgNation == 3))
     //       return SendSkillFailed();
@@ -590,7 +547,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // 2. MORAL_SELF target redirection — self-cast skills always target caster.
-    // C++ Reference: MagicInstance.cpp:78-87
     //   if (pSkill.bMoral == MORAL_SELF && !bIsRunProc)
     //       pSkillTarget = pSkillCaster; sTargetID = pSkillCaster->GetID();
     //   Also: MORAL_FRIEND_WITHME targeting an NPC redirects to caster.
@@ -606,7 +562,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── AnimatedSkill validation ─────────────────────────────────────
-    // C++ Reference: MagicInstance.cpp:176-204, 600-605
     // AnimatedSkill() = t_1 NOT IN (-1,0) AND bCastTime > 0 AND bItemGroup != 255
     //                   AND NOT MageArmorSkill
     let t_1 = skill.t_1.unwrap_or(0);
@@ -619,7 +574,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
     if is_animated {
         // ── Type 2 animated skill 500ms recast prevention ──────────
-        // C++ Reference: MagicInstance.cpp:49-56
         // If a *different* Type 2 skill was cast in the last 500ms, fail.
         if skill.type1.unwrap_or(0) == 2 && cast_time > 0 && b_opcode == MAGIC_CASTING {
             let now_ms = std::time::SystemTime::now()
@@ -649,7 +603,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         }
 
         // ── bCastFailed state machine ──────────────────────────────
-        // C++ Reference: MagicInstance.cpp:181-189
         if b_opcode != MAGIC_CASTING {
             // If cast_failed was set during CASTING, fail on FLYING/EFFECTING
             let was_failed = world.with_session(sid, |h| h.cast_failed).unwrap_or(false);
@@ -661,7 +614,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
         } else {
             // During CASTING: set cast_failed if player is moving
-            // C++ Reference: MagicInstance.cpp:186-189
             let is_moving = world
                 .with_session(sid, |h| h.move_old_speed != 0)
                 .unwrap_or(false);
@@ -677,10 +629,8 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     match b_opcode {
         MAGIC_CASTING => {
             // Phase 1: Broadcast cast animation to region
-            // C++ Reference: MagicInstance.cpp — case MAGIC_CASTING
 
             // Save cast position for anti-cheat validation on FLYING/EFFECTING
-            // C++ Reference: MagicInstance.cpp:29-31 — castID, castX, castZ
             if let Some(pos) = world.get_position(sid) {
                 world.update_session(sid, |h| {
                     h.cast_skill_id = skill_id;
@@ -695,10 +645,8 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         MAGIC_FLYING => {
             // Phase 2: Projectile flight (archer/ranged)
-            // C++ Reference: MagicInstance.cpp:363-438 — case MAGIC_FLYING
 
             // ── Cast position validation ──────────────────────────────
-            // C++ Reference: MagicInstance.cpp:191-204 — check castX/castZ
             // If the skill has a flying effect, validate position on FLYING phase.
             if skill.flying_effect.unwrap_or(0) != 0 {
                 if let Some(cast_pos) = world.get_cast_position(sid, skill_id) {
@@ -713,7 +661,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // ── Arrow/knife consumption ─────────────────────────────
-            // C++ Reference: MagicInstance.cpp:369-405
             // Type2 skills consume arrows (bNeedArrow count, or 1 for throwing knives).
             // If the skill has a use_item (arrow/knife), check inventory and consume.
             let use_item = skill.use_item.unwrap_or(0) as u32;
@@ -721,14 +668,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                 if let Some(type2) = world.get_magic_type2(skill_id as i32) {
                     let mut count = type2.need_arrow.unwrap_or(0) as u16;
                     // Throwing knives: NeedArrow=0 means consume 1
-                    // C++ Reference: MagicInstance.cpp:378-381
                     if count == 0 {
                         count = 1;
                     }
 
                     // Check if player has the required arrows/knives
                     // Special case: ITEM_INFINITYARC (800606000) bypasses consumption for arrows (391010000)
-                    // C++ Reference: MagicInstance.cpp:383-392
                     const ITEM_INFINITYARC: u32 = 800606000;
                     let has_infinity =
                         use_item == 391010000 && world.check_exist_item(sid, ITEM_INFINITYARC, 1);
@@ -758,10 +703,8 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         MAGIC_EFFECTING => {
             // Phase 3: Execute the actual skill effect
-            // C++ Reference: MagicInstance.cpp — case MAGIC_EFFECTING
 
             // ── Cast position validation ──────────────────────────────
-            // C++ Reference: MagicInstance.cpp:191-204 — check castX/castZ
             // If the skill has NO flying effect, validate position on EFFECTING phase.
             if skill.flying_effect.unwrap_or(0) == 0 {
                 if let Some(cast_pos) = world.get_cast_position(sid, skill_id) {
@@ -785,7 +728,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // ── Genie + PVP zone magic block ─────────────────────────────
-            // C++ Reference: MagicInstance.cpp:226-230
             // Players in genie cannot cast offensive magic against enemy players
             // in PVP zones. AOE genie block is per-target in execute_type3.
             if instance.target_id >= 0 && (instance.target_id as u32) < NPC_BAND {
@@ -807,7 +749,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // ── Pre-check consumable item existence ──────────────
-            // C++ Reference: MagicInstance.cpp:1035-1047
             // Before executing the skill, verify the player has the required
             // consumable item. Type 2 (archer) and type 6 skills skip this.
             // Arrow items (391010000) are already consumed in MAGIC_FLYING.
@@ -832,16 +773,13 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // ── Consume item after successful cast ──────────────────
-            // C++ Reference: MagicInstance.cpp:558-559 — ConsumeItem()
             // Called for all non-type2 skills (type2 = heal/buff, no item consumed)
             if skill_type != 2 {
                 consume_item(&world, sid, &skill);
             }
 
             // ── Set cooldown after successful cast ──────────────────
-            // C++ Reference: MagicInstance.cpp:531-552 — m_pCaster->m_sCoolDownList
             // Formula: expiry = UNIXTIME2 + (sReCastTime * 90)ms
-            // C++ Reference: MagicInstance.cpp:483-524 — instant_cast skips cooldown
             let recast_time = skill.recast_time.unwrap_or(0);
             if recast_time > 0 && !has_instant_cast {
                 let now = std::time::Instant::now();
@@ -856,7 +794,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // ── Set type cooldown after successful cast ─────────────
-            // C++ Reference: MagicInstance.cpp:483-520
             // Records the cast timestamp for bType[0] and bType[1].
             // Special: type3 with t_1==-1 uses synthetic key 10.
             if !has_instant_cast {
@@ -890,7 +827,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // ── Consume instant_cast buff after use ─────────────────
-            // C++ Reference: MagicInstance.cpp:561-562 — remove INSTANT_MAGIC after cast
             // Only consumed for non-Type2 skills (Type2 = heal/buff, already handled in FLYING)
             if has_instant_cast && skill_type != 2 {
                 world.remove_buff(sid, BUFF_TYPE_INSTANT_MAGIC);
@@ -907,11 +843,9 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         MAGIC_CANCEL | MAGIC_CANCEL2 => {
             // Client wants to cancel a buff
-            // C++ Reference: MagicInstance.cpp:565-570 — both MAGIC_CANCEL and MAGIC_CANCEL2
             //   trigger Type3Cancel(), Type4Cancel(), Type6Cancel(), Type9Cancel().
 
             // Type3Cancel — cancel HOT (heal-over-time) effects
-            // C++ Reference: MagicInstance.cpp:6913-6961
             // Target must be caster. Only cancels HOTs (hp_amount > 0).
             if target_id == caster_id {
                 if let Some(_t3) = world.get_magic_type3(skill.magic_num) {
@@ -927,7 +861,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // Type4Cancel — cancel a self-buff
-            // C++ Reference: MagicInstance.cpp:6892-6911
             // Target must be caster. Must not be a debuff. Removes buff + saved magic.
             if target_id == caster_id {
                 let type4_data = world.get_magic_type4(skill.magic_num);
@@ -937,7 +870,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                     // isDebuff() = buff_type between 100-200 (debuff range)
                     let is_debuff = (100..=200).contains(&buff_type);
                     if buff_type > 0 && !is_debuff {
-                        // C++ Reference: MagicInstance.cpp:6892-6895 — block cancellation
                         // of lockable scrolls while debuffed on same slot
                         if skill_id > 500000
                             && WorldState::is_lockable_scroll(buff_type)
@@ -946,7 +878,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                             return Ok(());
                         }
                         if let Some(removed) = world.remove_buff(sid, buff_type) {
-                            // C++ Reference: MagicProcess.cpp:1031-1572 — RemoveType4Buff
                             // performs per-buff-type cleanup (SIZE→StateChange, Kaul flags, etc.)
                             crate::systems::buff_tick::buff_type_cleanup(
                                 &world,
@@ -956,7 +887,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                             );
                             let expired_pkt = build_buff_expired_packet(buff_type as u8);
                             broadcast_to_caster_region(&world, sid, &expired_pkt);
-                            // C++ Reference: MagicProcess.cpp:1541 — SetUserAbility + SendItemMove
                             world.set_user_ability(sid);
                             world.send_item_move_refresh(sid);
                         }
@@ -966,7 +896,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // Type6Cancel — cancel transformation
-            // C++ Reference: MagicInstance.cpp:6757-6784
             if world.is_transformed(sid) && world.get_magic_type6(skill.magic_num).is_some() {
                 world.clear_transformation(sid);
                 // Send MAGIC_CANCEL_TRANSFORMATION to caster
@@ -980,7 +909,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // Type9Cancel — cancel stealth/lupine
-            // C++ Reference: MagicInstance.cpp:6786-6890
             if world.get_magic_type9(skill.magic_num).is_some() {
                 stealth::remove_stealth(&world, sid);
             }
@@ -992,7 +920,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         MAGIC_TYPE4_EXTEND => {
             // Extend the duration of a Type4 buff.
-            // C++ Reference: MagicInstance.cpp:6964-7025 — Type4Extend()
             //
             // Requires:
             //   1. Skill < 500000 (not a scroll buff)
@@ -1011,7 +938,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                 let buff_type = t4.buff_type.unwrap_or(0);
                 let is_debuff = (100..=200).contains(&buff_type);
                 if buff_type > 0 && !is_debuff {
-                    // C++ Reference: MagicInstance.cpp:6988-7009 — Duration Item scan
                     // Scan inventory for a kind=255 item whose effect1 points to a
                     // magic with moral == MORAL_EXTEND_DURATION (240).
                     let mut duration_item_id: Option<u32> = None;
@@ -1041,14 +967,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                         }
                     }
 
-                    // C++ Reference: MagicInstance.cpp:7012 — "No Duration Item was found."
                     let item_id = match duration_item_id {
                         Some(id) => id,
                         None => return Ok(()),
                     };
 
                     // Consume the Duration Item (1 use)
-                    // C++ Reference: MagicInstance.cpp:7005 — RobItem(i, pTable)
                     if !world.rob_item(sid, item_id, 1) {
                         return Ok(());
                     }
@@ -1083,9 +1007,7 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 // ── Pre-instance skill failed packet ──────────────────────────────────────
 
 /// Build a MAGIC_FAIL packet before MagicInstance is constructed.
-///
 /// Used for early validation checks (special skill target validation).
-/// C++ Reference: `MagicInstance::SendSkillFailed()` in MagicInstance.cpp
 fn build_skill_failed_packet(
     skill_id: u32,
     caster_id: i32,
@@ -1106,9 +1028,6 @@ fn build_skill_failed_packet(
 // ── Mana check ────────────────────────────────────────────────────────────
 
 /// Check if the caster has enough MP (and SP for Kurians) to cast and deduct it.
-///
-/// C++ Reference: `MagicInstance::UserCanCast()` in MagicInstance.cpp
-///
 /// For Kurian classes, skills may also require SP (stamina points). The SP cost
 /// is stored in `MagicRow::s_sp`. Both MP and SP must be sufficient; if either
 /// is insufficient, the skill is rejected.
@@ -1148,7 +1067,6 @@ fn check_and_deduct_mana(
     }
 
     // Check HP cost for skills that use HP instead of MP
-    // C++ Reference: MagicInstance.cpp:3105-3114
     // sHP > 0 && sMsp == 0 && sHP < 10000 → normal HP cost skills
     if hp_cost > 0 && mana_cost == 0 && hp_cost < 10000 && hp_cost > caster.hp {
         tracing::debug!(
@@ -1167,7 +1085,6 @@ fn check_and_deduct_mana(
         world.update_character_mp(sid, new_mp);
 
         // Send WIZ_MSP_CHANGE to client: [i16 max_mp] [i16 current_mp]
-        // C++ Reference: UserHealtMagicSpSystem.cpp:405-406
         // BUG-6 fix: fetch current max_mp from world state instead of stale snapshot
         let current_max_mp = world
             .get_character_info(sid)
@@ -1189,7 +1106,6 @@ fn check_and_deduct_mana(
     }
 
     // Deduct HP for HP-cost skills (sHP > 0, sMsp == 0, sHP < 10000)
-    // C++ Reference: MagicInstance.cpp:3105-3114
     if hp_cost > 0 && mana_cost == 0 && hp_cost < 10000 {
         let new_hp = (caster.hp - hp_cost).max(0);
         world.update_character_hp(sid, new_hp);
@@ -1199,7 +1115,6 @@ fn check_and_deduct_mana(
     }
 
     // Sacrifice skills: sHP >= 10000 — deduct 10,000 HP from caster
-    // C++ Reference: MagicInstance.cpp:3117-3125
     // Note: C++ always deducts 10000 regardless of actual sHP value (10001 in DB)
     // Cannot cast sacrifice on yourself (pUser == pSkillTarget → return false)
     if hp_cost >= 10000 {
@@ -1219,8 +1134,6 @@ fn check_and_deduct_mana(
 // ── Skill execution router ───────────────────────────────────────────────
 
 /// Route skill execution to the appropriate type handler.
-///
-/// C++ Reference: `MagicInstance::ExecuteSkill()` in MagicInstance.cpp:2402
 async fn execute_skill(
     world: &WorldState,
     caster_sid: SessionId,
@@ -1234,7 +1147,6 @@ async fn execute_skill(
     }
 
     // ── Block skills during blink (M4) ──────────────────────────────
-    // C++ Reference: MagicInstance.cpp:2407
     //   if (pSkillCaster->isBlinking() && bType != 4 && pSkill.iNum < 300000)
     //       return false;
     // Also: Unit.h:280 — canUseSkills() returns false when m_bCanUseSkills is false
@@ -1243,7 +1155,6 @@ async fn execute_skill(
     }
 
     // ── Remove stealth for offensive skill types ─────────────────────
-    // C++ Reference: MagicInstance.cpp:2411-2414
     //   if (pSkillCaster->isPlayer()) {
     //       if ((bType >= 1 && bType <= 3) || (bType == 7))
     //           TO_USER(pSkillCaster)->RemoveStealth();
@@ -1253,7 +1164,6 @@ async fn execute_skill(
     }
 
     // ── Type3 re-cast prevention ─────────────────────────────────────
-    // C++ Reference: MagicProcess.cpp:332-344
     //   Prevents re-casting pure Type3 HOT skills (bDirectType==1, bDuration!=0)
     //   on targets that already have any active HOT durational skill.
     if skill_type == 3 && skill.type2.unwrap_or(0) == 0 {
@@ -1299,9 +1209,6 @@ async fn execute_skill(
 // ── Type 1: Melee weapon skills ──────────────────────────────────────────
 
 /// Execute Type 1 skill — physical melee skill attack.
-///
-/// C++ Reference: `MagicInstance::ExecuteType1()` in MagicInstance.cpp
-///
 /// Adds skill-based bonus damage on top of the normal melee formula.
 async fn execute_type1(
     world: &WorldState,
@@ -1319,7 +1226,6 @@ async fn execute_type1(
 
     let target_id = instance.target_id;
 
-    // C++ Reference: MagicInstance.cpp:3210-3305 — AOE branch when sTargetID == -1
     if target_id < 0 {
         return execute_type1_aoe(world, caster_sid, instance, skill, &type1_data).await;
     }
@@ -1327,7 +1233,6 @@ async fn execute_type1(
     let target_is_player = (target_id as u32) < NPC_BAND;
     if !target_is_player {
         // NPC target — compute base melee damage + skill bonus damage
-        // C++ Reference: MagicInstance.cpp:3170 — damage = pSkillCaster->GetDamage(pSkillTarget, pSkill)
         let npc_id = target_id as u32;
 
         let caster = match world.get_character_info(caster_sid) {
@@ -1336,7 +1241,6 @@ async fn execute_type1(
         };
 
         // Compute base melee damage against NPC using Type1 formula
-        // C++ Reference: Unit.cpp:364-391, 454-455 — GetDamage() Type1 branch
         let base_melee = {
             let npc = world.get_npc_instance(npc_id);
             let npc_ac = npc
@@ -1374,18 +1278,15 @@ async fn execute_type1(
         };
 
         // Add skill's additional damage (if not blocked by block_physical)
-        // C++ Reference: MagicInstance.cpp:3172-3176
         let add_damage = type1_data.add_damage.unwrap_or(0) as i16;
         let mut damage = base_melee.saturating_add(add_damage);
 
         // Apply iADPtoNPC modifier
-        // C++ Reference: MagicInstance.cpp:3190-3191
         let adp_npc = type1_data.add_dmg_perc_to_npc.unwrap_or(0);
         if adp_npc != 0 {
             damage = ((damage as i32 * adp_npc) / 100) as i16;
         }
 
-        // C++ Reference: MagicInstance.cpp:3194-3197 — Chaos Dungeon fixed damage
         let caster_zone = world
             .get_position(caster_sid)
             .map(|p| p.zone_id)
@@ -1398,7 +1299,6 @@ async fn execute_type1(
             };
         }
 
-        // C++ Reference: MagicInstance.cpp:3314 — attack-zero indicator
         instance.data[3] = if damage == 0 {
             SKILLMAGIC_FAIL_ATTACKZERO
         } else {
@@ -1424,7 +1324,6 @@ async fn execute_type1(
         return false;
     }
 
-    // C++ Reference: Unit.cpp:2050-2051 — CanAttack() checks pTarget->isBlinking()
     // Blinking targets (respawn invulnerability) are immune to single-target Type1.
     {
         let now_unix = std::time::SystemTime::now()
@@ -1437,7 +1336,6 @@ async fn execute_type1(
         }
     }
 
-    // C++ Reference: Unit.cpp:355-356 — m_bBlockPhysical blocks all physical damage (incl. skills)
     if world.has_block_physical(target_sid) {
         send_skill_failed(world, caster_sid, instance);
         return false;
@@ -1450,7 +1348,6 @@ async fn execute_type1(
     }
 
     // PvP permission check — "default deny" model
-    // C++ Reference: MagicInstance.cpp:2853-2862 — MORAL_ENEMY calls isHostileTo
     {
         let caster_pos = world.get_position(caster_sid).unwrap_or_default();
         let target_pos = world.get_position(target_sid).unwrap_or_default();
@@ -1469,7 +1366,6 @@ async fn execute_type1(
     }
 
     // Calculate damage: Type1 formula + add_damage
-    // C++ Reference: Unit.cpp:364-391, 454-455 — GetDamage() Type1 branch
     let mut rng = rand::rngs::StdRng::from_entropy();
     // Snapshot caster combat data — 1 DashMap read instead of 3.
     let caster_snap = match world.snapshot_combat(caster_sid) {
@@ -1484,7 +1380,6 @@ async fn execute_type1(
         None => return false,
     };
     let base_damage = {
-        // C++ Reference: Unit.cpp:301 — full PvP AC with buff, class bonus, armor scroll check
         let target_ac = compute_pvp_skill_target_ac(&target_snap, &target, instance.skill_id);
         let caster_coeff = world.get_coefficient(caster.class);
         let target_coeff = world.get_coefficient(target.class);
@@ -1512,7 +1407,6 @@ async fn execute_type1(
     let mut add_damage = type1_data.add_damage.unwrap_or(0) as i16;
 
     // War zone bonus damage reduction for PvP
-    // C++ Reference: MagicInstance.cpp:3162-3168
     // In war zones, sAdditionalDamage is halved; in non-war zones, divided by 3.
     if add_damage > 0 {
         let in_war_zone = world
@@ -1529,13 +1423,11 @@ async fn execute_type1(
     let mut damage = base_damage.saturating_add(add_damage);
 
     // Apply iADPtoUser modifier for PvP
-    // C++ Reference: MagicInstance.cpp:3178-3181
     let adp_user = type1_data.add_dmg_perc_to_user.unwrap_or(0);
     if adp_user != 0 {
         damage = ((damage as i32 * adp_user) / 100) as i16;
     }
 
-    // C++ Reference: MagicInstance.cpp:3194-3197 — Chaos Dungeon fixed damage (PvP)
     {
         let caster_zone = world
             .get_position(caster_sid)
@@ -1554,7 +1446,6 @@ async fn execute_type1(
         damage = 0;
     }
 
-    // C++ Reference: MagicInstance.cpp:3314 — attack-zero indicator
     instance.data[3] = if damage == 0 {
         SKILLMAGIC_FAIL_ATTACKZERO
     } else {
@@ -1569,9 +1460,6 @@ async fn execute_type1(
 // ── Type 1 AOE: Ground-targeted melee AOE skills ─────────────────────────
 
 /// Execute Type 1 AOE — ground-targeted physical AOE (warrior stomps, etc.).
-///
-/// C++ Reference: `MagicInstance.cpp:3210-3305` — `sTargetID == -1` branch.
-///
 /// Gathers nearby units (players + NPCs), filters by range, and applies
 /// per-target damage using `compute_type1_hit_damage` + `sAddDamage`.
 /// Unlike single-target PvP, AOE does NOT halve `sAddDamage` in war zones,
@@ -1693,7 +1581,6 @@ async fn execute_type1_aoe(
         }
 
         // C++ line 3285: damage = pSkillCaster->GetDamage(pTarget, pSkill, true)
-        // C++ Reference: Unit.cpp:301 — full PvP AC with buff, class bonus, armor scroll check
         let aoe_target_snap = match world.snapshot_combat(target_sid) {
             Some(s) => s,
             None => continue,
@@ -1749,7 +1636,6 @@ async fn execute_type1_aoe(
             caster_sid as u32,
         );
         world.send_to_session_owned(target_sid, hp_pkt);
-        // C++ Reference: UserHealtMagicSpSystem.cpp:196-200 — SendPartyHPUpdate on every HP change
         crate::handler::party::broadcast_party_hp(world, target_sid);
 
         // C++ line 3297-3301: ItemWoreOut
@@ -1767,11 +1653,9 @@ async fn execute_type1_aoe(
             dead::rob_chaos_skill_items(world, target_sid);
 
             // ── PvP loyalty (NP) change ─────────────────────────────
-            // C++ Reference: UserHealtMagicSpSystem.cpp:726-728
             dead::pvp_loyalty_on_death(world, caster_sid, target_sid);
 
             // ── Rivalry / Anger Gauge (magic kill path) ────────────
-            // C++ Reference: UserHealtMagicSpSystem.cpp:589-611
             {
                 let now_secs = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -1797,11 +1681,9 @@ async fn execute_type1_aoe(
             }
 
             // ── PvP gold change ─────────────────────────────────────
-            // C++ Reference: UserGoldSystem.cpp:3-77
             dead::gold_change_on_death(world, caster_sid, target_sid);
 
             // ── Temple event kill scoring ───────────────────────────
-            // C++ Reference: UserHealtMagicSpSystem.cpp:499-536
             // OnDeathKilledPlayer is called from OnDeath regardless of
             // damage source (physical or magic).
             {
@@ -1938,9 +1820,6 @@ async fn execute_type1_aoe(
 // ── Type 2: Ranged/archery skills ────────────────────────────────────────
 
 /// Execute Type 2 skill — ranged projectile attack.
-///
-/// C++ Reference: `MagicInstance::ExecuteType2()` in MagicInstance.cpp
-///
 /// Arrow consumption is skipped (requires inventory system).
 async fn execute_type2(
     world: &WorldState,
@@ -1965,7 +1844,6 @@ async fn execute_type2(
     let target_is_player = (target_id as u32) < NPC_BAND;
     if !target_is_player {
         // NPC target — compute damage using Type2 formula (sAddDamage as percentage)
-        // C++ Reference: Unit.cpp:394-428, 445-457 — GetDamage() Type2 branch
         let npc_id = target_id as u32;
 
         let caster = match world.get_character_info(caster_sid) {
@@ -2008,12 +1886,10 @@ async fn execute_type2(
             &mut rng,
         );
 
-        // C++ Reference: MagicInstance.cpp:3494-3497 — iADPtoNPC modifier
         let adp_npc = type2_data.add_dmg_perc_to_npc.unwrap_or(0);
         if adp_npc != 0 {
             damage = ((damage as i32 * adp_npc as i32) / 100) as i16;
         }
-        // C++ Reference: MagicInstance.cpp:3534-3535
         instance.data[3] = if damage == 0 {
             SKILLMAGIC_FAIL_ATTACKZERO
         } else {
@@ -2040,7 +1916,6 @@ async fn execute_type2(
         return false;
     }
 
-    // C++ Reference: Unit.cpp:2050-2051 — CanAttack() checks pTarget->isBlinking()
     // Blinking targets (respawn invulnerability) are immune to single-target Type2.
     {
         let now_unix = std::time::SystemTime::now()
@@ -2053,7 +1928,6 @@ async fn execute_type2(
         }
     }
 
-    // C++ Reference: Unit.cpp:355-356 — m_bBlockPhysical blocks all physical damage (incl. skills)
     if world.has_block_physical(target_sid) {
         send_skill_failed(world, caster_sid, instance);
         return false;
@@ -2065,7 +1939,6 @@ async fn execute_type2(
     }
 
     // PvP permission check — "default deny" model
-    // C++ Reference: MagicInstance.cpp — ranged skills also use isHostileTo
     {
         let caster_pos = world.get_position(caster_sid).unwrap_or_default();
         let target_pos = world.get_position(target_sid).unwrap_or_default();
@@ -2084,7 +1957,6 @@ async fn execute_type2(
     }
 
     // Calculate damage using Type2 formula (sAddDamage as percentage, not flat)
-    // C++ Reference: Unit.cpp:394-428, 445-457 — GetDamage() Type2 branch
     let mut rng = rand::rngs::StdRng::from_entropy();
     // Snapshot caster combat data — 1 DashMap read instead of 3.
     let t2_pvp_snap = match world.snapshot_combat(caster_sid) {
@@ -2099,7 +1971,6 @@ async fn execute_type2(
         None => return false,
     };
     let mut damage = {
-        // C++ Reference: Unit.cpp:301 — full PvP AC with buff, class bonus, armor scroll check
         let target_ac = compute_pvp_skill_target_ac(&t2_target_snap, &target, instance.skill_id);
         let caster_coeff = world.get_coefficient(caster.class);
         let target_coeff = world.get_coefficient(target.class);
@@ -2125,7 +1996,6 @@ async fn execute_type2(
         )
     };
 
-    // C++ Reference: MagicInstance.cpp:3494-3497 — iADPtoUser modifier
     let adp_user = type2_data.add_dmg_perc_to_user.unwrap_or(0);
     if adp_user != 0 {
         damage = ((damage as i32 * adp_user as i32) / 100) as i16;
@@ -2135,7 +2005,6 @@ async fn execute_type2(
         damage = 0;
     }
 
-    // C++ Reference: MagicInstance.cpp:3534-3535
     instance.data[3] = if damage == 0 {
         SKILLMAGIC_FAIL_ATTACKZERO
     } else {
@@ -2150,9 +2019,6 @@ async fn execute_type2(
 // ── Type 3: Magic attack / heal / DOT ─────────────────────────────────────
 
 /// Execute Type 3 skill — magical damage, healing, or DOT/HOT.
-///
-/// C++ Reference: `MagicInstance::ExecuteType3()` in MagicInstance.cpp
-///
 /// Handles direct damage, healing, and durational (DOT/HOT) effects.
 /// DOT effects are registered via `world.add_durational_skill()` and
 /// processed by the `dot_tick` system every 2 seconds.
@@ -2176,7 +2042,6 @@ async fn execute_type3(
     let duration = type3_data.duration.unwrap_or(0);
     let direct_type = type3_data.direct_type.unwrap_or(0);
 
-    // C++ Reference: MagicInstance.cpp:1955-1960 — Potion cooldown (2400ms)
     // Applies when: (directType==1 || directType==2) && firstDamage > 0
     // Only for potions: skillID > 400000, bType[1]==0, bMoral==MORAL_SELF, bItemGroup==9
     {
@@ -2200,7 +2065,6 @@ async fn execute_type3(
                 send_skill_failed(world, caster_sid, instance);
                 return false;
             }
-            // C++ Reference: MagicInstance.cpp:3965-3972 — update timestamp on use
             world.update_session(caster_sid, |h| {
                 h.last_potion_time = std::time::Instant::now();
             });
@@ -2209,7 +2073,6 @@ async fn execute_type3(
         }
     }
 
-    // C++ Reference: MagicInstance.cpp:2988-2999 — NO_POTIONS blocks healing potions
     // Conditions: directType==1 (HP), firstDamage>0 (heal), useItem!=0, item.class==0
     {
         let use_item = skill.use_item.unwrap_or(0) as u32;
@@ -2230,11 +2093,9 @@ async fn execute_type3(
         }
     }
 
-    // C++ Reference: MagicInstance.cpp:3621 — sData[1] = 1 (success flag)
     instance.data[1] = 1;
 
     // ── Type3 skip for players with active DOT in temple event zones ──
-    // C++ Reference: MagicInstance.cpp:3633-3638
     //   if (pTarget->isPlayer() && pTarget->m_bType3Flag) {
     //       if (g_pMain->pTempleEvent.ActiveEvent
     //           && !g_pMain->pTempleEvent.isAttackable
@@ -2270,7 +2131,6 @@ async fn execute_type3(
             None => return false,
         };
 
-        // C++ Reference: MagicInstance.cpp:4003-4118 — switch(bDirectType)
         //   case 1: HpChangeMagic (HP heal/damage)
         //   case 2: MSpChange (MP heal/damage)
         let heal_amount = first_damage.unsigned_abs() as i16;
@@ -2342,7 +2202,6 @@ async fn execute_type3(
         || moral == MORAL_PARTY
         || moral == MORAL_PARTY_ALL
     {
-        // C++ Reference: MagicInstance.cpp:2164-2178 — MORAL_PARTY_ALL + TimeDamage > 0:
         // 1. Monster-transformed players cannot cast group heals (line 2168-2169)
         // 2. Block if caster already has an active HOT (prevents HOT stacking, line 2174-2178)
         if moral == MORAL_PARTY_ALL && time_damage > 0 {
@@ -2379,14 +2238,12 @@ async fn execute_type3(
             return false;
         }
 
-        // C++ Reference: MagicInstance.cpp:2208-2214 — single-target heal with TimeDamage > 0:
         // Block if target already has an active HOT (prevents HOT stacking).
         if time_damage > 0 && moral <= MORAL_PARTY && world.has_active_hot(target_sid) {
             send_skill_failed(world, caster_sid, instance);
             return false;
         }
 
-        // C++ Reference: MagicInstance.cpp:4003-4118 — switch(bDirectType)
         let heal_amount = first_damage.unsigned_abs() as i16;
         if heal_amount > 0 {
             match direct_type {
@@ -2468,7 +2325,6 @@ async fn execute_type3(
             };
             let mag_atk = world.get_buff_magic_attack_amount(caster_sid);
             let attr = type3_data.attribute.unwrap_or(0) as u8;
-            // C++ Reference: MagicInstance.cpp:3946-3950 — only call GetMagicDamage for
             // direct_type 1/8, negative first_damage, and skill < 400000.
             let use_magic_formula = first_damage < 0
                 && (direct_type == 1 || direct_type == 8)
@@ -2480,7 +2336,6 @@ async fn execute_type3(
             } else {
                 (-first_damage).max(0) as i16
             };
-            // C++ Reference: MagicInstance.cpp:3984-3998 — iADPtoNPC modifier
             let adp_npc = type3_data.add_dmg_perc_to_npc.unwrap_or(0);
             if adp_npc != 0 {
                 magic_damage = ((magic_damage as i32 * adp_npc as i32) / 100) as i16;
@@ -2497,11 +2352,9 @@ async fn execute_type3(
             .await;
 
             // Register DOT on NPC if time_damage != 0 and duration > 0
-            // C++ Reference: MagicInstance.cpp:4306-4307 — DOT uses GetMagicDamage when
             // sTimeDamage < 0 && attribute != 4 (different filter from first damage)
             if time_damage != 0 && duration > 0 {
                 let mut tick_count = (duration / 2).clamp(1, 255) as u8;
-                // C++ Reference: MagicInstance.cpp:4336-4337 — Chaos Dungeon DOT tick x2
                 let caster_zone_npc = world
                     .get_position(caster_sid)
                     .map(|p| p.zone_id)
@@ -2547,7 +2400,6 @@ async fn execute_type3(
             return false;
         }
 
-        // C++ Reference: Unit.cpp:2050-2051 — CanAttack() checks pTarget->isBlinking()
         // Blinking targets (respawn invulnerability) are immune to single-target Type3.
         {
             let now_unix = std::time::SystemTime::now()
@@ -2560,7 +2412,6 @@ async fn execute_type3(
             }
         }
 
-        // C++ Reference: BUFF_TYPE_BLOCK_MAGICAL_DAMAGE (158) blocks all magic damage
         if world.has_block_magic(target_sid) {
             send_skill_failed(world, caster_sid, instance);
             return false;
@@ -2572,7 +2423,6 @@ async fn execute_type3(
         }
 
         // PvP permission check — "default deny" model
-        // C++ Reference: MagicInstance.cpp:2853-2862 — MORAL_ENEMY calls isHostileTo
         let caster = match world.get_character_info(caster_sid) {
             Some(ch) => ch,
             None => return false,
@@ -2594,7 +2444,6 @@ async fn execute_type3(
             }
         }
 
-        // C++ Reference: MagicInstance.cpp:3962-3963 — Snow Battle damage override
         // During Snow Battle event in zone 69, all Type3 damage is forced to -10.
         {
             let caster_zone = world
@@ -2607,7 +2456,6 @@ async fn execute_type3(
             }
         }
 
-        // C++ Reference: MagicInstance.cpp:4003-4277 — direct_type switch
         let caster = match world.get_character_info(caster_sid) {
             Some(ch) => ch,
             None => return false,
@@ -2625,7 +2473,6 @@ async fn execute_type3(
 
         match direct_type {
             2 => {
-                // C++ Reference: MagicInstance.cpp:4099-4104 — MP change (drain/restore)
                 // Player target: change MP by sFirstDamage amount
                 let target_refresh = world
                     .get_character_info(target_sid)
@@ -2640,7 +2487,6 @@ async fn execute_type3(
                 return true;
             }
             5 => {
-                // C++ Reference: MagicInstance.cpp:4129-4135 — percentage HP damage
                 let damage = if first_damage < 100 {
                     // Percentage of current HP
                     (first_damage as i32 * target.hp as i32) / -100
@@ -2651,7 +2497,6 @@ async fn execute_type3(
                 apply_skill_damage(world, caster_sid, target_sid, instance, damage).await;
             }
             _ => {
-                // C++ Reference: MagicInstance.cpp:3946-3950 — only call GetMagicDamage for
                 // direct_type 1/8, negative first_damage, and skill < 400000.
                 let use_magic_formula = first_damage < 0
                     && (direct_type == 1 || direct_type == 8)
@@ -2668,7 +2513,6 @@ async fn execute_type3(
                         &pvp_ctx,
                         &mut pvp_rng,
                     );
-                    // C++ Reference: MagicInstance.cpp:3984-3998 — iADPtoUser modifier
                     let adp_user = type3_data.add_dmg_perc_to_user.unwrap_or(0);
                     if adp_user != 0 {
                         damage = ((damage as i32 * adp_user as i32) / 100) as i16;
@@ -2679,7 +2523,6 @@ async fn execute_type3(
                     apply_skill_damage(world, caster_sid, target_sid, instance, damage).await;
                 } else {
                     let mut raw_damage = (-first_damage).max(0) as i16;
-                    // C++ Reference: MagicInstance.cpp:3984-3998 — iADPtoUser modifier
                     let adp_user = type3_data.add_dmg_perc_to_user.unwrap_or(0);
                     if adp_user != 0 {
                         raw_damage = ((raw_damage as i32 * adp_user as i32) / 100) as i16;
@@ -2690,11 +2533,9 @@ async fn execute_type3(
         }
 
         // Register DOT if time_damage != 0 and duration > 0
-        // C++ Reference: MagicInstance.cpp:4306-4307 — DOT uses GetMagicDamage when
         // sTimeDamage < 0 && attribute != 4 (different filter from first damage)
         if time_damage != 0 && duration > 0 {
             let mut tick_count = (duration / 2).clamp(1, 255) as u8;
-            // C++ Reference: MagicInstance.cpp:4336-4337 — Chaos Dungeon DOT tick x2
             let cz = world
                 .get_position(caster_sid)
                 .map(|p| p.zone_id)
@@ -2717,7 +2558,6 @@ async fn execute_type3(
                     &dot_ctx,
                     &mut dot_rng,
                 );
-                // C++ Reference: MagicInstance.cpp:6621 — m_bMagicDamageReduction applied
                 // inside GetMagicDamage, so DOT damage is also reduced.
                 apply_magic_damage_reduction(world, target_sid, raw)
             } else {
@@ -2739,7 +2579,6 @@ async fn execute_type3(
     if moral == MORAL_AREA_ENEMY || moral == MORAL_AREA_ALL || moral == MORAL_AREA_FRIEND {
         // Genie AOE check is done per-target inside the player loop below,
         // NOT here — NPCs should still take AOE damage from genie mages.
-        // C++ Reference: MagicProcess.cpp:180-185 — per-target filter in UserRegionCheck
 
         // Pre-compute genie state for per-target filtering
         let caster_in_genie_aoe = moral == MORAL_AREA_ENEMY && {
@@ -2778,7 +2617,6 @@ async fn execute_type3(
         let mag_atk_aoe = world.get_buff_magic_attack_amount(caster_sid);
         let aoe_attr = type3_data.attribute.unwrap_or(0) as u8;
         let mut aoe_rng = rand::rngs::StdRng::from_entropy();
-        // C++ Reference: MagicInstance.cpp:3946-3950 — same filtering as single-target
         let aoe_use_magic_formula = first_damage < 0
             && (direct_type == 1 || direct_type == 8)
             && instance.skill_id < 400000;
@@ -2807,12 +2645,10 @@ async fn execute_type3(
                 continue;
             }
 
-            // C++ Reference: MagicInstance.cpp:3232,3572,4455 — GM immunity in AOE
             if moral == MORAL_AREA_ENEMY && target.authority == 0 {
                 continue;
             }
 
-            // C++ Reference: MagicInstance.cpp:3571-3573 — blinking targets immune in AOE Type3
             {
                 let now_unix = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -2838,7 +2674,6 @@ async fn execute_type3(
             }
 
             // PvP permission check for AOE targets — "default deny" model
-            // C++ Reference: MagicProcess.cpp:369-390 — UserRegionCheck calls isHostileTo
             if moral == MORAL_AREA_ENEMY
                 && !crate::handler::attack::is_hostile_to(
                     world,
@@ -2866,7 +2701,6 @@ async fn execute_type3(
                 continue;
             }
 
-            // C++ Reference: MagicProcess.cpp:373-387 — MORAL_AREA_ALL safety area cross-check
             // Players in enemy safety area cannot hit players in their own safety area.
             // Arena, PVP zones, and temple event zones are exempt (combat is always allowed).
             if moral == MORAL_AREA_ALL {
@@ -2902,19 +2736,16 @@ async fn execute_type3(
                 }
             }
 
-            // C++ Reference: MagicProcess.cpp:180-185 — mages in genie skip player targets
             // in MORAL_AREA_ENEMY AOE (NPCs still take damage in separate loop)
             if caster_in_genie_aoe {
                 continue;
             }
 
-            // C++ Reference: BUFF_TYPE_BLOCK_MAGICAL_DAMAGE (158) blocks AOE magic damage
             if moral != MORAL_AREA_FRIEND && world.has_block_magic(target_sid) {
                 continue;
             }
 
             // M3: Break stealth on AOE hit for enemy targets
-            // C++ Reference: MagicInstance.cpp:4471-4472
             //   if (pTarget->isPlayer() && pSkillCaster->GetNation() != pTarget->GetNation())
             //       TO_USER(pTarget)->RemoveStealth();
             if target.nation != caster.nation {
@@ -2926,7 +2757,6 @@ async fn execute_type3(
 
             if moral == MORAL_AREA_FRIEND {
                 // AOE heal (undead converts healing to damage)
-                // C++ Reference: UserHealtMagicSpSystem.cpp:138-142
                 let heal_amount = first_damage.unsigned_abs() as i16;
                 let is_target_undead = world.is_undead(target_sid);
                 let new_hp = if is_target_undead {
@@ -2939,7 +2769,6 @@ async fn execute_type3(
                 // Send WIZ_HP_CHANGE to AOE heal target
                 let hp_pkt = crate::systems::regen::build_hp_change_packet(target.max_hp, new_hp);
                 world.send_to_session_owned(target_sid, hp_pkt);
-                // C++ Reference: UserHealtMagicSpSystem.cpp:196-200 — SendPartyHPUpdate on every HP change
                 crate::handler::party::broadcast_party_hp(world, target_sid);
 
                 // Undead heal→damage death check
@@ -2970,7 +2799,6 @@ async fn execute_type3(
                     Some(s) => s,
                     None => continue,
                 };
-                // C++ Reference: MagicInstance.cpp:3946-3950 — only use GetMagicDamage
                 // for direct_type 1/8, negative first_damage, skill < 400000
                 let damage = if aoe_use_magic_formula {
                     let aoe_player_ctx =
@@ -2998,15 +2826,12 @@ async fn execute_type3(
                     caster_sid as u32,
                 );
                 world.send_to_session_owned(target_sid, hp_pkt);
-                // C++ Reference: UserHealtMagicSpSystem.cpp:196-200 — SendPartyHPUpdate on every HP change
                 crate::handler::party::broadcast_party_hp(world, target_sid);
 
                 // ── AOE durability loss ──────────────────────────────
-                // C++ Reference: MagicInstance.cpp:3298-3301
                 world.item_wore_out(caster_sid, WORE_TYPE_ATTACK, damage as i32);
                 world.item_wore_out(target_sid, WORE_TYPE_DEFENCE, damage as i32);
 
-                // C++ Reference: MagicInstance.cpp:4095-4096 — mage armor reflect (AOE)
                 try_reflect_damage(world, caster_sid, target_sid, damage).await;
 
                 if new_hp <= 0 {
@@ -3014,19 +2839,15 @@ async fn execute_type3(
                     dead::set_who_killed_me(world, target_sid, caster_sid);
 
                     // ── PvP death notice ────────────────────────────────
-                    // C++ Reference: UserHealtMagicSpSystem.cpp:513-544
                     dead::send_death_notice(world, caster_sid, target_sid);
 
                     // ── Chaos dungeon item rob ─────────────────────────
-                    // C++ Reference: UserHealtMagicSpSystem.cpp:454-459
                     dead::rob_chaos_skill_items(world, target_sid);
 
                     // ── PvP loyalty (NP) change ─────────────────────────
-                    // C++ Reference: UserHealtMagicSpSystem.cpp:726-728
                     dead::pvp_loyalty_on_death(world, caster_sid, target_sid);
 
                     // ── Rivalry / Anger Gauge (magic kill path) ────────
-                    // C++ Reference: UserHealtMagicSpSystem.cpp:589-611
                     {
                         let now_secs = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
@@ -3052,11 +2873,9 @@ async fn execute_type3(
                     }
 
                     // ── PvP gold change ────────────────────────────────
-                    // C++ Reference: UserHealtMagicSpSystem.cpp:715-725
                     dead::gold_change_on_death(world, caster_sid, target_sid);
 
                     // ── Temple event kill scoring ───────────────────────
-                    // C++ Reference: UserHealtMagicSpSystem.cpp:499-536
                     {
                         use crate::systems::event_room;
                         match caster_pos.zone_id {
@@ -3075,11 +2894,9 @@ async fn execute_type3(
                 }
 
                 // Register DOT for AOE targets
-                // C++ Reference: MagicInstance.cpp:4306-4307 — DOT: GetMagicDamage when
                 // sTimeDamage < 0 && attribute != 4
                 if time_damage != 0 && duration > 0 {
                     let mut tick_count = (duration / 2).clamp(1, 255) as u8;
-                    // C++ Reference: MagicInstance.cpp:4336-4337 — Chaos Dungeon DOT tick x2
                     if caster_pos.zone_id == ZONE_CHAOS_DUNGEON {
                         tick_count = (tick_count as u16 * 2).min(255) as u8;
                     }
@@ -3093,7 +2910,6 @@ async fn execute_type3(
                             &aoe_dot_ctx,
                             &mut aoe_rng,
                         );
-                        // C++ Reference: MagicInstance.cpp:6621 — reduction inside GetMagicDamage
                         apply_magic_damage_reduction(world, target_sid, raw)
                     } else {
                         (-time_damage).max(0) as i16
@@ -3113,12 +2929,10 @@ async fn execute_type3(
             send_target_hp_update(world, caster_sid, target_sid, aoe_target_damage);
         }
 
-        // C++ Reference: MagicInstance.cpp:3560-3563 — caster is also healed by AREA_FRIEND
         // get_nearby_session_ids excludes caster, so we heal caster separately here.
         if moral == MORAL_AREA_FRIEND {
             if let Some(caster_ch) = world.get_character_info(caster_sid) {
                 if caster_ch.hp > 0 && caster_ch.res_hp_type != USER_DEAD {
-                    // C++ Reference: UserHealtMagicSpSystem.cpp:138-142 — undead heal→damage
                     let heal_amount = first_damage.unsigned_abs() as i16;
                     let is_caster_undead = world.is_undead(caster_sid);
                     let new_hp = if is_caster_undead {
@@ -3130,7 +2944,6 @@ async fn execute_type3(
                     let hp_pkt =
                         crate::systems::regen::build_hp_change_packet(caster_ch.max_hp, new_hp);
                     world.send_to_session_owned(caster_sid, hp_pkt);
-                    // C++ Reference: UserHealtMagicSpSystem.cpp:196-200 — SendPartyHPUpdate on every HP change
                     crate::handler::party::broadcast_party_hp(world, caster_sid);
 
                     // Undead heal→damage death check
@@ -3161,9 +2974,7 @@ async fn execute_type3(
         }
 
         // ── AOE NPC damage ──────────────────────────────────────────
-        // C++ Reference: FundamentalMethods.cpp:272-311 — GetUnitListFromSurroundingRegions
         // includes NPCs in AOE targeting. We iterate nearby NPCs and apply damage.
-        // C++ Reference: MagicProcess.cpp:373-374 — MORAL_AREA_ALL rejects NPC targets
         // (only player-to-player), so only MORAL_AREA_ENEMY hits NPCs.
         if moral == MORAL_AREA_ENEMY {
             let nearby_npcs = world.get_nearby_npc_ids(
@@ -3198,7 +3009,6 @@ async fn execute_type3(
                 }
 
                 // Compute per-NPC damage with NPC resistance
-                // C++ Reference: MagicInstance.cpp:3946-3950 — same filtering for NPC targets
                 let npc_damage = if aoe_use_magic_formula {
                     let aoe_npc_ctx = build_npc_ctx(world, npc_id, aoe_attr, caster_sid);
                     compute_magic_damage(
@@ -3272,30 +3082,27 @@ enum MagicTargetKind {
 
 /// Context for the magic damage formula — carries target/zone information
 /// that `compute_magic_damage` needs beyond the caster-side values.
-///
-/// C++ Reference: `MagicInstance::GetMagicDamage()` in MagicInstance.cpp:6250-6692
 struct MagicDamageContext {
     /// Target type (player vs NPC) — determines formula constants.
     target_kind: MagicTargetKind,
     /// Target's total elemental resistance (items + buffs combined).
-    /// C++: `total_r = (m_sFireR + m_bAddFireR) * m_bPctFireR / 100`
     /// We simplify: total_r = equipped_r + buff_r (Pct always 100%).
     target_total_r: i32,
     /// Target class (for DamageSettings multiplier, only for player targets).
     target_class: u16,
-    /// Target's AC buff amount (C++ `m_sACAmount`).
+    /// Target's AC buff amount
     target_ac_amount: i32,
     /// Whether the target is in a war zone.
     is_war_zone: bool,
     /// DamageSettings from DB (class multipliers, mon_take_damage, mage_magic_damage).
     damage_settings: Option<ko_db::models::DamageSettingsRow>,
-    /// Mage weapon quality multiplier (C++ `getplusdamage()` — MagicInstance.cpp:6694-6744).
+    /// Mage weapon quality multiplier (`getplusdamage()` — MagicInstance.cpp:6694-6744).
     /// 1.0 = no bonus (default / non-weapon).
     plus_damage: f64,
-    /// Caster's weapon base damage for magic formula (C++ `righthand_damage`).
+    /// Caster's weapon base damage for magic formula
     /// Staff damage for mages, weapon damage for warriors/kurians, 0 for others.
     righthand_damage: i16,
-    /// Caster's attribute damage from equipped items (C++ `attribute_damage`).
+    /// Caster's attribute damage from equipped items
     /// Elemental bonus from staff + other slot bonuses matching the spell's attribute.
     attribute_damage: i16,
     /// Magic attribute type (1=fire, 2=cold, 3=lightning, 4=MAGIC_R, 5=disease, 6=poison).
@@ -3304,8 +3111,6 @@ struct MagicDamageContext {
 }
 
 /// Get the DamageSettings mage→target class multiplier.
-///
-/// C++ Reference: MagicInstance.cpp:6503-6513 — `g_pMain->pDamageSetting.mageTOxxx`
 fn get_mage_class_multiplier(ds: &ko_db::models::DamageSettingsRow, target_class: u16) -> f64 {
     let base = target_class % 100;
     match base {
@@ -3320,8 +3125,6 @@ fn get_mage_class_multiplier(ds: &ko_db::models::DamageSettingsRow, target_class
 
 /// Get a player target's total elemental resistance for magic damage.
 /// Get an NPC target's total elemental resistance from its template.
-///
-/// C++ Reference: NPC resistance fields (m_sFireR, etc.) from CNpcTable.
 fn get_npc_target_resistance(world: &WorldState, npc_id: u32, attribute: u8) -> i32 {
     let (proto_id, is_monster) = match world.get_npc_instance(npc_id) {
         Some(n) => (n.proto_id, n.is_monster),
@@ -3345,7 +3148,6 @@ fn get_npc_target_resistance(world: &WorldState, npc_id: u32, attribute: u8) -> 
 }
 
 /// Build a `MagicDamageContext` for a player target using pre-fetched snapshot.
-///
 /// Uses `CombatSnapshot` for target resistance and AC, eliminating 4 DashMap reads
 /// per call (3 from `get_player_target_resistance` + 1 from `get_buff_ac_amount`).
 fn build_player_ctx(
@@ -3412,9 +3214,6 @@ fn build_npc_ctx(
 }
 
 /// Compute magic damage from the `sFirstDamage`/`sTimeDamage` value.
-///
-/// C++ Reference: `MagicInstance::GetMagicDamage()` in MagicInstance.cpp:6250-6692
-///
 /// Formula steps (matching C++ order):
 /// 1. CHA scaling for mages (line 6305)
 /// 2. sMagicAmount multiplier (line 6306)
@@ -3447,7 +3246,6 @@ fn compute_magic_damage(
     let mut total_hit = base_damage; // keep sign (negative for attack spells)
 
     // ── Step 1: Stat scaling ──────────────────────────────────────────
-    // C++ Reference: MagicInstance.cpp:6284-6306
     // CHA scaling always applies for mages — the direct_type 1/8 filtering
     // is done at the call site (C++ line 3946-3950), not inside GetMagicDamage.
     let base_class = caster.class % 100;
@@ -3512,7 +3310,6 @@ fn compute_magic_damage(
     }
 
     // ── Step 6.5: Weapon damage reduction ───────────────────────────────
-    // C++ Reference: MagicInstance.cpp:6616-6619
     // For player casters (not NPC): subtract weapon-based damage from magic damage.
     // In the negative domain, this makes damage MORE negative (= more damage dealt).
     // Excluded for MAGIC_R (attribute 4) spells.
@@ -3543,7 +3340,6 @@ fn compute_magic_damage(
     }
 
     // C++ line 6645-6651: mage multiplier (modifies `baa`, not `damage`)
-    // C++ Reference: MagicInstance.cpp:6650 — baa *= getplusdamage()
     if is_mage && damage != 0 {
         if let Some(ref ds) = ctx.damage_settings {
             baa *= ds.mage_magic_damage as f64;
@@ -3569,9 +3365,6 @@ fn compute_magic_damage(
 }
 
 /// Apply target's magic damage reduction to a damage value.
-///
-/// C++ Reference: MagicInstance.cpp:6621 — `damage = damage * m_bMagicDamageReduction / 100`
-///
 /// In C++, this is applied inside `GetMagicDamage()`, so it affects both first damage
 /// and DOT duration damage.  We apply it at registration time for DOT damage, and
 /// via `apply_skill_damage()` for first/direct damage.
@@ -3588,18 +3381,13 @@ fn apply_magic_damage_reduction(world: &WorldState, target_sid: SessionId, damag
 }
 
 /// Apply class-specific AP/AC bonuses to magic PvP damage (non-CHA skills only).
-///
-/// C++ Reference: `MagicInstance.cpp:6518-6536` — `GetMagicDamage` PvP class bonus
-///
 /// For non-mage casters (warrior/rogue/priest), the class bonus system adjusts
 /// `temp_ap` and `temp_ac` using the equipped set item bonuses, then computes a
 /// secondary damage modifier: `temp_hit_B = (temp_ap * 200 / 100) / (temp_ac + 240)`,
 /// `final_damage = temp_hit_B * (damage / 100.0)`.
-///
 /// In magic, the indices are:
 /// - AC: target's AC class bonus at `[caster's class group index]`
 /// - AP: caster's AP class bonus at `[target's class group index]`
-///
 /// This differs from physical attack where both use the target's class index.
 fn apply_magic_class_bonus(
     damage: i16,
@@ -3612,7 +3400,6 @@ fn apply_magic_class_bonus(
     use crate::handler::attack::class_group_index;
 
     // Class bonus only applies to non-mage casters (isChaSkill = false).
-    // C++ Reference: MagicInstance.cpp:6284-6295 — mages use CHA (isChaSkill = true)
     let caster_base = caster.class % 100;
     let is_mage_caster = matches!(caster_base, 3 | 9 | 10);
     if is_mage_caster {
@@ -3640,7 +3427,6 @@ fn apply_magic_class_bonus(
     let caster_stats = &mcb_caster_snap.equipped_stats;
     let target_stats = &mcb_target_snap.equipped_stats;
 
-    // C++: temp_ap = m_sTotalHit * m_bAttackAmount / 5
     // (simplified: use caster's base stats since we don't track m_sTotalHit separately for magic)
     let total_hit = caster.str.max(1) as i32 * 3;
     let mut temp_ap = total_hit * mcb_caster_snap.attack_amount / 5;
@@ -3650,13 +3436,11 @@ fn apply_magic_class_bonus(
     let total_ac = target.sta.max(1) as i32 * 2;
     let mut temp_ac = total_ac;
 
-    // C++ Reference: MagicInstance.cpp:6529-6530
     // AC: target's AcClassBonusAmount[caster's GetBaseClass() - 1]
     // AP: caster's APClassBonusAmount[target's GetBaseClass() - 1]
     temp_ac = temp_ac * (100 + target_stats.ac_class_bonus[caster_idx] as i32) / 100;
     temp_ap = temp_ap * (100 + caster_stats.ap_class_bonus[target_idx] as i32) / 100;
 
-    // C++: temp_hit_B = (temp_ap * 200 / 100) / (temp_ac + 240)
     let temp_hit_b = if temp_ac + 240 > 0 {
         (temp_ap * 2) / (temp_ac + 240)
     } else {
@@ -3667,7 +3451,6 @@ fn apply_magic_class_bonus(
         return damage;
     }
 
-    // C++: damage = temp_hit_B * (damage / 100.0f)
     let result = (temp_hit_b as f32 * (damage as f32 / 100.0)) as i32;
     result.max(1) as i16
 }
@@ -3675,13 +3458,9 @@ fn apply_magic_class_bonus(
 // ── Type 4: Buffs / Debuffs ──────────────────────────────────────────────
 
 /// Execute Type 4 skill — apply buff or debuff.
-///
-/// C++ Reference: `MagicInstance::ExecuteType4()` in MagicInstance.cpp
-///
 /// Creates an `ActiveBuff` from the `MagicType4Row` data and applies it
 /// to the target via `world.apply_buff()`. Overwrites any existing buff
 /// of the same type. The buff_tick system handles expiry.
-///
 /// Supports self-cast, single-target, and AOE buff/debuff application.
 fn execute_type4(
     world: &WorldState,
@@ -3703,7 +3482,6 @@ fn execute_type4(
     if moral == MORAL_SELF {
         let duration = type4_data.duration.unwrap_or(0).max(0) as u16;
 
-        // C++ Reference: MagicInstance.cpp:4785 — sDataCopy with bResult, sDuration, bSpeed
         instance.data[1] = 1; // bResult = success
         instance.data[3] = duration as i32;
         instance.data[5] = type4_data.speed.unwrap_or(0) as i32;
@@ -3725,18 +3503,12 @@ fn execute_type4(
             instance.skill_id,
         );
         // BUG-3 fix: recalculate derived stats after buff application
-        // C++ Reference: MagicInstance.cpp — pUser->SetUserAbility()
         world.set_user_ability(caster_sid);
-        // C++ Reference: SendItemMove(1,1) — refresh client stat display with buff multipliers
         world.send_item_move_refresh(caster_sid);
-        // C++ Reference: MagicProcess.cpp:935 — Kaul visual transform broadcast
         broadcast_kaul_state_change(world, caster_sid, &type4_data, instance.skill_id);
-        // C++ Reference: MagicProcess.cpp:583-584 — Size change visual broadcast (Bezoar/Cake)
         broadcast_size_state_change(world, caster_sid, &type4_data, instance.skill_id);
-        // C++ Reference: MagicProcess.cpp:983,999 — Devil/Snowman visual broadcast
         broadcast_buff_state_change_on_apply(world, caster_sid, &type4_data, instance.skill_id);
         // Persist scroll buffs (skill_id > 500000) across logout/zone change
-        // C++ Reference: MagicInstance.cpp:4695 — `if (nSkillID > 500000 && pTarget->isPlayer())`
         if instance.skill_id > 500000 {
             world.insert_saved_magic(caster_sid, instance.skill_id, duration);
         }
@@ -3758,7 +3530,6 @@ fn execute_type4(
         || moral == MORAL_PARTY_ALL
     {
         // ── MORAL_PARTY_ALL self-cast: buff ALL party members ──
-        // C++ Reference: MagicInstance.cpp:4443-4488 — when sTargetID == -1,
         // scans surrounding regions, collects all same-party members within
         // radius, and buffs each one. Falls back to caster if no party.
         if moral == MORAL_PARTY_ALL && instance.target_id < 0 {
@@ -3813,7 +3584,6 @@ fn execute_type4(
             instance.data[3] = duration as i32;
             instance.data[5] = type4_data.speed.unwrap_or(0) as i32;
 
-            // C++ Reference: MagicInstance.cpp:4818 — sends per-target MAGIC_EFFECTING
             // with actual target_id (not -1) so client shows buff icon on each target.
             for &t_sid in &targets {
                 let mut pkt = Packet::new(Opcode::WizMagicProcess as u8);
@@ -3835,7 +3605,6 @@ fn execute_type4(
                     &type4_data,
                     duration,
                 );
-                // C++ Reference: MagicProcess.cpp:583-584 — Size/Kaul/Devil visual broadcasts
                 broadcast_size_state_change(world, t_sid, &type4_data, instance.skill_id);
                 broadcast_kaul_state_change(world, t_sid, &type4_data, instance.skill_id);
                 broadcast_buff_state_change_on_apply(world, t_sid, &type4_data, instance.skill_id);
@@ -3879,7 +3648,6 @@ fn execute_type4(
         }
 
         // Range check for friendly buffs — with party bypass
-        // C++ Reference: MagicInstance.cpp:267-273
         if target_sid != caster_sid {
             let party_bypass = (moral == MORAL_PARTY || moral == MORAL_PARTY_ALL) && {
                 let caster_ch = world.get_character_info(caster_sid);
@@ -3895,7 +3663,6 @@ fn execute_type4(
             }
         }
 
-        // C++ Reference: MagicInstance.cpp:2309-2316 — SPEED / SPEED2 mutual exclusion
         {
             let bt = type4_data.buff_type.unwrap_or(0);
             if bt == BUFF_TYPE_SPEED && world.has_buff(target_sid, BUFF_TYPE_SPEED2) {
@@ -3906,7 +3673,6 @@ fn execute_type4(
             }
         }
 
-        // C++ Reference: MagicInstance.cpp:2298-2305 — duplicate buff rejection
         {
             let bt = type4_data.buff_type.unwrap_or(0);
             if bt > 0 && world.has_buff(target_sid, bt) {
@@ -3932,11 +3698,8 @@ fn execute_type4(
             &type4_data,
             duration,
         );
-        // C++ Reference: MagicProcess.cpp:583-584 — Size change visual broadcast
         broadcast_size_state_change(world, target_sid, &type4_data, instance.skill_id);
-        // C++ Reference: MagicProcess.cpp:935 — Kaul visual transform broadcast
         broadcast_kaul_state_change(world, target_sid, &type4_data, instance.skill_id);
-        // C++ Reference: MagicProcess.cpp:983,999 — Devil/Snowman visual broadcast
         broadcast_buff_state_change_on_apply(world, target_sid, &type4_data, instance.skill_id);
         return true;
     }
@@ -3954,7 +3717,6 @@ fn execute_type4(
             let npc_id = target_id as u32;
             let buff_type = type4_data.buff_type.unwrap_or(0);
 
-            // C++ Reference: MagicInstance.cpp:4425-4426 — FREEZE cannot target NPCs
             if buff_type == BUFF_TYPE_FREEZE {
                 return false;
             }
@@ -3971,7 +3733,6 @@ fn execute_type4(
                     },
                 );
             }
-            // C++ Reference: MagicInstance.cpp:4785 — sDataCopy
             instance.data[1] = 1;
             instance.data[3] = duration as i32;
             instance.data[5] = type4_data.speed.unwrap_or(0) as i32;
@@ -3992,7 +3753,6 @@ fn execute_type4(
             return false;
         }
 
-        // C++ Reference: MagicInstance.cpp:4491-4494 — blinking targets immune to debuffs
         {
             let now_unix = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -4010,7 +3770,6 @@ fn execute_type4(
         }
 
         // PvP permission check — "default deny" model for enemy debuffs
-        // C++ Reference: MagicInstance.cpp:2853-2862 — MORAL_ENEMY calls isHostileTo
         {
             let caster_pos = world.get_position(caster_sid).unwrap_or_default();
             let target_pos = world.get_position(target_sid).unwrap_or_default();
@@ -4032,7 +3791,6 @@ fn execute_type4(
             }
         }
 
-        // C++ Reference: MagicInstance.cpp:4599-4617 — Curse Block / Curse Reflect
         // BUFF_TYPE_BLOCK_CURSE (29) blocks all debuffs.
         // BUFF_TYPE_BLOCK_CURSE_REFLECT (30) blocks and has 25% chance to reflect.
         {
@@ -4048,7 +3806,6 @@ fn execute_type4(
                 };
                 if roll < 250 {
                     // Reflect: apply debuff to caster instead
-                    // C++ Reference: MagicInstance.cpp:4608 — pTarget = pSkillCaster
                     let caster_blocked = world
                         .with_session(caster_sid, |h| h.block_curses || h.reflect_curses)
                         .unwrap_or(false);
@@ -4076,13 +3833,10 @@ fn execute_type4(
             }
         }
 
-        // C++ Reference: MagicInstance.cpp:4619-4643 — debuff resistance check
-        // C++ Reference: MagicInstance.cpp:4401-4411 — CheckIceLightSpeed algorithm
         // SPEED, SPEED2, STUN: check cold_r (for SPEED2/freeze) or lightning_r (for SPEED/STUN)
         {
             let bt = type4_data.buff_type.unwrap_or(0);
             if matches!(bt, BUFF_TYPE_SPEED | BUFF_TYPE_SPEED2 | BUFF_TYPE_STUN) {
-                // C++ Reference: MagicInstance.cpp:4624-4629 — rush skills and
                 // counter-spell skill IDs bypass the resistance check entirely
                 let is_bypass = is_rush_skill(instance.skill_id)
                     || matches!(
@@ -4097,21 +3851,18 @@ fn execute_type4(
                     } else {
                         eq_stats.lightning_r as i32
                     };
-                    // C++ Reference: MagicInstance.cpp:4633-4634 — uses ONLY base equipment
                     // resistance (m_sColdR / m_sLightningR) + m_bResistanceBonus.
                     // Does NOT include buff-added resistance (m_bAddColdR / m_bAddLightningR).
                     let total_res = item_res + eq_stats.resistance_bonus as i32;
                     let max_res: i32 = 250;
                     let clamped = total_res.min(max_res);
 
-                    // C++ Reference: MagicInstance.cpp:4638 — percentagerate & rand
                     let percentagerate = (clamped * 100) / max_res;
                     let rand_val: i32 = {
                         let mut rng = rand::thread_rng();
                         rng.gen_range(0..=10000)
                     };
 
-                    // C++ Reference: MagicInstance.cpp:4401-4411 — CheckIceLightSpeed
                     // newrand = rand + (percentagerate * 3)
                     // if icelightrate > newrand → debuff applies, else resisted
                     let icelightrate = skill.icelightrate.unwrap_or(0) as i32;
@@ -4125,7 +3876,6 @@ fn execute_type4(
                             return true;
                         }
                     } else {
-                        // C++ Reference: MagicInstance.cpp:4403 — no icelightrate means
                         // the skill cannot apply the debuff at all
                         instance.data[1] = 0;
                         let pkt = instance.build_packet(MAGIC_EFFECTING);
@@ -4136,7 +3886,6 @@ fn execute_type4(
             }
         }
 
-        // C++ Reference: MagicInstance.cpp:4785 — sDataCopy
         instance.data[1] = 1;
         instance.data[3] = type4_data.duration.unwrap_or(0).max(0) as i32;
         instance.data[5] = type4_data.speed.unwrap_or(0) as i32;
@@ -4160,19 +3909,14 @@ fn execute_type4(
         );
         // BUG-3 fix: recalculate derived stats after debuff application
         world.set_user_ability(target_sid);
-        // C++ Reference: SendItemMove(1,1) after SetUserAbility — refresh client stat display
         world.send_item_move_refresh(target_sid);
-        // C++ Reference: MagicProcess.cpp:935 — Kaul visual transform broadcast
         broadcast_kaul_state_change(world, target_sid, &type4_data, instance.skill_id);
-        // C++ Reference: MagicProcess.cpp:583-584 — Size change visual broadcast
         broadcast_size_state_change(world, target_sid, &type4_data, instance.skill_id);
-        // C++ Reference: MagicProcess.cpp:983,999 — Devil/Snowman visual broadcast
         broadcast_buff_state_change_on_apply(world, target_sid, &type4_data, instance.skill_id);
         return true;
     }
 
     // ── AOE buff/debuff ─────────────────────────────────────────────
-    // C++ Reference: MagicInstance.cpp:4443-4488 — sTargetID == -1 AOE case
     if moral == MORAL_AREA_ENEMY
         || moral == MORAL_AREA_FRIEND
         || moral == MORAL_AREA_ALL
@@ -4218,7 +3962,6 @@ fn execute_type4(
             // BUG-3 fix: recalculate derived stats after self-area buff
             world.set_user_ability(caster_sid);
             // Persist scroll self-area buffs across logout/zone change
-            // C++ Reference: MagicInstance.cpp:4695 — `if (nSkillID > 500000 && pTarget->isPlayer())`
             if instance.skill_id > 500000 {
                 let sa_duration = type4_data.duration.unwrap_or(0).max(0) as u16;
                 world.insert_saved_magic(caster_sid, instance.skill_id, sa_duration);
@@ -4246,12 +3989,10 @@ fn execute_type4(
                 continue;
             }
 
-            // C++ Reference: MagicInstance.cpp:4454-4455 — GM immunity in AOE debuffs
             if moral == MORAL_AREA_ENEMY && target.authority == 0 {
                 continue;
             }
 
-            // C++ Reference: MagicInstance.cpp:4454-4455 — blinking targets immune in AOE Type4
             {
                 let now_unix = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -4262,7 +4003,6 @@ fn execute_type4(
                 }
             }
 
-            // C++ Reference: MagicInstance.cpp:4675-4679 — prevent self-debuff in AOE crossfire
             if moral == MORAL_AREA_ENEMY && target_sid == caster_sid {
                 continue;
             }
@@ -4285,7 +4025,6 @@ fn execute_type4(
             }
 
             // PvP permission check for AOE buff/debuff targets
-            // C++ Reference: MagicProcess.cpp:369-390 — UserRegionCheck calls isHostileTo
             if moral == MORAL_AREA_ENEMY
                 && !crate::handler::attack::is_hostile_to(
                     world,
@@ -4313,7 +4052,6 @@ fn execute_type4(
                 continue;
             }
 
-            // C++ Reference: MagicProcess.cpp:373-387 — MORAL_AREA_ALL safety area cross-check
             if moral == MORAL_AREA_ALL {
                 let caster_zone = caster_pos.zone_id;
                 let target_zone = target_pos.zone_id;
@@ -4347,7 +4085,6 @@ fn execute_type4(
                 }
             }
 
-            // C++ Reference: MagicInstance.cpp:4599-4617 — Curse Block / Curse Reflect in AOE
             if moral == MORAL_AREA_ENEMY {
                 let (has_block, has_reflect) = world
                     .with_session(target_sid, |h| (h.block_curses, h.reflect_curses))
@@ -4387,7 +4124,6 @@ fn execute_type4(
                 }
             }
 
-            // C++ Reference: MagicInstance.cpp:4619-4643 — AOE debuff resistance check
             // Same CheckIceLightSpeed algorithm for AOE enemy debuffs
             if moral == MORAL_AREA_ENEMY {
                 let bt = type4_data.buff_type.unwrap_or(0);
@@ -4405,7 +4141,6 @@ fn execute_type4(
                         } else {
                             eq_stats.lightning_r as i32
                         };
-                        // C++ Reference: MagicInstance.cpp:4633-4634 — uses ONLY base equipment
                         // resistance + m_bResistanceBonus, NOT buff-added resistance.
                         let total_res = item_res + eq_stats.resistance_bonus as i32;
                         let max_res: i32 = 250;
@@ -4424,7 +4159,6 @@ fn execute_type4(
             }
 
             // M3: Break stealth on AOE hit for enemy targets
-            // C++ Reference: MagicInstance.cpp:4471-4472
             if target.nation != caster.nation {
                 crate::handler::stealth::remove_stealth(world, target_sid);
             }
@@ -4446,22 +4180,16 @@ fn execute_type4(
             );
             // BUG-3 fix: recalculate derived stats after AOE buff/debuff
             world.set_user_ability(target_sid);
-            // C++ Reference: SendItemMove(1,1) after SetUserAbility — refresh client stat display
             world.send_item_move_refresh(target_sid);
-            // C++ Reference: MagicProcess.cpp:935 — Kaul visual transform broadcast
             broadcast_kaul_state_change(world, target_sid, &type4_data, instance.skill_id);
-            // C++ Reference: MagicProcess.cpp:583-584 — Size change visual broadcast
             broadcast_size_state_change(world, target_sid, &type4_data, instance.skill_id);
-            // C++ Reference: MagicProcess.cpp:983,999 — Devil/Snowman visual broadcast
             broadcast_buff_state_change_on_apply(world, target_sid, &type4_data, instance.skill_id);
             // Persist scroll buffs on AOE targets
-            // C++ Reference: MagicInstance.cpp:4695 — `if (nSkillID > 500000 && pTarget->isPlayer())`
             if instance.skill_id > 500000 {
                 world.insert_saved_magic(target_sid, instance.skill_id, duration);
             }
         }
 
-        // C++ Reference: MagicInstance.cpp:4785 — sDataCopy
         instance.data[1] = 1;
         instance.data[3] = type4_data.duration.unwrap_or(0).max(0) as i32;
         instance.data[5] = type4_data.speed.unwrap_or(0) as i32;
@@ -4482,17 +4210,13 @@ fn execute_type4(
 }
 
 /// Check whether a skill ID is a "rush" skill that bypasses debuff resistance.
-///
-/// C++ Reference: `MagicInstance::isRushSkill()` in MagicInstance.cpp:7174-7185
 /// Rush skills: warrior charge variants (114509, 115509, 214509, 215509).
 fn is_rush_skill(skill_id: u32) -> bool {
     matches!(skill_id, 114509 | 115509 | 214509 | 215509)
 }
 
 /// Apply a Type4 buff to a single target, with duplicate/speed checks.
-///
 /// Used by `execute_type4` for both single-target and party-wide buff application.
-/// C++ Reference: `CMagicProcess::GrantType4Buff()` in MagicProcess.cpp:508
 fn grant_type4_buff_to_target(
     world: &WorldState,
     caster_sid: SessionId,
@@ -4531,7 +4255,6 @@ fn grant_type4_buff_to_target(
         instance.skill_id,
     );
     world.set_user_ability(target_sid);
-    // C++ Reference: SendItemMove(1,1) after SetUserAbility — refresh client stat display
     // This sends total_hit with buff multipliers so the client shows the updated attack value.
     world.send_item_move_refresh(target_sid);
     if instance.skill_id > 500000 {
@@ -4540,8 +4263,6 @@ fn grant_type4_buff_to_target(
 }
 
 /// Create an `ActiveBuff` from a `MagicType4Row`.
-///
-/// C++ Reference: `MagicInstance.cpp:4564` — populating `_BUFF_TYPE4_INFO pBuffInfo`
 pub(crate) fn create_active_buff(
     skill_id: u32,
     caster_sid: SessionId,
@@ -4585,7 +4306,6 @@ pub(crate) fn create_active_buff(
 }
 
 /// Apply immediate stat modifications from a Type 4 buff.
-///
 /// Adjusts max_hp and max_mp on the character. The buff itself is tracked
 /// separately via `ActiveBuff` so it can be reversed on expiry.
 pub(crate) fn apply_type4_stats(
@@ -4595,7 +4315,6 @@ pub(crate) fn apply_type4_stats(
     s_skill: i16,
     skill_id: u32,
 ) {
-    // C++ Reference: MagicProcess.cpp:774-776 — BUFF_TYPE_MAGE_ARMOR sets reflect element
     let buff_type = type4.buff_type.unwrap_or(0);
     if buff_type == BUFF_TYPE_MAGE_ARMOR {
         let reflect_type = (s_skill % 100) as u8;
@@ -4603,7 +4322,6 @@ pub(crate) fn apply_type4_stats(
             h.reflect_armor_type = reflect_type;
         });
     }
-    // C++ Reference: MagicProcess.cpp:880-888 — Minak's Thorn sets mirror damage
     if buff_type == BUFF_TYPE_MIRROR_DAMAGE_PARTY {
         let special_amount = type4.special_amount.unwrap_or(0).min(100) as u8;
         let is_direct = skill_id == 492028;
@@ -4613,7 +4331,6 @@ pub(crate) fn apply_type4_stats(
             h.mirror_amount = special_amount;
         });
     }
-    // C++ Reference: MagicProcess.cpp:890-896 — Eskrima sets dagger/bow defense amounts
     if buff_type == BUFF_TYPE_DAGGER_BOW_DEFENSE {
         let special_amount = type4.special_amount.unwrap_or(0).min(100) as u8;
         let amount = 100u8.saturating_sub(special_amount);
@@ -4622,7 +4339,6 @@ pub(crate) fn apply_type4_stats(
             h.bow_r_amount = amount;
         });
     }
-    // C++ Reference: MagicProcess.cpp:1424-1427 — SILENCE/NO_POTIONS disable flags
     if buff_type == BUFF_TYPE_SILENCE_TARGET {
         world.update_session(target_sid, |h| {
             h.can_use_skills = false;
@@ -4633,19 +4349,15 @@ pub(crate) fn apply_type4_stats(
             h.can_use_potions = false;
         });
     }
-    // C++ Reference: MagicProcess.cpp:930-943 — Kaul/Undead transformation
     if buff_type == BUFF_TYPE_KAUL_TRANSFORMATION {
         world.update_session(target_sid, |h| {
             h.is_kaul = true;
-            // C++ Reference: Unit.h:280 — canUseSkills() includes !isKaul()
             h.can_use_skills = false;
-            // C++ Reference: User.cpp:2955 — save current abnormal type before transform
             h.old_abnormal_type = if h.transform_skill_id != 0 {
                 h.transform_skill_id
             } else {
                 ABNORMAL_NORMAL
             };
-            // C++ Reference: MagicProcess.cpp:934 — m_sACAmount += 500
             // Add 500 to the Kaul buff's AC so get_buff_ac_amount() includes it
             if let Some(buff) = h
                 .buffs
@@ -4661,13 +4373,11 @@ pub(crate) fn apply_type4_stats(
             h.is_undead = true;
         });
     }
-    // C++ Reference: MagicProcess.cpp:748-749 — FREEZE also sets m_bBlockMagic
     if buff_type == BUFF_TYPE_FREEZE {
         world.update_session(target_sid, |h| {
             h.block_magic = true;
         });
     }
-    // C++ Reference: MagicProcess.cpp:917-919 — UNSIGHT/BLIND/DISABLE_TARGETING set m_bIsBlinded
     if buff_type == BUFF_TYPE_UNSIGHT
         || buff_type == BUFF_TYPE_BLIND
         || buff_type == BUFF_TYPE_DISABLE_TARGETING
@@ -4676,7 +4386,6 @@ pub(crate) fn apply_type4_stats(
             h.is_blinded = true;
         });
     }
-    // C++ Reference: MagicProcess.cpp:920-921 — BLOCK_PHYSICAL/BLOCK_MAGICAL flags
     if buff_type == BUFF_TYPE_BLOCK_PHYSICAL_DAMAGE {
         world.update_session(target_sid, |h| {
             h.block_physical = true;
@@ -4687,50 +4396,42 @@ pub(crate) fn apply_type4_stats(
             h.block_magic = true;
         });
     }
-    // C++ Reference: MagicProcess.cpp:996-999 — Devil Transform
     if buff_type == BUFF_TYPE_DEVIL_TRANSFORM {
         world.update_session(target_sid, |h| {
             h.is_devil = true;
         });
     }
-    // C++ Reference: MagicProcess.cpp:1399 — NO_RECALL prevents teleport
     if buff_type == BUFF_TYPE_NO_RECALL {
         world.update_session(target_sid, |h| {
             h.can_teleport = false;
         });
     }
-    // C++ Reference: MagicProcess.cpp:1281 — PROHIBIT_INVIS prevents stealth
     if buff_type == BUFF_TYPE_PROHIBIT_INVIS {
         world.update_session(target_sid, |h| {
             h.can_stealth = false;
         });
     }
-    // C++ Reference: MagicProcess.cpp:782-784 — RESIS_AND_MAGIC_DMG reduces magic damage
     if buff_type == BUFF_TYPE_RESIS_AND_MAGIC_DMG {
         let exp_pct = type4.exp_pct.unwrap_or(0).clamp(0, 100) as u8;
         world.update_session(target_sid, |h| {
             h.magic_damage_reduction = exp_pct;
         });
     }
-    // C++ Reference: MagicProcess.cpp:1304 — BLOCK_CURSE prevents debuffs
     if buff_type == BUFF_TYPE_BLOCK_CURSE {
         world.update_session(target_sid, |h| {
             h.block_curses = true;
         });
     }
-    // C++ Reference: MagicProcess.cpp:1308 — BLOCK_CURSE_REFLECT reflects curses
     if buff_type == BUFF_TYPE_BLOCK_CURSE_REFLECT {
         world.update_session(target_sid, |h| {
             h.reflect_curses = true;
         });
     }
-    // C++ Reference: MagicProcess.cpp:1264 — INSTANT_MAGIC removes cast time
     if buff_type == BUFF_TYPE_INSTANT_MAGIC {
         world.update_session(target_sid, |h| {
             h.instant_cast = true;
         });
     }
-    // C++ Reference: MagicProcess.cpp:977-979 — NP_DROP_NOAH scroll bonus
     if buff_type == BUFF_TYPE_NP_DROP_NOAH {
         let special_amount = type4.special_amount.unwrap_or(0) as i16;
         if special_amount > 0 {
@@ -4739,7 +4440,6 @@ pub(crate) fn apply_type4_stats(
             });
         }
     }
-    // C++ Reference: MagicProcess.cpp:552-555 — JACKPOT sets m_jackpotype
     if buff_type == BUFF_TYPE_JACKPOT {
         let jtype = if skill_id == 501570 {
             1u8 // EXP jackpot
@@ -4756,7 +4456,6 @@ pub(crate) fn apply_type4_stats(
             });
         }
     }
-    // C++ Reference: MagicProcess.cpp:662-665 — WEAPON_DAMAGE adds flat weapon damage bonus
     if buff_type == BUFF_TYPE_WEAPON_DAMAGE {
         let weapon_dmg = type4.attack.unwrap_or(0);
         world.update_session(target_sid, |h| {
@@ -4769,12 +4468,10 @@ pub(crate) fn apply_type4_stats(
             }
         });
     }
-    // C++ Reference: MagicProcess.cpp:667-682 — WEAPON_AC modifies armour AC
     // If sAC == 0 && sACPct > 0: modify m_bPctArmourAc (already tracked in ac_pct)
     // Else: modify m_sAddArmourAc (already tracked in ac)
     // Both are handled via existing ActiveBuff.ac / ac_pct fields.
     // The integration into set_user_ability is the missing piece (Task #4).
-    // C++ Reference: MagicProcess.cpp:699-709 — ATTACK_SPEED_ARMOR handles AC reduction
     if buff_type == BUFF_TYPE_ATTACK_SPEED_ARMOR {
         let ac_val = type4.ac.unwrap_or(0);
         if ac_val < 0 {
@@ -4793,34 +4490,29 @@ pub(crate) fn apply_type4_stats(
         }
         // Positive AC is already handled by the normal ActiveBuff.ac field
     }
-    // C++ Reference: MagicProcess.cpp:657-660 — WEIGHT increases carry weight
     if buff_type == BUFF_TYPE_WEIGHT {
         let weight_amount = type4.exp_pct.unwrap_or(0).clamp(0, 255) as u8;
         world.update_session(target_sid, |h| {
             h.weight_buff_amount = weight_amount;
         });
     }
-    // C++ Reference: MagicProcess.cpp:684-687 — LOYALTY sets NP gain multiplier
     if buff_type == BUFF_TYPE_LOYALTY {
         let np_amount = type4.exp_pct.unwrap_or(0).clamp(0, 255) as u8;
         world.update_session(target_sid, |h| {
             h.np_gain_amount = np_amount;
         });
     }
-    // C++ Reference: MagicProcess.cpp:689-692 — NOAH_BONUS sets gold gain multiplier
     if buff_type == BUFF_TYPE_NOAH_BONUS {
         let noah_amount = type4.exp_pct.unwrap_or(0).clamp(0, 255) as u8;
         world.update_session(target_sid, |h| {
             h.noah_gain_amount = noah_amount;
         });
     }
-    // C++ Reference: MagicProcess.cpp:694-697 — PREMIUM_MERCHANT sets merchant flag
     if buff_type == BUFF_TYPE_PREMIUM_MERCHANT {
         world.update_session(target_sid, |h| {
             h.is_premium_merchant = true;
         });
     }
-    // C++ Reference: MagicProcess.cpp:808-811 — MANA_ABSORB (Outrage/Frenzy/Mana Shield)
     if buff_type == BUFF_TYPE_MANA_ABSORB {
         let absorb_pct = type4.exp_pct.unwrap_or(0).max(0) as u8;
         world.update_session(target_sid, |h| {
@@ -4828,7 +4520,6 @@ pub(crate) fn apply_type4_stats(
             h.absorb_count = 4;
         });
     }
-    // C++ Reference: MagicProcess.cpp:839-855 — IGNORE_WEAPON (random chance)
     // C++ logic: `if (110 <= myrand(0, 300)) weapons = false; else weapons = true;`
     // myrand(0,300) returns [0..300]. Values >= 110 → NOT disabled (191/301 ≈ 63%).
     // Values < 110 → disabled (110/301 ≈ 37%).
@@ -4842,7 +4533,6 @@ pub(crate) fn apply_type4_stats(
             h.weapons_disabled = disabled;
         });
     }
-    // C++ Reference: MagicProcess.cpp:765-772 — DECREASE_RESIST sets pct resistance multipliers
     if buff_type == BUFF_TYPE_DECREASE_RESIST {
         let fire_r = type4.fire_r.unwrap_or(0).clamp(0, 100) as u8;
         let cold_r = type4.cold_r.unwrap_or(0).clamp(0, 100) as u8;
@@ -4859,7 +4549,6 @@ pub(crate) fn apply_type4_stats(
             h.pct_poison_r = 100u8.saturating_sub(poison_r);
         });
     }
-    // C++ Reference: MagicProcess.cpp:643-645 — EXPERIENCE buff adds EXP%
     if buff_type == BUFF_TYPE_EXPERIENCE {
         let exp_pct = type4.exp_pct.unwrap_or(0);
         if exp_pct > 100 {
@@ -4868,7 +4557,6 @@ pub(crate) fn apply_type4_stats(
             });
         }
     }
-    // C++ Reference: MagicProcess.cpp:829-831 — VARIOUS_EFFECTS EXP/NP bonuses
     if buff_type == BUFF_TYPE_VARIOUS_EFFECTS {
         let exp_pct = type4.exp_pct.unwrap_or(0);
         if exp_pct > 100 {
@@ -4883,7 +4571,6 @@ pub(crate) fn apply_type4_stats(
             });
         }
     }
-    // C++ Reference: MagicProcess.cpp:901-904 — LOYALTY_AMOUNT NP bonus
     if buff_type == BUFF_TYPE_LOYALTY_AMOUNT {
         let special_amount = type4.special_amount.unwrap_or(0);
         if special_amount > 0 {
@@ -4892,7 +4579,6 @@ pub(crate) fn apply_type4_stats(
             });
         }
     }
-    // C++ Reference: MagicProcess.cpp:558-586 — SIZE buff sets visual size effect
     if buff_type == BUFF_TYPE_SIZE {
         // C++ checks `if (pCaster->isPlayer())` — always true for our context
         // Determine visual effect from skill ID
@@ -4911,13 +4597,10 @@ pub(crate) fn apply_type4_stats(
     }
     // HP/MP bonuses from buffs are now computed centrally in set_user_ability()
     // via the ActiveBuff's max_hp/max_hp_pct/max_mp/max_mp_pct fields.
-    // C++ Reference: SetMaxHp() adds m_sMaxHPAmount to the formula result.
     // The caller (magic_process handlers) must call set_user_ability() after this.
 }
 
 /// Broadcast Kaul visual transform to region if the applied buff is Kaul.
-///
-/// C++ Reference: `MagicProcess.cpp:935` — `pTarget->StateChangeServerDirect(3, pType->iNum)`
 fn broadcast_kaul_state_change(
     world: &WorldState,
     target_sid: SessionId,
@@ -4946,8 +4629,6 @@ fn broadcast_kaul_state_change(
 }
 
 /// Broadcast size change visual to region if the applied buff is SIZE.
-///
-/// C++ Reference: `MagicProcess.cpp:583-584` — `pTarget->StateChangeServerDirect(3, bEffect)`
 fn broadcast_size_state_change(
     world: &WorldState,
     target_sid: SessionId,
@@ -4983,8 +4664,6 @@ fn broadcast_size_state_change(
 }
 
 /// Broadcast visual transforms for DEVIL_TRANSFORM and SNOWMAN_TITI on apply.
-///
-/// C++ Reference:
 /// - `MagicProcess.cpp:999` — `StateChangeServerDirect(12, 1)` for Devil
 /// - `MagicProcess.cpp:983` — `StateChangeServerDirect(3, pType->iNum)` for Snowman
 fn broadcast_buff_state_change_on_apply(
@@ -5013,7 +4692,6 @@ fn broadcast_buff_state_change_on_apply(
             );
         }
     } else if buff_type == BUFF_TYPE_IGNORE_WEAPON {
-        // C++ Reference: MagicProcess.cpp:849-854 — IGNORE_WEAPON hides weapons visually
         let weapons_disabled = world
             .with_session(target_sid, |h| h.weapons_disabled)
             .unwrap_or(false);
@@ -5038,7 +4716,6 @@ fn broadcast_buff_state_change_on_apply(
                 );
 
                 // Hide left hand if not a shield
-                // C++ Reference: MagicProcess.cpp:852-854 — skip shields
                 if let Some(left_slot) = world.get_inventory_slot(target_sid, LEFTHAND) {
                     if left_slot.item_id != 0 {
                         let is_shield = world
@@ -5097,8 +4774,6 @@ fn broadcast_buff_state_change_on_apply(
 // ── Shared helpers ────────────────────────────────────────────────────────
 
 /// Check if target is within skill range, using C++ dynamic range modifiers.
-///
-/// C++ Reference: `MagicInstance::Run()` lines 236-280 — range validation
 /// with class/weapon/movement modifiers.
 fn check_skill_range(
     world: &WorldState,
@@ -5133,7 +4808,6 @@ fn check_skill_range(
         .with_session(caster_sid, |h| h.move_old_speed != 0)
         .unwrap_or(false);
 
-    // C++ Reference: MagicInstance.cpp:236-280 — dynamic SkillRange calculation
     let skill_range: i32 =
         if (type1 == 1 || type2 == 1) && cast_time == 0 && !is_staff_skill(skill_id) {
             // Melee skill with no cast time, non-staff
@@ -5193,8 +4867,6 @@ fn check_skill_range(
 }
 
 /// Check if the target is NPC with proto_id 6200 (used for drain skill range override).
-///
-/// C++ Reference: MagicInstance.cpp:257 — `TO_NPC(pSkillTarget)->GetPID() == 6200`
 fn is_target_npc_pid_6200(_world: &WorldState, _target_sid: SessionId) -> bool {
     // NPC targets go through a different path (npc_id-based, not session-based),
     // so this player-vs-player range check won't encounter NPC PID 6200.
@@ -5202,8 +4874,6 @@ fn is_target_npc_pid_6200(_world: &WorldState, _target_sid: SessionId) -> bool {
 }
 
 /// Check if a skill ID is a "staff skill" (mage long-range staff attacks).
-///
-/// C++ Reference: `MagicInstance::isStaffSkill()` in MagicInstance.cpp:7099-7155
 /// Hardcoded list of skill IDs for all staff-based mage skills.
 fn is_staff_skill(skill_id: u32) -> bool {
     matches!(
@@ -5225,8 +4895,6 @@ fn is_staff_skill(skill_id: u32) -> bool {
 }
 
 /// Check if a skill ID is a "drain skill" (HP/MP drain attacks).
-///
-/// C++ Reference: `MagicInstance::isDrainSkills()` in MagicInstance.cpp:7280-7307
 fn is_drain_skill(skill_id: u32) -> bool {
     matches!(
         skill_id,
@@ -5235,8 +4903,6 @@ fn is_drain_skill(skill_id: u32) -> bool {
 }
 
 /// Check if a skill ID is a "stomp skill" (ground-target AoE warrior skills).
-///
-/// C++ Reference: `MagicInstance::isStompSkills()` in MagicInstance.cpp:7309-7327
 fn is_stomp_skill(skill_id: u32) -> bool {
     matches!(
         skill_id,
@@ -5258,18 +4924,13 @@ fn is_stomp_skill(skill_id: u32) -> bool {
 }
 
 /// Validate that the caster's class matches the skill's class requirement.
-///
-/// C++ Reference: `MagicInstance::CheckSkillClass()` in MagicInstance.cpp:1520-1590
-///
 /// The skill's `sSkill / 10` encodes the class constant (e.g., 101=KaruWarrior, 205=Blade).
 /// The player's `class % 100` gives the class type (1=warrior, 5=novice warrior, etc.).
 /// Each class constant pair (Karus/Elmorad equivalent) maps to a single class type.
 fn check_skill_class(iclass: i16, player_class: u16) -> bool {
-    // C++ Reference: globals.h:380-397 — ClassType enum
     // GetClassType() = GetClass() % 100
     let class_type = (player_class % 100) as i16;
 
-    // C++ Reference: GameDefine.h:12-42 — class constants
     match iclass {
         // Beginner warrior: KARUWARRIOR(101) / ELMORWARRIOR(201)
         101 | 201 => class_type == 1,
@@ -5308,7 +4969,6 @@ fn check_skill_class(iclass: i16, player_class: u16) -> bool {
 
 /// Send MAGIC_FAIL to the caster.
 fn send_skill_failed(world: &WorldState, caster_sid: SessionId, instance: &mut MagicInstance) {
-    // C++ Reference: MagicInstance.cpp:2459 — SendSkillFailed sets sData[3]
     // MAGIC_CASTING → SKILLMAGIC_FAIL_CASTING (-100), else → SKILLMAGIC_FAIL_NOEFFECT (-103)
     instance.data[3] = if instance.opcode == MAGIC_CASTING {
         -100 // SKILLMAGIC_FAIL_CASTING
@@ -5335,9 +4995,6 @@ fn broadcast_to_caster_region(world: &WorldState, caster_sid: SessionId, pkt: &P
 }
 
 /// Compute the full PvP target AC for skill-based physical damage.
-///
-/// C++ Reference: Unit.cpp:281-322 — GetDamage() AC calculation
-///
 /// Uses `total_ac` (equipment + coefficient), buff AC (with armor scroll disable check),
 /// AC percent, AC sour reduction, and class-specific AC bonus.
 fn compute_pvp_skill_target_ac(
@@ -5354,7 +5011,6 @@ fn compute_pvp_skill_target_ac(
         - snap.ac_sour)
         .max(0);
 
-    // C++ Reference: Unit.cpp:320 — class-specific AC bonus (PvP)
     if let Some(idx) = crate::handler::attack::class_group_index(target.class) {
         let bonus = snap.equipped_stats.ac_class_bonus[idx] as i32;
         ac = ac * (100 + bonus) / 100;
@@ -5363,8 +5019,6 @@ fn compute_pvp_skill_target_ac(
 }
 
 /// Check if a skill ID disables armor scroll AC buffs.
-///
-/// C++ Reference: Unit.cpp:281-299 — specific skill IDs that disable m_sACAmount
 const ARMOR_SCROLL_DISABLE_SKILLS: [u32; 14] = [
     107640, 108640, 207640, 208640, 107620, 108620, 207620, 208620, 107600, 108600, 207600, 208600,
     108670, 208670,
@@ -5375,11 +5029,8 @@ fn is_armor_scroll_disable_skill(skill_id: u32) -> bool {
 }
 
 /// Compute Type1 (melee skill) damage following C++ GetDamage formula.
-///
-/// C++ Reference: Unit.cpp:261-457, Type1 branch (lines 364-391, 454-455)
 /// - `temp_hit = temp_hit_B * (pType1->sHit / 100.0f)`
 /// - `damage = (short)((temp_hit + 0.3f * random) + 0.99f)`
-///
 /// Unlike the R-attack formula `(0.75 * hit_b + 0.3 * rand)`, Type1 skills use
 /// `(temp_hit + 0.3 * rand + 0.99)` where `temp_hit` is scaled by `sHit` percentage.
 #[allow(clippy::too_many_arguments)]
@@ -5448,12 +5099,9 @@ fn compute_type1_hit_damage(
 }
 
 /// Compute Type2 (ranged/archery skill) damage following C++ GetDamage formula.
-///
-/// C++ Reference: Unit.cpp:394-428, 445-457
 /// - Penetration (bHitType==1): `temp_hit = m_sTotalHit * m_bAttackAmount * (sAddDamage / 100.0f) / 100`
 /// - Normal: `temp_hit = temp_hit_B * (sAddDamage / 100.0f)`
 /// - `damage = (short)(((temp_hit * 0.6f) + 1.0f * random) + 0.99f)`
-///
 /// `sAddDamage` is a percentage multiplier, NOT flat damage.
 #[allow(clippy::too_many_arguments)]
 fn compute_type2_hit_damage(
@@ -5530,8 +5178,6 @@ fn compute_type2_hit_damage(
 }
 
 /// Hit rate check — same as attack.rs get_hit_rate.
-///
-/// C++ Reference: `Unit.cpp:1898-1984`
 fn get_hit_rate(rate: f32, rng: &mut impl Rng) -> u8 {
     let random = rng.gen_range(1..=10000);
 
@@ -5646,7 +5292,6 @@ async fn apply_skill_damage(
         return;
     }
 
-    // C++ Reference: UserHealtMagicSpSystem.cpp:66-67 — GM immunity
     if target.authority == 0 {
         let pkt = instance.build_packet(MAGIC_EFFECTING);
         broadcast_to_caster_region(world, caster_sid, &pkt);
@@ -5674,7 +5319,6 @@ async fn apply_skill_damage(
             .unwrap_or((100, false, false, 0, 0, 0));
 
     // ── Magic Damage Reduction (Elysian Web / BUFF_TYPE_RESIS_AND_MAGIC_DMG) ──
-    // C++ Reference: MagicInstance.cpp:6621 — damage = damage * m_bMagicDamageReduction / 100
     let mut effective_damage = damage;
     if reduction < 100 {
         effective_damage = (effective_damage as i32 * reduction as i32 / 100) as i16;
@@ -5684,14 +5328,12 @@ async fn apply_skill_damage(
         }
     }
 
-    // C++ Reference: UserHealtMagicSpSystem.cpp:43-135
     // C++ order: save originalAmount → mirror → mastery → mana absorb (uses originalAmount)
     // For magic: effective_damage already has magic_damage_reduction applied (like C++ GetMagicDamage).
     // Save it as original_damage for mana absorb calculation.
     let original_damage = effective_damage;
 
     // ── Mirror damage victim reduction ──────────────────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:74-112 — mirror FIRST, uses full `amount`
     let (mirror_dmg, mirror_direct) = if !not_use_zone && mirror_active && mirror_amt > 0 {
         let md = (mirror_amt as i32 * effective_damage as i32) / 100;
         if md > 0 {
@@ -5707,7 +5349,6 @@ async fn apply_skill_damage(
     }
 
     // ── Mastery passive damage reduction ────────────────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:114-123
     // Matchless: SkillPointMaster >= 10 → 15% reduction
     // Absoluteness: SkillPointMaster >= 5 → 10% reduction
     if !not_use_zone && crate::handler::class_change::is_mastered(target.class) {
@@ -5722,7 +5363,6 @@ async fn apply_skill_damage(
     }
 
     // ── Mana Absorb (Outrage/Frenzy/Mana Shield) ─────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:125-135
     // C++ uses `originalAmount` (pre-mirror) for absorb calculation,
     // but subtracts absorbed from current `amount` (post-mirror).
     {
@@ -5756,26 +5396,21 @@ async fn apply_skill_damage(
     world.update_character_hp(target_sid, new_hp);
 
     // Send WIZ_HP_CHANGE to the victim so their client updates their own HP
-    // C++ Reference: UserHealtMagicSpSystem.cpp:178-194
     let hp_pkt = crate::systems::regen::build_hp_change_packet_with_attacker(
         target.max_hp,
         new_hp,
         caster_sid as u32,
     );
     world.send_to_session_owned(target_sid, hp_pkt);
-    // C++ Reference: UserHealtMagicSpSystem.cpp:196-200 — SendPartyHPUpdate on every HP change
     crate::handler::party::broadcast_party_hp(world, target_sid);
 
     // ── Equipment durability loss ─────────────────────────────────────
-    // C++ Reference: MagicInstance.cpp:3201-3205
     world.item_wore_out(caster_sid, WORE_TYPE_ATTACK, damage as i32);
     world.item_wore_out(target_sid, WORE_TYPE_DEFENCE, damage as i32);
 
-    // C++ Reference: MagicInstance.cpp:3207-3208 — mage armor reflect
     try_reflect_damage(world, caster_sid, target_sid, damage).await;
 
     // ── Mirror damage reflection (skill buff) ──────────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:74-110
     // Mirror was pre-computed above; now reflect to caster or party.
     if mirror_dmg > 0 {
         if mirror_direct {
@@ -5793,7 +5428,6 @@ async fn apply_skill_damage(
             world.send_to_session_owned(caster_sid, atk_hp_pkt);
         } else if world.is_in_party(target_sid) {
             // Party distribution: spread mirror damage among attacker's party.
-            // C++ Reference: UserHealtMagicSpSystem.cpp:89-109
             if let Some(atk_party_id) = world.get_party_id(caster_sid) {
                 if let Some(party) = world.get_party(atk_party_id) {
                     let members = party.active_members();
@@ -5831,7 +5465,6 @@ async fn apply_skill_damage(
     }
 
     // ── Equipment mirror damage (ITEM_TYPE_MIRROR_DAMAGE) ───────────
-    // C++ Reference: Unit.cpp:1674-1796 — reflected = damage * total / 300
     {
         const ITEM_TYPE_MIRROR_DAMAGE_EQ: u8 = 0x08;
         let eq_stats = world.get_equipped_stats(target_sid);
@@ -5867,19 +5500,15 @@ async fn apply_skill_damage(
         dead::set_who_killed_me(world, target_sid, caster_sid);
 
         // ── PvP death notice ────────────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:513-544
         dead::send_death_notice(world, caster_sid, target_sid);
 
         // ── Chaos dungeon item rob ──────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:454-459
         dead::rob_chaos_skill_items(world, target_sid);
 
         // ── PvP loyalty (NP) change ─────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:726-728
         dead::pvp_loyalty_on_death(world, caster_sid, target_sid);
 
         // ── Rivalry / Anger Gauge (magic kill path) ─────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:589-611
         {
             let now_secs = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -5905,11 +5534,9 @@ async fn apply_skill_damage(
         }
 
         // ── PvP gold change ─────────────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:715-725
         dead::gold_change_on_death(world, caster_sid, target_sid);
 
         // ── Temple event kill scoring ───────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:499-536
         // OnDeathKilledPlayer is called from OnDeath regardless of
         // damage source (physical or magic).
         {
@@ -5951,12 +5578,8 @@ async fn apply_skill_damage(
 }
 
 /// Check and trigger mage armor reflect damage on the target.
-///
-/// C++ Reference: `MagicInstance::ReflectDamage()` in MagicInstance.cpp:7027-7072
-///
 /// When a player with BUFF_TYPE_MAGE_ARMOR (25) is hit, this fires a counter-skill
 /// back at the attacker and consumes the buff (one-time use).
-///
 /// Element mapping: 5=Fire, 6=Ice, 7=Lightning.
 /// Counter-skills by nation:
 /// - Fire:      Karus=190573, Elmorad=290573
@@ -5976,7 +5599,6 @@ fn try_reflect_damage<'a>(
             return;
         }
 
-        // C++ Reference: MagicInstance.cpp:7032 — only works if caster isPlayer()
         // Both sides are players in PvP, so this is always true here.
 
         let reflect_type = world
@@ -5991,7 +5613,6 @@ fn try_reflect_damage<'a>(
             None => return,
         };
 
-        // C++ Reference: MagicInstance.cpp:7041-7053 — map element to counter-skill
         const FIRE_DAMAGE: u8 = 5;
         const ICE_DAMAGE: u8 = 6;
         const LIGHTNING_DAMAGE: u8 = 7;
@@ -6007,7 +5628,6 @@ fn try_reflect_damage<'a>(
         };
 
         // Clear reflect BEFORE executing counter-skill to prevent infinite recursion
-        // C++ Reference: MagicInstance.cpp:7071 — RemoveType4Buff(BUFF_TYPE_MAGE_ARMOR)
         world.update_session(target_sid, |h| {
             h.reflect_armor_type = 0;
         });
@@ -6018,7 +5638,6 @@ fn try_reflect_damage<'a>(
         let expired_pkt = build_buff_expired_packet(BUFF_TYPE_MAGE_ARMOR as u8);
         world.send_to_session_owned(target_sid, expired_pkt);
 
-        // C++ Reference: MagicInstance.cpp:7059-7069 — create new MagicInstance and Run()
         let skill = match world.get_magic(counter_skill_id as i32) {
             Some(s) => s,
             None => {
@@ -6039,7 +5658,6 @@ fn try_reflect_damage<'a>(
             data: [0; 7],
         };
 
-        // C++ Reference: MagicInstance.cpp:7067-7068 — set AOE coords to target position
         if let Some(pos) = world.get_position(target_sid) {
             instance.data[0] = (pos.x as u16) as i32;
             instance.data[2] = (pos.z as u16) as i32;
@@ -6074,9 +5692,6 @@ fn try_reflect_damage<'a>(
 }
 
 /// Send WIZ_TARGET_HP to the caster for HP bar + damage display update.
-///
-/// C++ Reference: `User.cpp:2712-2771` — `SendTargetHP(echo, tid, damage)`
-///
 /// The `damage` parameter is displayed in the client's console as the amount
 /// of damage dealt. Pass 0 for heals or non-damage updates.
 fn send_target_hp_update(
@@ -6105,7 +5720,6 @@ fn send_target_hp_update(
 }
 
 /// Apply skill damage to an NPC target, handle death (XP + broadcast), and send HP update.
-///
 /// Used by Type 1, 2, and 3 skill handlers when the target is an NPC.
 /// Respawn is handled via a separate 30-second timer in the melee attack handler.
 async fn apply_skill_damage_to_npc(
@@ -6118,7 +5732,6 @@ async fn apply_skill_damage_to_npc(
     attribute_type: u8,
 ) {
     // ── Bot target: apply damage, send HP update, handle death ─────
-    // C++ Reference: `CBot::HpChange()` in `BotHealthHandler.cpp:3-151`
     // Bots are stored in world.bots (not the NPC instance map).
     // We apply the magic damage to the bot's HP and send WIZ_TARGET_HP to the
     // caster. If the bot's HP reaches 0, we trigger the full death processing.
@@ -6135,7 +5748,6 @@ async fn apply_skill_damage_to_npc(
         });
 
         // Send WIZ_TARGET_HP to caster
-        // C++ Reference: `TO_USER(pAttacker)->SendTargetHP(0, GetID(), amount, false)`
         let mut target_hp_pkt = ko_protocol::Packet::new(ko_protocol::Opcode::WizTargetHp as u8);
         target_hp_pkt.write_u32(npc_id);
         target_hp_pkt.write_u8(0); // echo
@@ -6176,9 +5788,7 @@ async fn apply_skill_damage_to_npc(
     };
 
     // NPC type validation — certain NPCs are immune to magic skills
-    // C++ Reference: MagicInstance.cpp:882-898 — returns SkillUseFail for special types
     {
-        // C++ Reference: MagicInstance.cpp:882-884 — NPC_PARTNER_TYPE with nation NONE
         if tmpl.npc_type == NPC_PARTNER_TYPE && tmpl.group == 0 {
             return;
         }
@@ -6193,7 +5803,6 @@ async fn apply_skill_damage_to_npc(
             _ => {}
         }
 
-        // C++ Reference: MagicInstance.cpp:899-905 — CSW artifact & doors
         let is_csw_door = tmpl.npc_type == NPC_GATE && matches!(npc.proto_id, 561..=563);
 
         if tmpl.npc_type == NPC_DESTROYED_ARTIFACT || is_csw_door {
@@ -6213,7 +5822,6 @@ async fn apply_skill_damage_to_npc(
             }
         }
 
-        // C++ Reference: Unit.cpp:2082-2108 — Monument nation attack checks
         {
             if tmpl.npc_type == NPC_BIFROST_MONUMENT {
                 let beef = world.get_beef_event();
@@ -6234,7 +5842,6 @@ async fn apply_skill_damage_to_npc(
             }
         }
 
-        // C++ Reference: MagicInstance.cpp:908-909 — Under-the-Castle disable skill list
         // Vampiric Touch, Blood Drain, Fire Thorn, Static Thorn, Parasite, Super Parasite
         // are blocked when cast against NPCs in zone 86.
         {
@@ -6282,14 +5889,13 @@ async fn apply_skill_damage_to_npc(
     world.record_npc_damage(npc_id, caster_sid, damage as i32);
 
     // ── Caster weapon durability loss ────────────────────────────────
-    // C++ Reference: MagicInstance.cpp:3202 — ItemWoreOut(ATTACK, damage)
     world.item_wore_out(caster_sid, WORE_TYPE_ATTACK, damage as i32);
 
     // Notify NPC AI about damage (reactive aggro — C++ ChangeTarget)
     if new_hp > 0 {
         world.notify_npc_damaged(npc_id, caster_sid);
 
-        // Elemental fainting check — C++ Reference: Npc.cpp:687-721
+        // Elemental fainting check
         // When an NPC takes magic damage with an elemental attribute, there is a
         // chance to stun (faint) the NPC based on its resistance to that element.
         if attribute_type > 0 {
@@ -6308,7 +5914,6 @@ async fn apply_skill_damage_to_npc(
     broadcast_to_caster_region(world, caster_sid, &pkt);
 
     // Send HP bar update with actual damage for console display
-    // C++ Reference: Npc.cpp:519 — TO_USER(pAttacker)->SendTargetHP(0, GetID(), amount, false)
     // C++ sends negative amount (damage dealt), client uses sign for display:
     // negative = "X damage dealt", positive = "X HP received"
     let mut hp_pkt = Packet::new(Opcode::WizTargetHp as u8);
@@ -6332,12 +5937,8 @@ async fn apply_skill_damage_to_npc(
 }
 
 /// Try to apply elemental fainting to an NPC after taking magic damage.
-///
-/// C++ Reference: `Npc.cpp:687-721` — `CNpc::RecvAttackReq()` / `HpChangeMagic()` fainting logic
-///
 /// Formula: `faint_chance = 10 + (40 - 40 * (resistance / 80))`
 /// If `random(1, 100) < faint_chance`, the NPC enters FAINTING state for 2 seconds.
-///
 /// Attribute mapping:
 /// - 1 (Fire) -> fire_r
 /// - 2 (Ice) -> cold_r
@@ -6411,9 +6012,6 @@ const TYPE5_REMOVE_BLESS: i32 = 5;
 const TYPE5_LIFE_CRYSTAL: i32 = 6;
 
 /// Execute Type 5 skill — resurrection, cure DOTs, cure debuffs.
-///
-/// C++ Reference: `MagicInstance::ExecuteType5()` in MagicInstance.cpp:4859-5045
-///
 /// Sub-types (bType field):
 /// - 1 (REMOVE_TYPE3): Remove harmful DOT effects from target
 /// - 2 (REMOVE_TYPE4): Remove type 4 debuffs from target
@@ -6457,7 +6055,6 @@ async fn execute_type5(
     match sub_type {
         TYPE5_REMOVE_TYPE3 => {
             // Remove all harmful DOT effects (negative hp_amount)
-            // C++ Reference: MagicInstance.cpp:4933-4965
             let removed = world.clear_harmful_dots(target_sid);
             if removed {
                 // Send MAGIC_DURATION_EXPIRED with type 200 to remove DOT visual
@@ -6476,13 +6073,11 @@ async fn execute_type5(
 
         TYPE5_REMOVE_TYPE4 => {
             // Remove all type 4 debuffs
-            // C++ Reference: MagicInstance.cpp:4967-4985
             let removed_types = world.remove_debuffs(target_sid);
             for buff_type in &removed_types {
                 let expired_pkt = build_buff_expired_packet(*buff_type as u8);
                 broadcast_to_caster_region(world, caster_sid, &expired_pkt);
             }
-            // C++ Reference: MagicInstance.cpp:4981-4984 — recast lockable scrolls
             // after debuff removal. For each removed debuff type, if it's lockable,
             // recast the original scroll buff from saved magic.
             for buff_type in &removed_types {
@@ -6490,7 +6085,6 @@ async fn execute_type5(
                     world.recast_lockable_scrolls(target_sid, *buff_type);
                 }
             }
-            // C++ Reference: MagicProcess.cpp:1541 — SetUserAbility() after each RemoveType4Buff
             if !removed_types.is_empty() {
                 world.set_user_ability(target_sid);
             }
@@ -6504,14 +6098,12 @@ async fn execute_type5(
 
         TYPE5_RESURRECTION | TYPE5_LIFE_CRYSTAL => {
             // Resurrect a dead player
-            // C++ Reference: MagicInstance.cpp:5003-5023
             //   Calls pTUser->Regene(INOUT_IN, nSkillID)
             if target.res_hp_type != USER_DEAD && target.hp > 0 {
                 send_skill_failed(world, caster_sid, instance);
                 return false;
             }
 
-            // C++ Reference: MagicInstance.cpp:5014-5020 — RESURRECTION stone consumption + caster reward
             // Target must have sNeedStone of iUseItem; caster gets (sNeedStone / 2) + 1 back.
             if sub_type == TYPE5_RESURRECTION {
                 let use_item_id = skill.use_item.unwrap_or(0);
@@ -6544,14 +6136,11 @@ async fn execute_type5(
             world.update_character_hp(target_sid, target.max_hp); // Full HP
 
             if target_zone == ZONE_UNDER_CASTLE {
-                // C++ Reference: AttackHandler.cpp:427-428 — full MP in Under Castle
                 world.update_character_mp(target_sid, target.max_mp);
             } else {
-                // C++ Reference: AttackHandler.cpp:392 — MP reset to 0
                 world.update_character_mp(target_sid, 0);
 
                 // EXP recovery — only for PvE deaths (who_killed_me == -1)
-                // C++ Reference: AttackHandler.cpp:394-395
                 let (who_killed, lost_exp) = world
                     .with_session(target_sid, |h| (h.who_killed_me, h.lost_exp))
                     .unwrap_or((-1, 0));
@@ -6574,14 +6163,12 @@ async fn execute_type5(
             }
 
             // Reset death tracking fields
-            // C++ Reference: AttackHandler.cpp:407-408
             world.update_session(target_sid, |h| {
                 h.who_killed_me = -1;
                 h.lost_exp = 0;
             });
 
             // Send WIZ_REGENE packet to the resurrected player
-            // C++ Reference: AttackHandler.cpp:402-404
             if let Some(tpos) = world.get_position(target_sid) {
                 let mut regene_pkt = ko_protocol::Packet::new(ko_protocol::Opcode::WizRegene as u8);
                 regene_pkt.write_u16((tpos.x * 10.0) as u16);
@@ -6607,7 +6194,6 @@ async fn execute_type5(
 
         TYPE5_RESURRECTION_SELF => {
             // Self-resurrection (only caster can be the target)
-            // C++ Reference: MagicInstance.cpp:4986-5005
             if target_sid != caster_sid {
                 return true;
             }
@@ -6627,10 +6213,8 @@ async fn execute_type5(
             world.update_character_hp(caster_sid, target.max_hp); // Full HP
 
             if caster_zone == ZONE_UNDER_CASTLE {
-                // C++ Reference: AttackHandler.cpp:427-428 — full MP in Under Castle
                 world.update_character_mp(caster_sid, target.max_mp);
             } else {
-                // C++ Reference: AttackHandler.cpp:392 — MP reset to 0
                 world.update_character_mp(caster_sid, 0);
 
                 // EXP recovery — only for PvE deaths
@@ -6652,7 +6236,6 @@ async fn execute_type5(
             });
 
             // Send WIZ_REGENE packet to self
-            // C++ Reference: AttackHandler.cpp:402-404
             if let Some(cpos) = world.get_position(caster_sid) {
                 let mut regene_pkt = ko_protocol::Packet::new(ko_protocol::Opcode::WizRegene as u8);
                 regene_pkt.write_u16((cpos.x * 10.0) as u16);
@@ -6677,9 +6260,7 @@ async fn execute_type5(
 
         TYPE5_REMOVE_BLESS => {
             // Remove HP/MP buff (buff_type for HP_MP bless)
-            // C++ Reference: MagicInstance.cpp:5025-5033
             let removed = world.remove_buff(target_sid, 50); // BUFF_TYPE_HP_MP = 50
-                                                             // C++ Reference: MagicProcess.cpp:1541 — SetUserAbility() after RemoveType4Buff
             if removed.is_some() {
                 world.set_user_ability(target_sid);
             }
@@ -6708,9 +6289,6 @@ async fn execute_type5(
 }
 
 /// Post-resurrection sequence — world-level equivalent of regene.rs post-regene.
-///
-/// C++ Reference: `AttackHandler.cpp:411-442` — code after `Regene(INOUT_IN, nSkillID)`
-///
 /// Performs:
 /// 1. Broadcast INOUT_RESPAWN so other players see the resurrection
 /// 2. Initialize stealth (reset invisibility)
@@ -6718,7 +6296,6 @@ async fn execute_type5(
 /// 4. Activate blink (10s invulnerability)
 fn post_resurrection_sequence(world: &WorldState, sid: SessionId, zone_id: u16) {
     // ── 1. Broadcast INOUT_RESPAWN to 3×3 region ─────────────────────
-    // C++ Reference: AttackHandler.cpp:413 — `UserInOut(INOUT_RESPAWN)`
     if let Some((pos, my_char, event_room)) = world.with_session(sid, |h| {
         (h.position, h.character.clone(), h.event_room)
     }) {
@@ -6759,7 +6336,6 @@ fn post_resurrection_sequence(world: &WorldState, sid: SessionId, zone_id: u16) 
     }
 
     // ── 2. InitializeStealth ─────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:418 — `InitializeStealth()`
     world.set_invisibility_type(sid, 0);
     let mut stealth_pkt = ko_protocol::Packet::new(ko_protocol::Opcode::WizStealth as u8);
     stealth_pkt.write_u8(0);
@@ -6767,13 +6343,11 @@ fn post_resurrection_sequence(world: &WorldState, sid: SessionId, zone_id: u16) 
     world.send_to_session_owned(sid, stealth_pkt);
 
     // ── 3. Cure DOT & Poison ─────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:419-420
     world.clear_durational_skills(sid);
     crate::systems::buff_tick::send_user_status_update_packet(world, sid, 1, 0); // DOT cure
     crate::systems::buff_tick::send_user_status_update_packet(world, sid, 2, 0); // Poison cure
 
     // ── 4. InitType4() + RecastSavedMagic() ──────────────────────────
-    // C++ Reference: AttackHandler.cpp:430-437
     //   if (!isBlinking() && zone != CHAOS_DUNGEON && zone != DUNGEON_DEFENCE && zone != KNIGHT_ROYALE)
     //       InitType4();  RecastSavedMagic();
     // ZONE_KNIGHT_ROYALE_RES = 100: distinct from ZONE_KNIGHT_ROYALE (76); value from C++ AttackHandler
@@ -6791,7 +6365,6 @@ fn post_resurrection_sequence(world: &WorldState, sid: SessionId, zone_id: u16) 
     }
 
     // ── 5. Activate blink (10s invulnerability) ──────────────────────
-    // C++ Reference: AttackHandler.cpp:439-442 — `BlinkStart()`
     // Skip blink in war zones and zones without blink_zone flag
     let should_blink = world.get_zone(zone_id).is_some_and(|z| {
         !z.is_war_zone()
@@ -6800,7 +6373,6 @@ fn post_resurrection_sequence(world: &WorldState, sid: SessionId, zone_id: u16) 
                 .map(|zi| zi.abilities.blink_zone)
                 .unwrap_or(false)
     });
-    // C++: if (isGM() || isTransformed()) skip blink
     let is_gm = world
         .get_character_info(sid)
         .map(|ch| ch.authority == 0)
@@ -6819,7 +6391,6 @@ fn post_resurrection_sequence(world: &WorldState, sid: SessionId, zone_id: u16) 
         });
 
         // Broadcast ABNORMAL_BLINKING state change to 3×3 region
-        // C++ Reference: User.cpp:4075 — `StateChangeServerDirect(3, ABNORMAL_BLINKING)`
         let state_pkt = crate::handler::regene::build_state_change_broadcast(
             sid as u32,
             STATE_CHANGE_ABNORMAL,
@@ -6848,9 +6419,6 @@ fn post_resurrection_sequence(world: &WorldState, sid: SessionId, zone_id: u16) 
 // ── Type 6: Transformation ──────────────────────────────────────────────
 
 /// Execute Type 6 skill -- transformation (disguise as NPC/monster).
-///
-/// C++ Reference: `MagicInstance::ExecuteType6()` in MagicInstance.cpp:5047-5215
-///
 /// Transforms the caster into a different visual model (NPC/monster/siege).
 /// The transformation lasts for `sDuration` seconds.
 fn execute_type6(
@@ -6878,7 +6446,6 @@ fn execute_type6(
         .unwrap_or(0);
 
     // ── Zone-specific transformation validation ──────────────────────
-    // C++ Reference: MagicInstance.cpp:5063-5137
     // user_skill_use values follow the C++ TransformationSkillUse enum:
     //   0 = Siege, 1 = Monster, 3 = NPC, 4 = Special,
     //   5 = OreadsGuard, 6 = MovingTower, 7 = MamaPag
@@ -6928,14 +6495,12 @@ fn execute_type6(
     }
 
     // Block transformation if already transformed
-    // C++ Reference: MagicInstance.cpp:5068 — `!bIsRecastingSavedMagic && pCaster->isTransformed()`
     if world.is_transformed(caster_sid) {
         send_skill_failed(world, caster_sid, instance);
         return false;
     }
 
     // Nation check: if type6 has a nation restriction
-    // C++ Reference: MagicInstance.cpp:5070
     if type6_data.nation != 0 && type6_data.nation != caster.nation as i32 {
         send_skill_failed(world, caster_sid, instance);
         return false;
@@ -6945,7 +6510,6 @@ fn execute_type6(
     let transform_id = type6_data.transform_id;
 
     // Determine transformation type from user_skill_use
-    // C++ Reference: MagicInstance.cpp:5161-5180
     let transformation_type = match type6_data.user_skill_use {
         1 => TRANSFORMATION_MONSTER,       // TransformationSkillUseMonster
         2 | 5 => TRANSFORMATION_NPC,       // TransformationSkillUseNPC / MamaPag
@@ -6957,7 +6521,6 @@ fn execute_type6(
     };
 
     // Store transformation state on the session
-    // C++ Reference: MagicInstance.cpp:5183-5189
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
@@ -6973,7 +6536,6 @@ fn execute_type6(
     );
 
     // Store transformation state on the character
-    // C++ Reference: MagicInstance.cpp:5183-5190
     world.update_character_stats(caster_sid, |ch| {
         ch.res_hp_type = 3; // Transformed state (C++ StateChangeServerDirect(3, nSkillID))
     });
@@ -7012,9 +6574,6 @@ fn execute_type6(
 // ── Type 7: Summon / CC ─────────────────────────────────────────────────
 
 /// Execute Type 7 skill -- summoning / crowd control / target change.
-///
-/// C++ Reference: `MagicInstance::ExecuteType7()` in MagicInstance.cpp:5217-5338
-///
 /// Handles target-change effects, NPC sleep/stun, and NPC damage.
 async fn execute_type7(
     world: &WorldState,
@@ -7034,7 +6593,6 @@ async fn execute_type7(
     let target_change = type7_data.target_change;
 
     // Set sData[1] = 1 (success indicator)
-    // C++ Reference: MagicInstance.cpp:5266
     instance.data[1] = 1;
 
     let target_id = instance.target_id;
@@ -7044,17 +6602,14 @@ async fn execute_type7(
 
         if target_is_npc && damage > 0 {
             // Apply damage to NPC target
-            // C++ Reference: MagicInstance.cpp:5319-5326
             let npc_id = target_id as u32;
             apply_skill_damage_to_npc(world, caster_sid, npc_id, instance, damage, skill, 0).await;
         }
 
         // Target change type 2 = sleep/stun NPC
-        // C++ Reference: MagicInstance.cpp:5328-5335
         if target_change == 2 && (target_id as u32) >= NPC_BAND {
             let npc_id = target_id as u32;
             // Set NPC to fainted/sleeping state
-            // C++: pTarget->StateChangeServerDirect(1, 4)  (type=1, value=4 = stunned)
             let mut state_pkt = Packet::new(Opcode::WizStateChange as u8);
             state_pkt.write_u32(npc_id);
             state_pkt.write_u8(1); // type 1 = general state
@@ -7088,9 +6643,6 @@ async fn execute_type7(
 // ── Type 8: Teleport / Knockback ────────────────────────────────────────
 
 /// Execute Type 8 skill — teleportation or knockback.
-///
-/// C++ Reference: `MagicInstance::ExecuteType8()` in MagicInstance.cpp
-///
 /// `warp_type` determines behavior:
 /// - 1 (WARP_RESURRECTION): teleport target to resurrection point
 /// - Other: knockback by `kick_distance`
@@ -7135,7 +6687,6 @@ fn execute_type8(
             target.bind_z
         );
 
-        // C++ Reference: MagicInstance.cpp:5461 — sData[1] = 1 for success
         instance.data[1] = 1;
         // Broadcast the effect before warping
         let pkt = instance.build_packet(MAGIC_EFFECTING);
@@ -7165,7 +6716,6 @@ fn execute_type8(
                     let new_z = tp.z + nz * kick_dist;
 
                     // Validate knockback destination is within zone bounds
-                    // C++ Reference: SMDFile.cpp:196 — IsValidPosition(x, z)
                     let valid = world
                         .get_zone(tp.zone_id)
                         .map(|z| z.is_valid_position(new_x, new_z))
@@ -7178,7 +6728,6 @@ fn execute_type8(
         }
     }
 
-    // C++ Reference: MagicInstance.cpp:5461 — sData[1] = 1 for success
     instance.data[1] = 1;
     let pkt = instance.build_packet(MAGIC_EFFECTING);
     broadcast_to_caster_region(world, caster_sid, &pkt);
@@ -7188,9 +6737,6 @@ fn execute_type8(
 // ── Type 9: Stealth / Invisibility ──────────────────────────────────────
 
 /// Execute Type 9 skill — invisibility or advanced CC.
-///
-/// C++ Reference: `MagicInstance::ExecuteType9()` in MagicInstance.cpp
-///
 /// Applies invisibility/stealth as a buff (state change). The buff is stored
 /// via the Type 4 buff system with a special buff type. Stealth is removed
 /// on attack or certain movements (handled by attack/move handlers).
@@ -7211,13 +6757,11 @@ fn execute_type9(
     let duration = type9_data.duration.unwrap_or(0);
     let state_change = type9_data.state_change.unwrap_or(0) as u8;
 
-    // C++ Reference: MagicInstance.cpp:6023-6041
     // For stateChange 1 or 2: apply individual stealth (rogue invisibility)
     // - Check if player is already invisible (fail if so)
     // - Set invisibility_type via StateChangeServerDirect(7, stateChange)
     // - Insert into type9BuffMap
     if state_change == 1 || state_change == 2 {
-        // C++ Reference: MagicInstance.cpp:6028-6029 — stealth blocked in event zones
         let caster_zone = world
             .get_position(caster_sid)
             .map(|p| p.zone_id)
@@ -7227,21 +6771,18 @@ fn execute_type9(
             return false;
         }
 
-        // C++ Reference: Unit.h — m_bCanStealth = false prevents stealth (PROHIBIT_INVIS debuff)
         if !world.can_stealth(caster_sid) {
             send_skill_failed(world, caster_sid, instance);
             return false;
         }
 
         // If already invisible, reject the skill
-        // C++ Reference: MagicInstance.cpp:6034-6038
         if world.get_invisibility_type(caster_sid) != 0 {
             send_skill_failed(world, caster_sid, instance);
             return false;
         }
 
         // Set invisibility type (determines break condition)
-        // C++ Reference: MagicInstance.cpp:6040 — StateChangeServerDirect(7, stateChange)
         world.set_invisibility_type(caster_sid, state_change);
 
         // Broadcast StateChange(7, stateChange) to make player invisible to others
@@ -7331,7 +6872,6 @@ fn execute_type9(
         duration
     );
 
-    // C++ Reference: MagicInstance.cpp:6021,6043,6046
     // sData[1] = 1 (success), sData[3] = duration
     // C++ sends to caster only (bSendToRegion = false), NOT region broadcast
     instance.data[1] = 1;
@@ -7342,13 +6882,8 @@ fn execute_type9(
 }
 
 /// Check if a buff_type represents a debuff.
-///
-/// C++ Reference: `MagicInstance::isDebuff()` — debuff types are
 /// those that harm the target (slow, stun, poison, etc.)
-///
 /// Determine if an active buff is actually a debuff based on its field values.
-///
-/// C++ Reference: `_MAGIC_TYPE4::IsBuff()` — `MagicProcess.cpp:1582-1770`
 /// In C++, many buff types can be EITHER buff or debuff depending on their
 /// actual stat modifier values (e.g., BUFF_TYPE_DAMAGE with attack >= 100 is
 /// a buff, but attack < 100 is a debuff).
@@ -7419,8 +6954,6 @@ pub fn is_debuff_type(buff_type: i32) -> bool {
 }
 
 /// Check if a zone allows monster transformation (TransformationSkillUseMonster).
-///
-/// C++ Reference: `Unit.h:106-128` — `isTransformationMonsterInZone()`.
 /// Returns true for homeland, Eslant, Moradon, Forgotten Temple, Abyss, and clan war zones.
 fn is_transformation_monster_zone(zone_id: u16) -> bool {
     use crate::world::{
@@ -7460,7 +6993,6 @@ fn is_transformation_monster_zone(zone_id: u16) -> bool {
 // ── Consume Item Helper ─────────────────────────────────────────────────
 
 /// Items that should NOT be consumed (special scrolls/stones).
-/// C++ Reference: MagicInstance.cpp:7081-7089 — individual `==` checks for 9 items.
 /// Note: 370004000-370006000 (Blood of Wolf etc.) are NOT in C++ list — they ARE consumed.
 const NO_CONSUME_ITEMS: [u32; 9] = [
     370001000, 370002000, 370003000, // Town return scrolls
@@ -7472,8 +7004,6 @@ const NO_CONSUME_ITEMS: [u32; 9] = [
 const CLASS_STONE_BASE_ID: u32 = 379060000;
 
 /// Resolve the consumable item ID for a skill.
-///
-/// C++ Reference: `MagicInstance.cpp:1037-1044` — nConsumeItem derivation
 /// Derived from `pSkill.nBeforeAction` and `pSkill.iUseItem`.
 fn resolve_consume_item(skill: &ko_db::models::MagicRow) -> u32 {
     let before_action = skill.before_action.unwrap_or(0) as u32;
@@ -7495,8 +7025,6 @@ fn resolve_consume_item(skill: &ko_db::models::MagicRow) -> u32 {
 }
 
 /// Consume the item used to cast this skill.
-///
-/// C++ Reference: `MagicInstance::ConsumeItem()` — MagicInstance.cpp:7074-7097
 /// Uses `nConsumeItem` which is derived from `pSkill.nBeforeAction` and `pSkill.iUseItem`.
 /// Some items (e.g. town scrolls, special stones) are excluded from consumption.
 fn consume_item(
@@ -7522,7 +7050,6 @@ fn consume_item(
 // ── Magic Type Cooldown Helpers ──────────────────────────────────────────
 
 /// Default minimum interval between same-type casts (ms).
-/// C++ Reference: MagicInstance.cpp:1986
 const TYPE_COOLDOWN_DEFAULT_MS: u128 = 575;
 
 /// Interval for instant melee/archer on first catch (ms).
@@ -7532,11 +7059,9 @@ const TYPE_COOLDOWN_INSTANT_MELEE_MS: u128 = 650;
 const TYPE_COOLDOWN_CATCH_MS: u128 = 400;
 
 /// Staff skill minimum interval (ms).
-/// C++ Reference: User.h:31 — PLAYER_SKILL_REQUEST_INTERVAL
 const PLAYER_SKILL_REQUEST_INTERVAL_MS: u128 = 800;
 
 /// Check if a skill ID is a mage armor skill (bypasses type cooldown).
-/// C++ Reference: MagicInstance.cpp:7187-7203
 fn is_mage_armor_skill(skill_id: u32) -> bool {
     matches!(
         skill_id,
@@ -7545,8 +7070,6 @@ fn is_mage_armor_skill(skill_id: u32) -> bool {
 }
 
 /// Check type cooldown for bType[0] and bType[1]. Returns true if blocked.
-///
-/// C++ Reference: MagicInstance.cpp:1966-2072
 /// `existspeed` bypass only applies to bType[0] — NOT bType[1].
 fn check_type_cooldown(
     world: &crate::world::WorldState,
@@ -7584,7 +7107,7 @@ fn check_type_cooldown(
         return true;
     }
 
-    // Check bType[1] — NO existspeed bypass (C++ MagicInstance.cpp:2031-2070)
+    // Check bType[1] — NO existspeed bypass
     if type2 != 0
         && check_single_type_cooldown(world, sid, skill_id, type2, type1, cast_time, false)
     {
@@ -7595,8 +7118,6 @@ fn check_type_cooldown(
 }
 
 /// Check a single type entry in the cooldown map. Returns true if blocked.
-///
-/// C++ Reference: MagicInstance.cpp:1976-2020 (bType[0]) / 2029-2070 (bType[1])
 /// When `existspeed` is true, skip timing check and just reset the entry.
 fn check_single_type_cooldown(
     world: &crate::world::WorldState,
@@ -8269,7 +7790,6 @@ mod tests {
 
     // ── Sprint 301: Scroll buff persistence filter (skill_id > 500000) ──
 
-    /// C++ Reference: MagicInstance.cpp:4695 — only scroll buffs (skill_id > 500000) persist.
     #[test]
     fn test_scroll_buff_persistence_filter() {
         // Regular class skills (< 500000) should NOT persist
@@ -8532,7 +8052,6 @@ mod tests {
 
     #[test]
     fn test_transformation_type_constants() {
-        // C++ Reference: Unit.h — enum TransformationType
         assert_eq!(TRANSFORMATION_MONSTER, 1);
         assert_eq!(TRANSFORMATION_NPC, 2);
         assert_eq!(TRANSFORMATION_SIEGE, 3);
@@ -8540,7 +8059,6 @@ mod tests {
 
     #[test]
     fn test_transformation_type_from_user_skill_use() {
-        // C++ Reference: MagicInstance.cpp:5161-5180 — switch (bUserSkillUse)
         // user_skill_use=1 => TransformationMonster
         assert_eq!(1u8, TRANSFORMATION_MONSTER);
         // user_skill_use=2 => TransformationNPC
@@ -8551,7 +8069,6 @@ mod tests {
 
     #[test]
     fn test_type6_state_change_broadcast_format() {
-        // C++ Reference: MagicInstance.cpp:5190
         //   StateChangeServerDirect(3, nSkillID)
         let skill_id: u32 = 450001;
         let mut pkt = Packet::new(Opcode::WizStateChange as u8);
@@ -8571,7 +8088,6 @@ mod tests {
 
     #[test]
     fn test_magic_cancel_transformation_packet_format() {
-        // C++ Reference: MagicInstance.cpp:6774
         //   Packet result(WIZ_MAGIC_PROCESS, uint8(MAGIC_CANCEL_TRANSFORMATION));
         let mut pkt = Packet::new(Opcode::WizMagicProcess as u8);
         pkt.write_u8(MAGIC_CANCEL_TRANSFORMATION);
@@ -8584,7 +8100,6 @@ mod tests {
 
     #[test]
     fn test_blink_skill_block_type4_exception() {
-        // C++ Reference: MagicInstance.cpp:2407
         //   if (pSkillCaster->isBlinking() && bType != 4 && pSkill.iNum < 300000)
         //       return false;
         // Type 4 buffs are allowed during blink
@@ -8610,7 +8125,6 @@ mod tests {
 
     #[test]
     fn test_blink_skill_block_high_skill_id_exception() {
-        // C++ Reference: MagicInstance.cpp:2407
         //   pSkill.iNum < 300000
         // Skills >= 300000 are allowed even during blink (scrolls/potions)
         let can_use_skills = false;
@@ -8642,7 +8156,6 @@ mod tests {
 
     #[test]
     fn test_aoe_stealth_break_enemy_nation_check() {
-        // C++ Reference: MagicInstance.cpp:4471-4472
         //   if (pTarget->isPlayer() && pSkillCaster->GetNation() != pTarget->GetNation())
         //       TO_USER(pTarget)->RemoveStealth();
         let caster_nation: u8 = 1;
@@ -9962,7 +9475,6 @@ mod tests {
 
     /// Verify MAGIC_CANCEL2 is excluded from cooldown check alongside MAGIC_CANCEL.
     ///
-    /// C++ Reference: MagicInstance.cpp:1852-1853 — both MAGIC_CANCEL and MAGIC_CANCEL2
     /// bypass the cooldown recast check.
     #[test]
     fn test_magic_cancel2_skips_cooldown() {
@@ -10101,7 +9613,6 @@ mod tests {
     /// Test Type1 sAdditionalDamage reduction in war zone (divide by 2).
     #[test]
     fn test_type1_add_damage_war_zone_reduction() {
-        // C++ Reference: MagicInstance.cpp:3164-3165
         // In war zone, sAdditionalDamage /= 2
         let add_damage: i16 = 100;
         let reduced = add_damage / 2;
@@ -10111,7 +9622,6 @@ mod tests {
     /// Test Type1 sAdditionalDamage reduction in non-war zone (divide by 3).
     #[test]
     fn test_type1_add_damage_non_war_zone_reduction() {
-        // C++ Reference: MagicInstance.cpp:3166-3167
         // In non-war zone, sAdditionalDamage /= 3
         let add_damage: i16 = 100;
         let reduced = add_damage / 3;
@@ -10381,7 +9891,6 @@ mod tests {
     fn test_use_standing_moving_fails() {
         let use_standing: i16 = 1;
         let move_old_speed: i16 = 45;
-        // C++ Reference: MagicInstance.cpp:1692-1693
         let should_fail = use_standing == 1 && move_old_speed != 0;
         assert!(should_fail);
     }
@@ -10510,7 +10019,6 @@ mod tests {
     }
 
     /// NeedArrow=0 should default to count=1 (throwing knives).
-    /// C++ Reference: MagicInstance.cpp:378-381
     #[test]
     fn test_need_arrow_zero_defaults_to_one() {
         let need_arrow: i32 = 0;
@@ -10580,7 +10088,6 @@ mod tests {
 
     #[test]
     fn test_cast_position_flying_effect_check() {
-        // C++ Reference: MagicInstance.cpp:197-200
         // If skill has flying_effect, check position on FLYING phase
         // If skill has NO flying_effect, check position on EFFECTING phase
         let flying_effect_skill: i16 = 1;
@@ -10594,7 +10101,6 @@ mod tests {
     #[test]
     fn test_cast_skill_id_mismatch_skips() {
         // If saved cast_skill_id doesn't match current skill, skip position check
-        // C++ Reference: MagicInstance.cpp:194 — pSkill.iNum == pUser->pUserMagicUsed.castID
         let saved_skill_id: u32 = 101001;
         let current_skill_id: u32 = 102002;
         let matches = saved_skill_id == current_skill_id;
@@ -10614,7 +10120,6 @@ mod tests {
 
     #[test]
     fn test_party_bypass_same_party() {
-        // C++ Reference: MagicInstance.cpp:267-271
         // moral==MORAL_PARTY && type[0]==4 && same party → bypass range
         let moral: i16 = 8; // MORAL_PARTY
         let caster_party: Option<u16> = Some(1);
@@ -11434,7 +10939,6 @@ mod tests {
     }
 
     /// reflect_armor_type derived from sSkill % 100 — Fire Armor.
-    /// C++ Reference: MagicProcess.cpp:775 — pTarget->m_bReflectArmorType = (pSkill.sSkill % 100)
     #[test]
     fn test_reflect_armor_type_from_sskill() {
         // Fire armor skills have sSkill values ending in 5 (e.g., 105, 205, etc.)
@@ -11489,7 +10993,6 @@ mod tests {
     // ── Temple event is_attackable gate tests ──────────────────────────
 
     /// Event user in temple zone with is_attackable=false → magic blocked.
-    /// C++ Reference: MagicInstance.cpp:835,871
     #[test]
     fn test_is_attackable_false_blocks_event_user() {
         use crate::systems::event_room::{EventRoomManager, EventUser, TempleEventType};
@@ -11660,7 +11163,7 @@ mod tests {
     // ── Type3 temple event skip tests ─────────────────────────────────
 
     /// Type3 skip: target with active DOT, event active, !is_attackable, in event zone
-    /// → should be blocked (C++ MagicInstance.cpp:3633-3638).
+    /// → should be blocked
     #[test]
     fn test_type3_skip_event_zone_not_attackable() {
         use crate::systems::event_room;
@@ -11801,7 +11304,6 @@ mod tests {
     /// m_sMonsterStoneStatus=false → room isolation guard skipped.
     #[test]
     fn test_ms_magic_isolation_status_false_skips_guard() {
-        // C++ Reference: MagicInstance.cpp:914 — m_sMonsterStoneStatus guard
         let world = crate::world::WorldState::new();
         let (tx1, _rx1) = tokio::sync::mpsc::unbounded_channel();
         let (tx2, _rx2) = tokio::sync::mpsc::unbounded_channel();
@@ -11831,7 +11333,6 @@ mod tests {
     }
 
     /// Type5 resurrection: EXP recovery applies only for PvE deaths (who_killed_me == -1).
-    /// C++ Reference: AttackHandler.cpp:394-395
     #[test]
     fn test_type5_resurrection_exp_recovery_pve_only() {
         let world = crate::world::WorldState::new();
@@ -11909,7 +11410,6 @@ mod tests {
     }
 
     /// Type5 resurrection in Under Castle (zone 86) restores full MP instead of 0.
-    /// C++ Reference: AttackHandler.cpp:390-396, 427-428
     #[test]
     fn test_type5_resurrection_under_castle_full_mp() {
         let world = crate::world::WorldState::new();
@@ -11941,7 +11441,6 @@ mod tests {
     }
 
     /// Type5 resurrection sends WIZ_REGENE packet to the target.
-    /// C++ Reference: AttackHandler.cpp:402-404
     #[test]
     fn test_type5_resurrection_sends_regene_packet() {
         let world = crate::world::WorldState::new();
@@ -11970,7 +11469,6 @@ mod tests {
     }
 
     /// Post-resurrection sequence clears DOTs and sends cure packets.
-    /// C++ Reference: AttackHandler.cpp:419-420
     #[tokio::test]
     async fn test_post_resurrection_clears_dots_and_sends_cure() {
         let world = crate::world::WorldState::new();
@@ -12065,7 +11563,6 @@ mod tests {
     }
 
     /// Post-resurrection sequence activates blink in blink-enabled zones.
-    /// C++ Reference: AttackHandler.cpp:439-442
     #[tokio::test]
     async fn test_post_resurrection_activates_blink() {
         let world = crate::world::WorldState::new();
@@ -12104,7 +11601,6 @@ mod tests {
     }
 
     /// Post-resurrection sequence sends stealth init and cure packets.
-    /// C++ Reference: AttackHandler.cpp:413-420
     #[tokio::test]
     async fn test_post_resurrection_sends_inout_and_cures() {
         let world = crate::world::WorldState::new();
@@ -12141,11 +11637,9 @@ mod tests {
     }
 
     // ── MORAL_AREA_ALL Safety Area Cross-Check Tests ──────────────────
-    // C++ Reference: MagicProcess.cpp:373-387
 
     #[test]
     fn test_moral_area_all_safety_area_blocks_cross_zone_exploit() {
-        // C++ Reference: MagicProcess.cpp:384-385
         // isInEnemySafetyArea = "I am in the enemy's forward safe zone"
         // isInOwnSafetyArea = "I am in my own faction's safe zone"
         // (1860,174) in ZONE_KARUS = Elmorad forward base
@@ -12247,7 +11741,6 @@ mod tests {
     #[test]
     fn test_moral_area_all_no_npc_targeting() {
         // MORAL_AREA_ALL (12) should not target NPCs
-        // C++ Reference: MagicProcess.cpp:373-374 — isNPC() check
         let moral: i16 = 12; // MORAL_AREA_ALL
         let moral_area_enemy: i16 = 10;
         // Only MORAL_AREA_ENEMY should enter the NPC damage loop
@@ -12298,7 +11791,6 @@ mod tests {
     }
 
     // ── Armor Scroll AC Disabling Tests ───────────────────────────────
-    // C++ Reference: Unit.cpp:281-301
 
     #[test]
     fn test_armor_scroll_disable_skill_ids() {
@@ -12439,7 +11931,6 @@ mod tests {
 
     #[test]
     fn test_blinking_blocks_casting_flying_effecting() {
-        // C++ Reference: MagicInstance.cpp:822-823
         // isBlinking() in UserCanCast() blocks CASTING, FLYING, EFFECTING.
         // Exceptions: CANCEL(6), CANCEL2(13), TYPE4_EXTEND(8), FAIL(4).
         let blocked_opcodes = [MAGIC_CASTING, MAGIC_FLYING, MAGIC_EFFECTING];
@@ -12473,7 +11964,6 @@ mod tests {
 
     #[test]
     fn test_dead_exempts_type5_resurrection() {
-        // C++ Reference: MagicInstance.cpp:846
         // `pSkillCaster->isDead() && pSkill.bType[0] != 5`
         // Dead casters CAN cast Type 5 skills (self-resurrection).
         let is_dead = true;
@@ -12893,14 +12383,12 @@ mod tests {
         }
     }
 
-    /// C++ Reference: MagicInstance.h:52 — MORAL_EXTEND_DURATION = 240
     #[test]
     fn test_moral_extend_duration_constant() {
         assert_eq!(240i16, 240);
     }
 
     /// Duration Item search: kind=255 + effect1 pointing to moral=240 magic.
-    /// C++ Reference: MagicInstance.cpp:6988-7009
     #[test]
     fn test_type4_extend_duration_item_lookup() {
         use crate::world::types::UserItemSlot;
@@ -13049,7 +12537,6 @@ mod tests {
 
     #[test]
     fn test_target_id_i16_cast_negative_one() {
-        // C++ Reference: MagicProcess.cpp:58-59 — `instance.sTargetID = (int16)sTargetID;`
         // When client sends 0xFFFFFFFF, reading as u32→i32 gives -1.
         // The i16 cast should also give -1.
         let raw: u32 = 0xFFFFFFFF;
@@ -13086,7 +12573,6 @@ mod tests {
 
     #[test]
     fn test_buff_attack_amount_displayed_total_hit() {
-        // C++ Reference: User.cpp:3683 — `uint16(m_sTotalHit * m_bAttackAmount / 100)`
         // Wolf skill: attack=120 → attack_amount=120, so displayed = total_hit * 120 / 100
         let total_hit: u16 = 500;
         let attack_amount: u32 = 120; // 120% (20% increase)
@@ -13100,7 +12586,6 @@ mod tests {
 
     #[test]
     fn test_displayed_resistance_with_buff() {
-        // C++ Reference: User.cpp:3688
         // Formula: `(base_r + add_r + resistance_bonus) * pct_r / 100`
         let base_r: i32 = 50;
         let add_r: i32 = 20; // from buff

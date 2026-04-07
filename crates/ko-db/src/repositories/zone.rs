@@ -1,6 +1,4 @@
 //! Zone repository — loads zone configuration and events from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `GameServer/Map.cpp:Initialize()` — loads _ZONE_INFO from DB
 //! - `shared/database/EventSet.h` — CEventSet (loads EVENT table)
 
@@ -20,7 +18,6 @@ impl<'a> ZoneRepository<'a> {
 
     /// Load all zone configuration entries.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadZoneInfoFromDB()`
     pub async fn load_all_zones(&self) -> Result<Vec<ZoneInfoRow>, sqlx::Error> {
         sqlx::query_as::<_, ZoneInfoRow>(
             "SELECT zone_no, smd_name, zone_name, zone_type, min_level, max_level, \
@@ -38,7 +35,6 @@ impl<'a> ZoneRepository<'a> {
 
     /// Load all events for a specific zone.
     ///
-    /// C++ Reference: `CEventSet::Read()` — loads from EVENT table per zone
     pub async fn load_events(&self, zone_no: i16) -> Result<Vec<GameEventRow>, sqlx::Error> {
         sqlx::query_as::<_, GameEventRow>(
             "SELECT zone_no, event_num, event_type, \
@@ -65,7 +61,6 @@ impl<'a> ZoneRepository<'a> {
 
     /// Load all object events (interactive objects) for all zones.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadObjectPosTable()` — loads `K_OBJECTPOS` table
     pub async fn load_all_object_events(&self) -> Result<Vec<ObjectEventRow>, sqlx::Error> {
         sqlx::query_as::<_, ObjectEventRow>(
             "SELECT id, zone_id, belong, s_index, obj_type, control_npc, status, \

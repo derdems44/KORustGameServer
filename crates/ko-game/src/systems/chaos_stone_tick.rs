@@ -1,7 +1,4 @@
 //! Chaos Stone respawn timer tick system.
-//!
-//! C++ Reference: `CGameServerDlg::ChaosStoneRespawnTimer()` in `ChaosStone.cpp:53-76`
-//!
 //! Runs once per second, decrementing respawn countdowns for killed chaos
 //! stones. When a countdown reaches zero the stone is flagged for respawn
 //! and the NPC AI tick will re-spawn it on the next pass.
@@ -12,12 +9,9 @@ use std::time::Duration;
 use crate::world::WorldState;
 
 /// Chaos stone respawn timer tick interval (once per second).
-///
-/// C++ Reference: `ChaosStone.cpp` — `ChaosStoneRespawnTimer()` called from 1-second timer.
 const CHAOS_STONE_TICK_SECS: u64 = 1;
 
 /// Start the chaos stone respawn timer background task.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
 pub fn start_chaos_stone_tick_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -30,8 +24,6 @@ pub fn start_chaos_stone_tick_task(world: Arc<WorldState>) -> tokio::task::JoinH
 }
 
 /// Process one second of chaos stone respawn timers.
-///
-/// C++ Reference: `CGameServerDlg::ChaosStoneRespawnTimer()` in `ChaosStone.cpp:53-76`
 fn process_chaos_stone_tick(world: &WorldState) {
     let results = {
         let infos = world.chaos_stone_infos();

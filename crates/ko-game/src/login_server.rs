@@ -1,7 +1,4 @@
 //! Login Server — TCP listener and connection accept loop.
-//!
-//! C++ Reference: `KOOriginalGameServer/LoginServer/LoginServer.cpp`
-//!
 //! The C++ server listens on 10 consecutive ports (base_port .. base_port+9).
 //! Launchers pick one at random, so we must bind all 10.
 //! Separate from the Game Server (port 15001).
@@ -15,7 +12,7 @@ use ko_db::DbPool;
 
 use crate::login_session::LoginSession;
 
-/// Number of listener ports (mirrors C++ `for (int i = 0; i < 10; i++)`).
+/// Number of listener ports (mirrors `for (int i = 0; i < 10; i++)`).
 const LISTENER_COUNT: u16 = 10;
 
 /// Login server configuration.

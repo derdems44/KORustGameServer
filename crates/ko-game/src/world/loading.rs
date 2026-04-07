@@ -1,5 +1,4 @@
 //! Startup DB table loading for WorldState.
-//!
 //! Extracted from `WorldState::load()` to reduce the size of `mod.rs`.
 //! All methods here populate DashMap/RwLock fields on an already-constructed
 //! WorldState by reading rows from PostgreSQL via repository pattern.
@@ -63,7 +62,6 @@ impl WorldState {
     /// Each sub-section loads one or more related tables from PostgreSQL
     /// and populates the corresponding DashMap/RwLock field.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadServerData()` and related load functions.
     pub(crate) async fn load_all_tables(
         &self,
         pool: &DbPool,
@@ -87,15 +85,12 @@ impl WorldState {
         tracing::info!(count = level_up_rows.len(), "level-up table loaded");
 
         // ─── King System Loading ────────────────────────────────────────────────
-        // C++ Reference: CGameServerDlg::LoadKingSystemDB()
         self.load_king_system(pool).await;
 
         // ─── Siege Warfare Loading ──────────────────────────────────────────────
-        // C++ Reference: CGameServerDlg::LoadServerData() -> CKnightsSiegeWarfare
         self.load_siege_warfare(pool).await;
 
         // ─── Item Table Loading ─────────────────────────────────────────────────
-        // C++ Reference: CGameServerDlg::LoadItemTable()
         let item_repo = ItemRepository::new(pool);
         let item_rows = item_repo.load_all().await?;
         for row in &item_rows {
@@ -772,7 +767,6 @@ impl WorldState {
 
     /// Load right-top title messages from DB.
     ///
-    /// C++ Reference: `CRightTopTitleSet::Fetch()` in `RightTopTitleSet.h`
     async fn load_right_top_titles(&self, pool: &DbPool) {
         let repo = ko_db::repositories::server_settings::ServerSettingsRepository::new(pool);
         match repo.load_right_top_titles().await {
@@ -846,7 +840,6 @@ impl WorldState {
 
     /// Load user rankings from DB (update_ranks + load tables).
     ///
-    /// C++ Reference: `LoadUserRankings()` — called at startup and every 15 minutes.
     pub async fn reload_user_rankings(&self, pool: &DbPool) {
         use ko_db::repositories::ranking::RankingRepository;
 
@@ -897,8 +890,6 @@ impl WorldState {
         *self.user_knights_rank.write() = knights_map;
 
         // Step 3b: Compute and apply knights (clan) ratings
-        // C++ Reference: LoadKnightsRankTable() — loads KNIGHTS_RATING table
-        // C++ Reference: RecvKnightsAllList() — updates m_byRanking + m_byGrade on each clan
         //
         // Every 15 minutes, recompute per-nation clan rankings from points.
         // Updates knights_rating table AND knights.ranking column in DB,
@@ -918,7 +909,6 @@ impl WorldState {
                     }
 
                     // Apply computed rankings and recompute grade
-                    // C++ Reference: RecvKnightsAllList (KnightsManager.cpp:1571-1580)
                     let mut updated = 0u32;
                     for row in &rows {
                         let clan_id = row.clan_id as u16;
@@ -971,7 +961,6 @@ impl WorldState {
         self.apply_user_ranks_to_bots();
 
         // Step 6: Recompute daily ranks and reload cache
-        // C++ Reference: UPDATE_RANKS also recomputes daily rank positions
         let dr_repo = ko_db::repositories::daily_rank::DailyRankRepository::new(pool);
         if let Err(e) = dr_repo.compute_ranks().await {
             tracing::warn!("compute_daily_ranks() failed during reload: {e}");
@@ -1333,7 +1322,6 @@ impl WorldState {
                 let region_x = calc_region(x);
                 let region_z = calc_region(z);
 
-                // C++ Reference: NpcThread.cpp:458 — NPCs in event zones use
                 // spawn.room as their event_room for instance isolation.
                 let event_room = if spawn.room > 0 { spawn.room as u16 } else { 0 };
 
@@ -1429,9 +1417,7 @@ impl WorldState {
                 }
 
                 // Guard NPCs need AI to detect and attack enemy players.
-                // C++ Reference: `NpcThread.cpp:96` — guards always run
                 //   CheckFindEnemy() → FindEnemy() in the AI loop.
-                // C++ Reference: `Npc.h:397-409` — isGuard(), isGuardTower()
                 if is_guard_npc_type(tmpl.npc_type) && !self.npc_ai.contains_key(&nid) {
                     let regen_ms = if spawn.regen_time > 0 {
                         spawn.regen_time as u64 * 1000
@@ -1556,7 +1542,6 @@ impl WorldState {
         );
 
         // ── Spawn NPC instances from object_event_pos ───────────────────
-        // C++ Reference: NpcThread.cpp:527-619 — _LoadAllObjects + _AddObjectEventNpc
         // Objects like gates, anvils, bind points, etc. are spawned as static NPCs
         // using their s_index as the template ID.
         let mut obj_npc_count = 0u32;
@@ -1879,7 +1864,6 @@ impl WorldState {
             Err(e) => tracing::warn!("home table not found or error: {e}, skipping"),
         }
         // Load start_position table (per-zone nation-specific spawn coords)
-        // C++ Reference: LoadServerData.cpp — m_StartPositionArray
         match ss_repo.load_start_positions().await {
             Ok(rows) => {
                 let count = rows.len();
@@ -1891,7 +1875,6 @@ impl WorldState {
             Err(e) => tracing::warn!("start_position table not found or error: {e}, skipping"),
         }
         // Load start_position_random table (random spawn points for special zones)
-        // C++ Reference: LoadServerData.cpp — m_StartPositionRandomArray
         match ss_repo.load_start_positions_random().await {
             Ok(rows) => {
                 let count = rows.len();
@@ -1908,7 +1891,6 @@ impl WorldState {
             }
         }
         // Load persistent send_messages (type=1) for login broadcast
-        // C++ Reference: LoadServerData.cpp:969 — LoadSendMessageTable()
         let sched_repo = ko_db::repositories::scheduled_tasks::ScheduledTasksRepository::new(pool);
         match sched_repo.load_messages().await {
             Ok(rows) => {
@@ -1920,7 +1902,6 @@ impl WorldState {
         }
 
         // Load automatic commands
-        // C++ Reference: ServerStartStopHandler.cpp:64-84 — m_AutomaticCommandArray
         match sched_repo.load_active_commands().await {
             Ok(rows) => {
                 tracing::info!(count = rows.len(), "automatic_commands loaded");
@@ -1982,7 +1963,6 @@ impl WorldState {
 
     /// Load jackpot settings (2 rows: EXP + Noah).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadJackPotSettingTable` in `LoadServerData.cpp:1052`.
     async fn load_jackpot_settings(&self, pool: &DbPool) {
         let repo = JackPotRepository::new(pool);
         match repo.load_all().await {
@@ -2195,7 +2175,6 @@ impl WorldState {
             Ok(rows) => {
                 let count = rows.len();
                 // Build runtime info map from rank-1 spawn entries.
-                // C++ Reference: CGameServerDlg::ChaosStoneLoad()
                 let infos = crate::handler::chaos_stone::load_chaos_stones(&rows);
                 let info_count = infos.len();
                 *self.chaos_stone_spawns.write() = rows;
@@ -2253,7 +2232,6 @@ impl WorldState {
         }
 
         // ── Daily Rank Computation + Cache ──
-        // C++ Reference: LoadServerData.cpp:540 — UpdateRanks() called before LoadDailyRank()
         let dr_repo = ko_db::repositories::daily_rank::DailyRankRepository::new(pool);
         if let Err(e) = dr_repo.compute_ranks().await {
             tracing::warn!("compute_daily_ranks() failed: {e}, skipping");
@@ -2444,7 +2422,6 @@ impl WorldState {
 
     /// Load the anti-AFK NPC ID list from DB.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AntiAfkList` loaded from ANTIAFKLIST table.
     async fn load_anti_afk_list(&self, pool: &DbPool) {
         let repo = ko_db::repositories::anti_afk::AntiAfkRepository::new(pool);
         match repo.load_all().await {
@@ -2460,7 +2437,6 @@ impl WorldState {
 
     /// Load RANKBUG configuration from DB.
     ///
-    /// C++ Reference: `ClickRankBugSet.h` — loads from `RANKBUG` table at startup.
     async fn load_rankbug(&self, pool: &DbPool) {
         let repo = ko_db::repositories::rankbug::RankBugRepository::new(pool);
         match repo.load().await {
@@ -2478,7 +2454,6 @@ impl WorldState {
 
     /// Load banish-of-winner spawn definitions from DB.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadBanishWinnerTable()` — loads all rows at startup.
     async fn load_banish_of_winner(&self, pool: &DbPool) {
         let repo = ko_db::repositories::banish::BanishRepository::new(pool);
         match repo.load_all().await {

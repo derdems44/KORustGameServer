@@ -1,28 +1,18 @@
 //! Draki Tower instance dungeon handler.
-//!
-//! C++ Reference: `DrakiTowerSystem.cpp` (655 LOC)
-//!
 //! ## Architecture
-//!
 //! Draki Tower is a **per-user instance dungeon** with 5 dungeons, each containing
 //! multiple sub-stages. Unlike shared events (BDW, FT), each player gets their own
 //! private room via the EventRoomManager.
-//!
 //! ## Stage Structure (41 entries)
-//!
 //! - Dungeons 1-4: 6 sub-stages each (monster/NPC alternating at sub-stages 3 and 6)
 //! - Dungeon 5: 8 sub-stages (NPC stage only at sub-stage 8)
 //! - NPC stages (draki_tower_npc_state=1) are rest/safe zones between combat rounds
-//!
 //! ## Timers
-//!
 //! - `SUB_STAGE_TIME_LIMIT` (300s): Time to clear each sub-stage
 //! - `BETWEEN_STAGE_WAIT` (180s): Rest time between stages
 //! - `KICK_TIMER` (20s): Grace period before teleporting player out
 //! - `ROOM_CLOSE_TIMER` (7200s): Idle room cleanup
-//!
 //! ## Entry Requirements
-//!
 //! - Must be in nation castle (Luferson for Karus, El Morad castle for El Morad)
 //! - Not in another instance dungeon
 //! - Not dead
@@ -39,63 +29,39 @@ use ko_db::models::draki_tower::{DrakiMonsterListRow, DrakiTowerStageRow};
 pub use crate::world::types::ZONE_DRAKI_TOWER;
 
 /// Certificate item required for entry.
-///
-/// C++ Reference: `Define.h:351` — `#define CERTIFIKAOFDRAKI 810595000`
 pub const CERTIFIKAOFDRAKI: u32 = 810_595_000;
 
 /// Monster kill time for spawned Draki Tower monsters (seconds).
-///
-/// C++ Reference: `Define.h:96` — `#define DRAKI_TOWER_MONSTER_KILL_TIME 315`
 pub const DRAKI_TOWER_MONSTER_KILL_TIME: u32 = 315;
 
 /// Time limit per sub-stage in seconds.
-///
-/// C++ Reference: `uint16 TimeLimit = 300;` in `DrakiRiftChange()`
 pub const SUB_STAGE_TIME_LIMIT: u32 = 300;
 
 /// Wait time between stages (rest period) in seconds.
-///
-/// C++ Reference: `pRoomInfo->m_tDrakiSubTimer = UNIXTIME + 180;` in `SendDrakiTempleDetail()`
 pub const BETWEEN_STAGE_WAIT: u32 = 180;
 
 /// Kick timer duration in seconds.
-///
-/// C++ Reference: `pRoomInfo->m_tDrakiOutTimer = UNIXTIME + 20;` in `DrakiTowerKickOuts()`
 pub const KICK_TIMER: u32 = 20;
 
 /// Room close timer in seconds (idle cleanup).
-///
-/// C++ Reference: `pRoomInfo->m_tDrakiRoomCloseTimer = 7200;`
 pub const ROOM_CLOSE_TIMER: u32 = 7200;
 
 /// Maximum daily entrance limit.
-///
-/// C++ Reference: `pUser->m_bDrakiEnteranceLimit = 3;` in `DrakiTowerLimitReset()`
 pub const MAX_ENTRANCE_LIMIT: u8 = 3;
 
 /// Achievement threshold: if tower completed in under this many seconds.
-///
-/// C++ Reference: `if (DrakiTowerFinishedTime <= 1200)`
 pub const ACHIEVEMENT_TIME_THRESHOLD: u32 = 1200;
 
 /// Maximum event room index.
-///
-/// C++ Reference: `EVENTMAXROOM`
 pub const EVENT_MAX_ROOM: u16 = 60;
 
 // ── Sub-opcodes (under WIZ_EVENT) ──────────────────────────────────────
 
-/// C++ Reference: `packets.h:793`
 pub const TEMPLE_DRAKI_TOWER_ENTER: u8 = 33;
-/// C++ Reference: `packets.h:794`
 pub const TEMPLE_DRAKI_TOWER_LIST: u8 = 34;
-/// C++ Reference: `packets.h:795`
 pub const TEMPLE_DRAKI_TOWER_TIMER: u8 = 35;
-/// C++ Reference: `packets.h:796`
 pub const TEMPLE_DRAKI_TOWER_OUT1: u8 = 36;
-/// C++ Reference: `packets.h:797`
 pub const TEMPLE_DRAKI_TOWER_OUT2: u8 = 37;
-/// C++ Reference: `packets.h:798`
 pub const TEMPLE_DRAKI_TOWER_TOWN: u8 = 38;
 
 // ── Entry error codes ──────────────────────────────────────────────────
@@ -122,8 +88,6 @@ pub const ENTER_ERR_INTERNAL: u32 = 10;
 // ── Spawn positions per dungeon ────────────────────────────────────────
 
 /// Get the spawn (entry) position for a given dungeon level (1-5).
-///
-/// C++ Reference: `DatabaseThread.cpp:127-145` switch statement
 pub fn dungeon_spawn_position(dungeon: u8) -> (i32, i32) {
     match dungeon {
         1 => (40, 451),
@@ -138,8 +102,6 @@ pub fn dungeon_spawn_position(dungeon: u8) -> (i32, i32) {
 // ── Class mapping ─────────────────────────────────────────────────────
 
 /// Map game class to Draki Tower class ID.
-///
-/// C++ Reference: `DBAgent.cpp:4571-4583` — class mapping for rankings
 ///   Warrior(1,5,6,7,8)→1, Rogue(2,9,10)→2, Mage(3,11,12)→3,
 ///   Priest(4,15,16)→4, PortuKurian(13,14)→13
 pub fn draki_class(game_class: u16) -> i32 {
@@ -154,8 +116,6 @@ pub fn draki_class(game_class: u16) -> i32 {
 }
 
 /// Get the display name for a Draki Tower class.
-///
-/// C++ Reference: `DBAgent.cpp:4574-4582`
 pub fn draki_class_name(draki_class: i32) -> &'static str {
     match draki_class {
         1 => "Warrior",
@@ -168,8 +128,6 @@ pub fn draki_class_name(draki_class: i32) -> &'static str {
 }
 
 /// Calculate max dungeon progress from a linear stage index.
-///
-/// C++ Reference: `DBAgent.cpp:4618` — `(bStage - (bStage % 6)) / 6 + (bStage % 6 > 0 ? 1 : 0)`
 pub fn max_stages_from_linear(stage: i16) -> u32 {
     let s = stage as u32;
     let base = (s.saturating_sub(s % 6)) / 6;
@@ -180,8 +138,6 @@ pub fn max_stages_from_linear(stage: i16) -> u32 {
 // ── Per-Room Instance State ────────────────────────────────────────────
 
 /// Runtime state for a single Draki Tower room instance.
-///
-/// C++ Reference: `_DRAKI_TOWER_INFO` struct
 #[derive(Debug)]
 pub struct DrakiTowerRoomInfo {
     /// Room ID (1-based, from EventRoomManager).
@@ -261,8 +217,6 @@ impl DrakiTowerRoomInfo {
 
     /// Reset the room to idle state.
     ///
-    /// C++ Reference: Multiple reset blocks in `DrakiTowerKickTimer()` and
-    ///                `DrakiTowerRoomCloseUserisOut()`
     pub fn reset(&mut self) {
         self.draki_stage = 0;
         self.draki_sub_stage = 0;
@@ -292,8 +246,6 @@ impl DrakiTowerRoomInfo {
 
 /// Find the stage index (in the stages list) that matches the given
 /// dungeon/sub-stage and NPC state.
-///
-/// C++ Reference: `SelectDrakiRoom()` / `SelectNpcDrakiRoom()`
 pub fn find_stage_index(
     stages: &[DrakiTowerStageRow],
     draki_stage: u16,
@@ -313,8 +265,6 @@ pub fn get_stage_at(stages: &[DrakiTowerStageRow], index: usize) -> Option<&Drak
 }
 
 /// Get all monster spawn entries for a given stage ID.
-///
-/// C++ Reference: `SummonDrakiMonsters()` — iterates `m_DrakiMonsterListArray`
 ///                filtering by `bDrakiStage == RoomIndex`
 pub fn get_monsters_for_stage(
     monsters: &[DrakiMonsterListRow],
@@ -337,9 +287,6 @@ pub fn build_monster_stage_map(
 // ── Entry Validation ───────────────────────────────────────────────────
 
 /// Validate entry conditions for a Draki Tower dungeon.
-///
-/// C++ Reference: `CUser::DrakiTowerTempleEnter()` in `DrakiTowerSystem.cpp:14-96`
-///
 /// Returns `Ok(())` if all checks pass, or `Err(error_code)` with the
 /// appropriate error code to send to the client.
 #[allow(clippy::too_many_arguments)]
@@ -369,7 +316,6 @@ pub fn validate_entry(
     }
 
     // Check if already in an instance zone
-    // C++ Reference: ZONE_STONE1, ZONE_STONE2, ZONE_STONE3, ZONE_DRAKI_TOWER
     let forbidden_zones: [u16; 4] = [81, 82, 83, ZONE_DRAKI_TOWER];
     if forbidden_zones.contains(&current_zone_id) || event_room > 0 {
         return Err(ENTER_ERR_ALREADY_IN_INSTANCE);
@@ -400,8 +346,6 @@ pub fn validate_entry(
 }
 
 /// Find a free (inactive) room from the room pool.
-///
-/// C++ Reference: `DatabaseThread.cpp:87-95` — finds first room with `m_tDrakiTowerStart == false`
 pub fn find_free_room(rooms: &HashMap<u16, DrakiTowerRoomInfo>) -> Option<u16> {
     for room_id in 1..=EVENT_MAX_ROOM {
         if let Some(room) = rooms.get(&room_id) {
@@ -433,9 +377,6 @@ pub enum StageAdvanceResult {
 }
 
 /// Advance the room to the next stage.
-///
-/// C++ Reference: `CUser::ChangeDrakiMode()` in `DrakiTowerSystem.cpp:320-347`
-///
 /// Finds the current stage index, then looks at the next stage to determine
 /// if it's a monster or NPC stage.
 pub fn advance_stage(
@@ -491,8 +432,6 @@ pub fn advance_stage(
 }
 
 /// Apply a monster-stage transition to the room.
-///
-/// C++ Reference: `DrakiRiftChange()` — sets stage/sub-stage, timers
 pub fn apply_monster_stage(room: &mut DrakiTowerRoomInfo, stage: &DrakiTowerStageRow, now: u64) {
     room.draki_stage = stage.draki_stage as u16;
     room.draki_sub_stage = stage.draki_sub_stage as u16;
@@ -503,8 +442,6 @@ pub fn apply_monster_stage(room: &mut DrakiTowerRoomInfo, stage: &DrakiTowerStag
 }
 
 /// Apply an NPC-stage (rest) transition to the room.
-///
-/// C++ Reference: `SendDrakiTempleDetail(false)` — sets timers, saves user info
 pub fn apply_npc_stage(
     room: &mut DrakiTowerRoomInfo,
     stage: &DrakiTowerStageRow,
@@ -525,8 +462,6 @@ pub fn apply_npc_stage(
 }
 
 /// Initialize the room for entry (first sub-stage of selected dungeon).
-///
-/// C++ Reference: `DatabaseThread.cpp:106-151`
 pub fn initialize_room_for_entry(
     room: &mut DrakiTowerRoomInfo,
     enter_dungeon: u8,
@@ -564,9 +499,6 @@ pub enum DrakiTickResult {
 }
 
 /// Process one timer tick for a Draki Tower room.
-///
-/// C++ Reference: `CUser::DrakiTowerKickTimer()` in `DrakiTowerSystem.cpp:429-497`
-///
 /// Called every second for each active room.
 pub fn room_timer_tick(room: &DrakiTowerRoomInfo, now: u64) -> DrakiTickResult {
     if !room.tower_started {
@@ -593,9 +525,6 @@ pub fn room_timer_tick(room: &DrakiTowerRoomInfo, now: u64) -> DrakiTickResult {
 }
 
 /// Process room close timer tick.
-///
-/// C++ Reference: `CGameServerDlg::DrakiTowerRoomCloseTimer()` in `DrakiTowerSystem.cpp:552-573`
-///
 /// Returns true if the room should be closed (timer reached 0).
 pub fn room_close_tick(room: &mut DrakiTowerRoomInfo) -> bool {
     if !room.tower_started {
@@ -610,16 +539,12 @@ pub fn room_close_tick(room: &mut DrakiTowerRoomInfo) -> bool {
 }
 
 /// Apply kick-out state to the room.
-///
-/// C++ Reference: `CUser::DrakiTowerKickOuts()` in `DrakiTowerSystem.cpp:411-426`
 pub fn apply_kickout(room: &mut DrakiTowerRoomInfo, now: u64) {
     room.draki_out_timer = now + KICK_TIMER as u64;
     room.out_timer_active = true;
 }
 
 /// Apply town-return state to the room.
-///
-/// C++ Reference: `CUser::DrakiTowerTown()` in `DrakiTowerSystem.cpp:500-524`
 pub fn apply_town_return(room: &mut DrakiTowerRoomInfo, now: u64) {
     room.draki_town_out_timer = now + KICK_TIMER as u64;
     room.town_out_timer_active = true;
@@ -627,8 +552,6 @@ pub fn apply_town_return(room: &mut DrakiTowerRoomInfo, now: u64) {
 }
 
 /// Get the exit zone for a player based on their level.
-///
-/// C++ Reference: `DrakiTowerKickTimer()` — level 1-34 go to Moradon,
 ///                others go to nation zone.
 pub fn get_exit_zone(level: u16, nation: u8) -> u16 {
     if (1..=34).contains(&level) {
@@ -639,8 +562,6 @@ pub fn get_exit_zone(level: u16, nation: u8) -> u16 {
 }
 
 /// Check if it's time for the daily entrance limit reset (18:00).
-///
-/// C++ Reference: `CGameServerDlg::DrakiTowerLimitReset()` in `DrakiTowerSystem.cpp:527-549`
 pub fn should_reset_limits(hour: u32, minute: u32, second: u32) -> bool {
     hour == 18 && minute == 0 && second == 0
 }

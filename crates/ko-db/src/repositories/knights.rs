@@ -1,6 +1,4 @@
 //! Knights (clan) repository — KNIGHTS table access.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/DBAgent.cpp` — knights DB functions.
 
 use sqlx::PgPool;
 
@@ -52,7 +50,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Create a new clan in the database.
     ///
-    /// C++ Reference: `CDBAgent::CreateKnights` in `DBAgent.cpp`
     pub async fn create_knights(
         &self,
         id_num: i16,
@@ -77,7 +74,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Update a user's clan ID and fame in userdata.
     ///
-    /// C++ Reference: `CDBAgent::KnightsMemberJoin` — sets knights + fame on join.
     pub async fn update_user_knights(
         &self,
         char_name: &str,
@@ -125,7 +121,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Update the chief for a clan (leadership transfer).
     ///
-    /// C++ Reference: `CDBAgent::KnightsMemberChief`
     pub async fn update_chief(&self, id_num: i16, chief: &str) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE knights SET chief = $1 WHERE id_num = $2")
             .bind(chief)
@@ -158,7 +153,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Update the clan notice.
     ///
-    /// C++ Reference: `CDBAgent::KnightsClanNoticeUpdate`
     pub async fn update_notice(&self, id_num: i16, notice: &str) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE knights SET str_clan_notice = $1 WHERE id_num = $2")
             .bind(notice)
@@ -170,7 +164,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Rename a clan in the database.
     ///
-    /// C++ Reference: `CDBAgent::UpdateCharacterClanName` / `CHANGE_NEW_CLANID` stored proc.
     ///
     /// Returns: 3 on success, 2 if new name already exists, 0 on error.
     pub async fn rename_clan(&self, clan_id: i16, new_name: &str) -> Result<u8, sqlx::Error> {
@@ -193,7 +186,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Delete a clan from the database (disband).
     ///
-    /// C++ Reference: `CDBAgent::KnightsDestroy`
     pub async fn destroy_knights(&self, id_num: i16) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM knights WHERE id_num = $1")
             .bind(id_num)
@@ -223,7 +215,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Save clan premium state to DB.
     ///
-    /// C++ Reference: `GiveClanPremium` — premium_time is unix timestamp, premium_in_use is type.
     pub async fn save_clan_premium(
         &self,
         id_num: i16,
@@ -243,8 +234,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Update the clan mark (symbol/emblem) data in the DB.
     ///
-    /// C++ Reference: `CKnightsDatabaseHandler::KnightsRegisterSymbol()` in
-    /// `KnightsDatabaseHandler.cpp:655-692` — increments mark version, stores blob.
     pub async fn update_mark(
         &self,
         id_num: i16,
@@ -290,7 +279,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Find the next available clan ID for a given nation.
     ///
-    /// C++ Reference: `CKnightsManager::GetKnightsIndex` — Karus uses 1..14999, El Morad 15001..32000.
     pub async fn next_clan_id(&self, nation: u8) -> Result<Option<i16>, sqlx::Error> {
         let (min_id, max_id): (i16, i16) = if nation == 2 {
             // El Morad
@@ -319,7 +307,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Load all alliances (for server startup).
     ///
-    /// C++ Reference: `CKnightsAllianceSet` — fetches KNIGHTS_ALLIANCE table.
     pub async fn load_all_alliances(&self) -> Result<Vec<KnightsAllianceRow>, sqlx::Error> {
         sqlx::query_as::<_, KnightsAllianceRow>(
             "SELECT * FROM knights_alliance ORDER BY s_main_alliance_knights",
@@ -330,7 +317,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Create a new alliance in the database.
     ///
-    /// C++ Reference: `CDBAgent::KnightsAllianceCreate`
     pub async fn alliance_create(&self, main_clan: i16, sub_clan: i16) -> Result<(), sqlx::Error> {
         sqlx::query(
             "INSERT INTO knights_alliance (s_main_alliance_knights, s_sub_alliance_knights)
@@ -346,7 +332,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Insert a clan into an existing alliance.
     ///
-    /// C++ Reference: `CDBAgent::KnightsAllianceInsert`
     /// `slot`: 1=sub, 2=merc1, 3=merc2
     pub async fn alliance_insert(
         &self,
@@ -374,7 +359,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Remove a clan from an alliance (set its slot to 0).
     ///
-    /// C++ Reference: `CDBAgent::KnightsAllianceRemove`
     pub async fn alliance_remove(
         &self,
         main_clan: i16,
@@ -397,7 +381,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Destroy an alliance entirely.
     ///
-    /// C++ Reference: `CDBAgent::KnightsAllianceDestroy`
     pub async fn alliance_destroy(&self, main_clan: i16) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM knights_alliance WHERE s_main_alliance_knights = $1")
             .bind(main_clan)
@@ -422,7 +405,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Update the clan point method.
     ///
-    /// C++ Reference: `CDBAgent::KnightsPointMethodChange`
     pub async fn update_clan_point_method(
         &self,
         id_num: i16,
@@ -438,7 +420,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Update a user's memo in userdata.
     ///
-    /// C++ Reference: `CDBAgent::KnightsUserMemoUpdate`
     pub async fn update_user_memo(&self, char_name: &str, memo: &str) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE userdata SET str_memo = $1 WHERE str_user_id = $2")
             .bind(memo)
@@ -450,7 +431,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Update the alliance notice text.
     ///
-    /// C++ Reference: `CDBAgent::KnightsAllianceNoticeUpdate`
     pub async fn update_alliance_notice(
         &self,
         main_clan: i16,
@@ -468,7 +448,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Transfer clan leadership in the database.
     ///
-    /// C++ Reference: `CDBAgent::KnightsHandover` — updates chief, vice chiefs, and member fame.
     pub async fn handover_leadership(
         &self,
         clan_id: i16,
@@ -505,7 +484,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Update a clan's flag and cape after demotion.
     ///
-    /// C++ Reference: `Knights.cpp:917-919` — `KNIGHTS_UPDATE_GRADE` DB request.
     pub async fn update_flag_cape(
         &self,
         id_num: i16,
@@ -523,7 +501,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Update a clan's nation for clan-wide nation transfer (ClanNts).
     ///
-    /// C++ Reference: `CDBAgent::SaveCNTSKnights(clan_id, nation)` — updates clan nation in DB.
     pub async fn save_clan_nation(&self, clan_id: i16, new_nation: i16) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE knights SET nation = $1 WHERE id_num = $2")
             .bind(new_nation)
@@ -535,7 +512,6 @@ impl<'a> KnightsRepository<'a> {
 
     /// Get distinct account IDs for a set of character names.
     ///
-    /// C++ Reference: `CKnights::m_arKnightsUser` — maps account_id → member data.
     /// Used by ClanNts to find all accounts of clan members.
     pub async fn get_member_account_ids(&self, clan_id: i16) -> Result<Vec<String>, sqlx::Error> {
         let rows: Vec<(String,)> = sqlx::query_as(

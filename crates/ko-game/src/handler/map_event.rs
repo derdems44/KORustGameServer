@@ -1,24 +1,16 @@
 //! WIZ_MAP_EVENT (0x53) handler — zone war event status query.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/NPCHandler.cpp:512-526`
-//!
 //! When a player enters certain battle zones during wartime, the client
 //! requests the current event state (monument points, kill counts).
-//!
 //! ## Request (C->S)
-//!
 //! | Offset | Type | Description |
 //! |--------|------|-------------|
 //! | 0      | u8   | Event type  |
-//!
 //! ## Response (S->C)
-//!
 //! | Offset | Type  | Description |
 //! |--------|-------|-------------|
 //! | 0      | u8    | Event type (echo) |
 //! | 1      | i16le | Karus counter (monument points or dead count) |
 //! | 3      | i16le | Elmorad counter (monument points or dead count) |
-//!
 //! Counter fields are only included when war is active and the player
 //! is in the appropriate battle zone.
 
@@ -29,8 +21,6 @@ use crate::session::{ClientSession, SessionState};
 use crate::world::types::{ZONE_BATTLE4, ZONE_BATTLE6};
 
 /// Handle WIZ_MAP_EVENT from the client.
-///
-/// C++ Reference: `CUser::RecvMapEvent()` in `NPCHandler.cpp:512-526`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -46,7 +36,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
     let mut result = Packet::new(Opcode::WizMapEvent as u8);
 
-    // C++ Reference: NPCHandler.cpp:519-523
     // Only send counters when war is active and player is in the right zone.
     //
     // C++ checks `g_pMain->isWarOpen()` which returns true when `m_byBattleOpen >= NATION_BATTLE`.
@@ -55,14 +44,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
     if war_open && zone_id == ZONE_BATTLE4 {
         // Monument capture zone — send monument points
-        // C++: result << bType << g_pMain->m_sKarusMonumentPoint << g_pMain->m_sElmoMonumentPoint;
         let (karus_monument, elmorad_monument) = world.get_battle_monument_points();
         result.write_u8(event_type);
         result.write_i16(karus_monument);
         result.write_i16(elmorad_monument);
     } else if war_open && zone_id == ZONE_BATTLE6 {
         // Kill count zone — send dead counts
-        // C++: result << bType << g_pMain->m_sKarusDead << g_pMain->m_sElmoradDead;
         let (karus_dead, elmorad_dead) = world.get_battle_dead_counts();
         result.write_u8(event_type);
         result.write_i16(karus_dead);

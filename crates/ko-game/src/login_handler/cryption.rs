@@ -62,7 +62,7 @@ pub async fn handle(session: &mut LoginSession, _pkt: Packet) -> anyhow::Result<
 ///
 /// NOTE: The original server sends 14 bytes in 0xA1 (format not yet
 /// fully RE'd). We send the full server list format as a first attempt.
-/// If the client expects a different format, Ghidra analysis is needed.
+/// If the client expects a different format.
 async fn handle_rekey_ack(session: &mut LoginSession) -> anyhow::Result<()> {
     let repo = ServerListRepository::new(session.pool());
     let servers = match repo.load_all().await {

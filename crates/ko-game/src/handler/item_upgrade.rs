@@ -1,16 +1,10 @@
 //! WIZ_ITEM_UPGRADE (0x5B) handler — item upgrade system (normal, accessories, rebirth).
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/ItemUpgradeSystem.cpp`
-//! C++ Reference: `KOOriginalGameServer/GameServer/ExchangeSystemMain.cpp`
-//!
 //! Packet format (from client):
 //! ```text
 //! [u8 nUpgradeType] [u8 bType] [u32 npcID] [10x (i32 itemID, i8 slot)]
 //! ```
-//!
 //! nUpgradeType: 2=normal, 3=accessories, 7=rebirth
 //! bType: 1=execute, 2=preview
-//!
 //! Response (WIZ_ITEM_UPGRADE):
 //! ```text
 //! [u8 nUpgradeType] [u8 bType] [u8 result] [optional: u8 logos_flag] [N x (i32 itemID, i8 slot)]
@@ -34,76 +28,49 @@ use crate::world::{
 use super::{HAVE_MAX, ITEM_KIND_UNIQUE, SLOT_MAX};
 use crate::object_event_constants::{OBJECT_ANVIL, OBJECT_ARTIFACT, OBJECT_NPC};
 
-/// C++ `ITEM_TRINA` — Trina's Piece.
 const ITEM_TRINA: u32 = 700002000;
-/// C++ `ITEM_KARIVDIS` — Tears of Karivdis.
 const ITEM_KARIVDIS: u32 = 379258000;
-/// C++ `ITEM_LOW_CLASS_TRINA`.
 const ITEM_LOW_CLASS_TRINA: u32 = 353000000;
-/// C++ `ITEM_MIDDLE_CLASS_TRINA`.
 const ITEM_MIDDLE_CLASS_TRINA: u32 = 352900000;
-/// C++ `ITEM_BLESSINGLOGOS` (890092000).
 const ITEM_BLESSING_LOGOS: u32 = 890092000;
 /// Accessory trina piece.
 const ITEM_RING_TRINA: u32 = 354000000;
 
-/// C++ `NPC_ANVIL = 24` — NPC type for upgrade anvils.
 const NPC_ANVIL: u8 = 24;
 
-/// C++ `UPGRADE_DELAY = 2` — minimum seconds between consecutive item upgrades.
 const UPGRADE_DELAY: u64 = 2;
 
-/// C++ `MAX_ITEMS_REQ_FOR_UPGRADE` = 8 (max consumed items, excluding the origin item).
 const MAX_ITEMS_REQ: usize = 8;
 
 /// C++ sub-opcodes for WIZ_ITEM_UPGRADE (ItemUpgradeOpcodes enum).
 const ITEM_UPGRADE: u8 = 2;
 const ITEM_ACCESSORIES: u8 = 3;
 const ITEM_UPGRADE_REBIRTH: u8 = 7;
-/// C++ `ITEM_BIFROST_REQ = 4` — Bifrost Piece request (NPC validation).
 const ITEM_BIFROST_REQ: u8 = 4;
-/// C++ `ITEM_BIFROST_EXCHANGE = 5` — Bifrost Piece exchange (random loot).
 const ITEM_BIFROST_EXCHANGE: u8 = 5;
-/// C++ `SPECIAL_PART_SEWING = 11` — Shozin Exchange (crafting).
 const SPECIAL_PART_SEWING: u8 = 11;
-/// C++ `ITEM_OLDMAN_EXCHANGE = 13` — Item Disassemble (smash).
 const ITEM_OLDMAN_EXCHANGE: u8 = 13;
-/// C++ `ITEM_SEAL = 8` — Item Seal (lock/unlock/bind/unbind).
 const ITEM_SEAL: u8 = 8;
 
 // ── Item Seal sub-opcodes ────────────────────────────────────────────
-/// C++ `SealOpcodes::ITEM_LOCK = 1` — Seal (lock) an item.
 const SEAL_LOCK: u8 = 1;
-/// C++ `SealOpcodes::ITEM_UNLOCK = 2` — Unseal (unlock) an item.
 const SEAL_UNLOCK: u8 = 2;
-/// C++ `SealOpcodes::ITEM_BOUND = 3` — Bind a Krowaz item.
 const SEAL_BOUND: u8 = 3;
-/// C++ `SealOpcodes::ITEM_UNBOUND = 4` — Unbind an old item.
 const SEAL_UNBOUND: u8 = 4;
 /// Gold cost for sealing an item.
-///
-/// C++ Reference: `SealHandler.cpp` — `ITEM_SEAL_PRICE = 1000000`
 const ITEM_SEAL_PRICE: u32 = 1_000_000;
 /// Binding scroll item ID — consumed when unbinding.
-///
-/// C++ Reference: `SealHandler.cpp` — `810890000`
 const BINDING_SCROLL_ID: u32 = 810_890_000;
 
 // ── Pet Hatching / Transform sub-opcodes ──────────────────────────────
-/// C++ `PET_HATCHING_TRANSFROM = 6` — Hatch a pet from an egg item.
 const PET_HATCHING: u8 = 6;
-/// C++ `PET_IMAGE_TRANSFORM = 10` — Change pet appearance via transform recipe.
 const PET_IMAGE_TRANSFORM: u8 = 10;
-/// C++ `PET_START_ITEM = 610001000` — Base pet kaul item ID.
 const PET_START_ITEM: u32 = 610_001_000;
-/// C++ `PET_START_LEVEL = 1` — New pet always starts at level 1.
 const PET_START_LEVEL: u8 = 1;
 
-/// C++ `UpgradeType` enum.
 const UPGRADE_TYPE_NORMAL: u8 = 1;
 const UPGRADE_TYPE_PREVIEW: u8 = 2;
 
-/// C++ `UpgradeErrorCodes` enum.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UpgradeResult {
@@ -115,7 +82,6 @@ enum UpgradeResult {
     Rental = 5,
 }
 
-/// C++ `UpgradeScrollType` enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i8)]
 enum ScrollType {
@@ -139,8 +105,6 @@ struct UpgradeItem {
 }
 
 /// Classify a scroll item ID into a scroll type.
-///
-/// C++ Reference: `GetScrollType()` in `ItemUpgradeSystem.cpp:20-96`
 fn get_scroll_type(scroll_id: u32) -> ScrollType {
     match scroll_id {
         379221000 | 379222000 | 379223000 | 379224000 | 379225000 | 379226000 | 379227000
@@ -214,8 +178,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Core upgrade logic shared by normal, accessories, and rebirth upgrades.
-///
-/// C++ Reference: `CUser::ItemUpgrade()` in `ItemUpgradeSystem.cpp:103-655`
 async fn item_upgrade(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -229,7 +191,6 @@ async fn item_upgrade(
     let npc_id = reader.read_u32().unwrap_or(0);
 
     // NPC range check — must be near an Anvil NPC
-    // C++ Reference: ItemUpgradeSystem.cpp:170-172
     if !world.is_in_npc_range(sid, npc_id) {
         send_fail(
             session,
@@ -244,7 +205,6 @@ async fn item_upgrade(
     }
 
     // NPC type check — must be NPC_ANVIL (24)
-    // C++ Reference: ItemUpgradeSystem.cpp:170-172 — pNpc->GetType() != NPC_ANVIL
     {
         let is_anvil = world
             .get_npc_instance(npc_id)
@@ -285,7 +245,6 @@ async fn item_upgrade(
     // ── Validation checks (matching C++ order) ──
 
     // Check player state: dead, trading, store open, merchanting, mining
-    // C++ Reference: ItemUpgradeSystem.cpp:131,153-160 — isDead, isTrading, isStoreOpen, isMerchanting, isMining
     if world.is_player_dead(sid)
         || world.is_trading(sid)
         || world.is_store_open(sid)
@@ -305,7 +264,6 @@ async fn item_upgrade(
     }
 
     // Rate-limiting: max upgrade count and 2-second cooldown between upgrades.
-    // C++ Reference: ItemUpgradeSystem.cpp:148-161
     {
         let max_count = world
             .get_server_settings()
@@ -589,7 +547,6 @@ async fn item_upgrade(
     }
 
     // Logos grade limit check — uses server settings, not hardcoded value
-    // C++ Reference: ItemUpgradeSystem.cpp:387-393 — maxBlessingUp / maxBlessingUpReb
     // Derive grade from item number (last digit) as fallback — C++ stores m_byGrade per-row,
     // but our PostgreSQL export had all by_grade=0. Safe fallback: num % 10.
     let by_grade = {
@@ -737,14 +694,12 @@ async fn item_upgrade(
 
         if let Some(setting) = world.find_upgrade_setting(item_type, by_grade, req1, req2) {
             gen_rate = setting.success_rate as u32;
-            // C++ Reference: ItemUpgradeSystem.cpp:521-522 — cap gen_rate at 10000
             if gen_rate > 10000 {
                 gen_rate = 10000;
             }
             req_coins = setting.item_req_coins as u32;
             settings_found = true;
 
-            // C++ Reference: ItemUpgradeSystem.cpp:487-505
             // Validate required items from settings exist in items list and inventory.
             let s_req1 = setting.req_item_id1;
             let s_req2 = setting.req_item_id2;
@@ -946,7 +901,6 @@ async fn item_upgrade(
     }
 
     // ── Upgrade Notice: server-wide broadcast for notable items ──────
-    // C++ Reference: ItemUpgradeSystem.cpp:658-703 — ItemUpgradeNotice()
     //   if (pItem.isnull() || isGM() || !pServerSetting.UpgradeNotice) return;
     //   if (!pItem.m_isUpgradeNotice) return;
     //   Packet(WIZ_LOGOSSHOUT, 0x02) << 0x05 << UpgradeResult << name << item_num << rank
@@ -1000,7 +954,6 @@ async fn item_upgrade(
     }
 
     // Broadcast anvil effect to the region
-    // C++ Reference: ItemUpgradeSystem.cpp:641-645 — uses GetTargetID() (NPC ID)
     if b_type != UPGRADE_TYPE_PREVIEW {
         let mut anvil_pkt = Packet::new(Opcode::WizObjectEvent as u8);
         anvil_pkt.write_u8(OBJECT_ANVIL);
@@ -1030,8 +983,6 @@ async fn item_upgrade(
 }
 
 /// Check if the user's scroll type is compatible with the item's class requirement.
-///
-/// C++ Reference: `ItemUpgradeSystem.cpp:352-381`
 fn is_scroll_compatible(item_class: ScrollType, user_scroll: ScrollType) -> bool {
     match item_class {
         ScrollType::LowClass => matches!(
@@ -1098,14 +1049,10 @@ fn rand_range(min: u32, max: u32) -> u32 {
 
 // ── Constants for Shozin Exchange (Special Part Sewing) ──────────────
 
-/// C++ `NPC_CRAFTSMAN = 135`
 const NPC_CRAFTSMAN: u8 = 135;
-/// C++ `NPC_JEWELY = 174`
 const NPC_JEWELY: u8 = 174;
-/// C++ `ITEM_SHADOW_PIECE = 700009000`
 const ITEM_SHADOW_PIECE: u32 = 700_009_000;
 
-/// C++ `CraftingErrorCode` enum.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CraftingErrorCode {
@@ -1116,11 +1063,9 @@ enum CraftingErrorCode {
 
 // ── Constants for Item Smash (Old Man Exchange) ──────────────────────
 
-/// C++ `NPC_OLD_MAN_NPC = 222` — test-only reference constant
 #[cfg(test)]
 const NPC_OLD_MAN: u8 = 222;
 
-/// C++ `SmashExchangeError` enum.
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SmashError {
@@ -1158,9 +1103,6 @@ async fn send_smash_fail(session: &mut ClientSession, error: SmashError) -> anyh
 }
 
 /// Handle the Shozin Exchange (Special Part Sewing / Crafting) sub-opcode.
-///
-/// C++ Reference: `CUser::ShozinExchange()` in `CraftingSystem.cpp`
-///
 /// Packet format:
 /// ```text
 /// [u32 npcID] [u32 shadowPiece] [u8 shadowSlot] [u8 materialCount]
@@ -1186,7 +1128,7 @@ async fn shozin_exchange(
         return send_crafting_fail(session, CraftingErrorCode::WrongMaterial).await;
     }
 
-    // Player state validation — C++ Reference: CraftingSystem.cpp:39-48
+    // Player state validation
     if world.is_player_dead(sid)
         || world.is_selling_merchant_preparing(sid)
         || world.is_trading(sid)
@@ -1395,7 +1337,7 @@ async fn shozin_exchange(
         return send_crafting_fail(session, CraftingErrorCode::WrongMaterial).await;
     }
 
-    // Random selection from matching recipes (C++ `myrand(0, size-1)`)
+    // Random selection from matching recipes
     let recipe_idx = if matching_recipes.len() == 1 {
         0
     } else {
@@ -1530,7 +1472,6 @@ async fn shozin_exchange(
         result_code = CraftingErrorCode::Success;
 
         // Daily rank stat: SHTotalExchange++ (crafting success)
-        // C++ Reference: CraftingSystem.cpp:314 — `pUserDailyRank.SHTotalExchange++`
         world.update_session(sid, |h| {
             h.dr_sh_total_exchange += 1;
         });
@@ -1572,14 +1513,10 @@ async fn shozin_exchange(
 }
 
 /// Handle the Item Disassemble (Old Man Exchange / Item Smash) sub-opcode.
-///
-/// C++ Reference: `CUser::ItemDisassemble()` in `ItemSmashSystem.cpp`
-///
 /// Packet format:
 /// ```text
 /// [u32 itemID] [u8 slot] [u32 npcID]
 /// ```
-///
 /// Response:
 /// ```text
 /// [u16 error/success] [u32 origItemID] [u8 origSlot] [u16 rollCount]
@@ -1597,7 +1534,7 @@ async fn item_disassemble(
     let slot = reader.read_u8().unwrap_or(0xff);
     let _npc_id_raw = reader.read_u32().unwrap_or(0);
 
-    // Player state validation — C++ Reference: ItemSmashSystem.cpp:24-33
+    // Player state validation
     if world.is_player_dead(sid)
         || world.is_selling_merchant_preparing(sid)
         || world.is_buying_merchant_preparing(sid)
@@ -1819,12 +1756,9 @@ async fn item_disassemble(
 
 // ── Bifrost Piece Exchange ─────────────────────────────────────────────
 
-/// C++ `NPC_CHAOTIC_GENERATOR = 137` — Bifrost Piece Generator NPC.
 const NPC_CHAOTIC_GENERATOR: u8 = 137;
-/// C++ `NPC_CHAOTIC_GENERATOR2 = 162` — Bifrost Piece Generator NPC (newer).
 const NPC_CHAOTIC_GENERATOR2: u8 = 162;
 
-/// C++ `BeefEffectType` enum — visual effect on exchange.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BeefEffectType {
@@ -1834,8 +1768,6 @@ enum BeefEffectType {
 }
 
 /// Handle ITEM_BIFROST_REQ (sub=4) — simple NPC validation + success response.
-///
-/// C++ Reference: `ExchangeSystemMain.cpp:31-35` — just validates NPC and sends 1.
 async fn bifrost_piece_req(session: &mut ClientSession) -> anyhow::Result<()> {
     let mut pkt = Packet::new(Opcode::WizItemUpgrade as u8);
     pkt.write_u8(ITEM_BIFROST_REQ);
@@ -1845,8 +1777,6 @@ async fn bifrost_piece_req(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Send Bifrost exchange failure packet.
-///
-/// C++ Reference: `BifrostPieceSmashSystem.cpp:4-8`
 async fn bifrost_send_fail(session: &mut ClientSession, error_code: u8) -> anyhow::Result<()> {
     let mut pkt = Packet::new(Opcode::WizItemUpgrade as u8);
     pkt.write_u8(ITEM_BIFROST_EXCHANGE);
@@ -1857,11 +1787,7 @@ async fn bifrost_send_fail(session: &mut ClientSession, error_code: u8) -> anyho
 
 /// Handle ITEM_BIFROST_EXCHANGE (sub=5) — Bifrost Piece exchange with weighted
 /// random loot selection.
-///
-/// C++ Reference: `BifrostPieceSmashSystem.cpp:11-143`
-///
 /// Client packet: `[u32 npc_id] [u32 piece_item_id] [i8 src_pos]`
-///
 /// Response on success:
 /// `[u8 1] [u32 reward_item_id] [i8 reward_slot] [u32 piece_item_id] [i8 src_pos] [u8 effect_type]`
 async fn bifrost_piece_exchange(
@@ -1872,7 +1798,7 @@ async fn bifrost_piece_exchange(
     let sid = session.session_id();
     let error_code: u8 = 2;
 
-    // Read client packet — C++ Reference: BifrostPieceSmashSystem.cpp:14
+    // Read client packet
     let npc_id_raw = reader.read_u32().unwrap_or(0);
     let piece_item_id = reader.read_u32().unwrap_or(0);
     let src_pos = reader.read_i8().unwrap_or(-1);
@@ -1885,7 +1811,7 @@ async fn bifrost_piece_exchange(
         src_pos
     );
 
-    // Chaotic coins gate — C++ Reference: BifrostPieceSmashSystem.cpp:18-22
+    // Chaotic coins gate
     //   uint32 coinsreq = g_pMain->pServerSetting.chaoticcoins;
     //   if (coinsreq && !hasCoins(coinsreq)) return BifrostPieceSendFail(errorcode);
     let chaotic_coins = world
@@ -1899,7 +1825,7 @@ async fn bifrost_piece_exchange(
         }
     }
 
-    // Cooldown check (1500ms) — C++ Reference: BifrostPieceSmashSystem.cpp:24
+    // Cooldown check (1500ms)
     // C++ uses `m_BeefExchangeTime > UNIXTIME2`, then sets `UNIXTIME2 + 1500`
     let cooldown_ok = world
         .with_session(sid, |h| {
@@ -1910,7 +1836,7 @@ async fn bifrost_piece_exchange(
         return bifrost_send_fail(session, error_code).await;
     }
 
-    // Weight check — C++ Reference: BifrostPieceSmashSystem.cpp:24
+    // Weight check
     let (item_weight, max_weight) = world
         .with_session(sid, |h| {
             (h.equipped_stats.item_weight, h.equipped_stats.max_weight)
@@ -1920,12 +1846,12 @@ async fn bifrost_piece_exchange(
         return bifrost_send_fail(session, error_code).await;
     }
 
-    // Set cooldown — C++ Reference: BifrostPieceSmashSystem.cpp:27
+    // Set cooldown
     world.update_session(sid, |h| {
         h.beef_exchange_time = std::time::Instant::now();
     });
 
-    // NPC range check — C++ Reference: BifrostPieceSmashSystem.cpp:29-40
+    // NPC range check
     let npc_id = npc_id_raw;
     if !world.is_in_npc_range(sid, npc_id) {
         return bifrost_send_fail(session, error_code).await;
@@ -1943,7 +1869,6 @@ async fn bifrost_piece_exchange(
     }
 
     // Zone check — must be in Moradon
-    // C++ Reference: BifrostPieceSmashSystem.cpp:39 — isInMoradon()
     let zone_id = world.get_position(sid).map(|p| p.zone_id).unwrap_or(0);
     if !matches!(
         zone_id,
@@ -1953,7 +1878,6 @@ async fn bifrost_piece_exchange(
     }
 
     // NPC type check — must be CHAOTIC_GENERATOR or CHAOTIC_GENERATOR2
-    // C++ Reference: BifrostPieceSmashSystem.cpp:42-43
     if let Some(npc_inst) = world.get_npc_instance(npc_id) {
         if let Some(tmpl) = world.get_npc_template(npc_inst.proto_id, false) {
             if tmpl.npc_type != NPC_CHAOTIC_GENERATOR && tmpl.npc_type != NPC_CHAOTIC_GENERATOR2 {
@@ -1963,7 +1887,6 @@ async fn bifrost_piece_exchange(
     }
 
     // Validate origin item (piece) — must exist in item table, be countable, Effect2 == 251
-    // C++ Reference: BifrostPieceSmashSystem.cpp:45-47
     let piece_table = match world.get_item(piece_item_id) {
         Some(t) => t,
         None => return bifrost_send_fail(session, error_code).await,
@@ -1973,7 +1896,6 @@ async fn bifrost_piece_exchange(
     }
 
     // Validate inventory slot — item must match, count > 0, not rented/sealed/duplicate
-    // C++ Reference: BifrostPieceSmashSystem.cpp:49-54
     if src_pos < 0 || src_pos as usize >= HAVE_MAX {
         return bifrost_send_fail(session, error_code).await;
     }
@@ -1990,20 +1912,18 @@ async fn bifrost_piece_exchange(
     }
 
     // Check free inventory slots — need at least 1
-    // C++ Reference: BifrostPieceSmashSystem.cpp:56-61
     let free_slots = world.count_free_slots(sid);
     if free_slots < 1 {
         return bifrost_send_fail(session, error_code).await;
     }
 
     // Load matching bifrost exchanges — random_flag IN (1,2,3) with matching origin item
-    // C++ Reference: BifrostPieceSmashSystem.cpp:65-81
     let exchanges = world.get_bifrost_exchanges(piece_item_id);
     if exchanges.is_empty() {
         return bifrost_send_fail(session, error_code).await;
     }
 
-    // BifrostCheckExchange per-entry validation — C++ Reference: BifrostPieceSmashSystem.cpp:88-90
+    // BifrostCheckExchange per-entry validation
     // C++ validates every exchange entry BEFORE building the random array.
     // If any entry fails, the whole operation is aborted.
     for ex in &exchanges {
@@ -2018,7 +1938,6 @@ async fn bifrost_piece_exchange(
     }
 
     // Build weighted random array (10000 slots, divided by 5)
-    // C++ Reference: BifrostPieceSmashSystem.cpp:86-102
     let mut rand_array: Vec<u32> = Vec::with_capacity(10000);
     for ex in &exchanges {
         // Skip if random_flag >= 101
@@ -2052,12 +1971,10 @@ async fn bifrost_piece_exchange(
     }
 
     // Random selection
-    // C++ Reference: BifrostPieceSmashSystem.cpp:104-106
     let rand_idx = rand_range(0, rand_array.len() as u32) as usize;
     let reward_item_id = rand_array[rand_idx];
 
     // Validate reward item
-    // C++ Reference: BifrostPieceSmashSystem.cpp:108-114
     let reward_table = match world.get_item(reward_item_id) {
         Some(t) => t,
         None => return bifrost_send_fail(session, error_code).await,
@@ -2076,7 +1993,6 @@ async fn bifrost_piece_exchange(
     };
 
     // Remove 1 piece from inventory
-    // C++ Reference: BifrostPieceSmashSystem.cpp:116-117
     world.update_inventory(sid, |inv| {
         if actual_slot < inv.len() && inv[actual_slot].item_id == piece_item_id {
             if inv[actual_slot].count > 1 {
@@ -2091,13 +2007,11 @@ async fn bifrost_piece_exchange(
     });
 
     // Give reward item
-    // C++ Reference: BifrostPieceSmashSystem.cpp:120-123
     if !world.give_item(sid, reward_item_id, 1) {
         return bifrost_send_fail(session, 0).await;
     }
 
     // Determine effect color by item type
-    // C++ Reference: BifrostPieceSmashSystem.cpp:130-132
     let reward_item_type = reward_table.item_type.unwrap_or(0);
     let effect_type = if reward_item_type == 4 {
         BeefEffectType::White
@@ -2111,7 +2025,6 @@ async fn bifrost_piece_exchange(
     world.set_user_ability(sid);
 
     // Send success response
-    // C++ Reference: BifrostPieceSmashSystem.cpp:134-135
     let slot_check = if reward_slot >= SLOT_MAX {
         (reward_slot - SLOT_MAX) as i8
     } else {
@@ -2129,7 +2042,6 @@ async fn bifrost_piece_exchange(
     session.send_packet(&result).await?;
 
     // Broadcast artifact effect to region (3×3 grid)
-    // C++ Reference: BifrostPieceSmashSystem.cpp:136-140 — `SendToRegion(&newpkt, nullptr, GetEventRoom())`
     let mut artifact_pkt = Packet::new(Opcode::WizObjectEvent as u8);
     artifact_pkt.write_u8(OBJECT_ARTIFACT);
     artifact_pkt.write_u8(effect_type as u8);
@@ -2146,7 +2058,6 @@ async fn bifrost_piece_exchange(
     }
 
     // Epic item notice — broadcast to all if ItemType==4 or specific item
-    // C++ Reference: BifrostPieceSmashSystem.cpp:142 + LogosItemNotice:145-153
     if reward_item_type == 4 || reward_item_id == 379_068_000 {
         let (char_name, personal_rank) = world
             .with_session(sid, |h| {
@@ -2177,14 +2088,11 @@ async fn bifrost_piece_exchange(
 
 // ── Item Seal System ─────────────────────────────────────────────────
 //
-// C++ Reference: `SealHandler.cpp`
 //
 // Sub-opcode 8 of WIZ_ITEM_UPGRADE.
 // Four operations: LOCK (seal), UNLOCK (unseal), BOUND, UNBOUND.
 
 /// Send seal result to client.
-///
-/// C++ Reference: `SealHandler.cpp:444` — result packet
 async fn send_seal_result(
     session: &mut ClientSession,
     seal_type: u8,
@@ -2205,8 +2113,6 @@ async fn send_seal_result(
 }
 
 /// Process item seal operations (lock/unlock/bind/unbind).
-///
-/// C++ Reference: `SealHandler.cpp:354-540` — `CUser::ItemSealProcess(Packet& pkt)`
 async fn item_seal_process(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -2239,8 +2145,6 @@ async fn item_seal_process(
 }
 
 /// ITEM_LOCK — seal an item (costs 1M gold, requires VIP password).
-///
-/// C++ Reference: `SealHandler.cpp:370-420`
 async fn item_seal_lock(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -2325,8 +2229,6 @@ async fn item_seal_lock(
 }
 
 /// ITEM_UNLOCK — unseal an item (requires VIP password).
-///
-/// C++ Reference: `SealHandler.cpp:420-470`
 async fn item_seal_unlock(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -2379,7 +2281,7 @@ async fn item_seal_unlock(
         return send_seal_result(session, SEAL_UNLOCK, 2, item_id, src_pos).await;
     }
 
-    // Restore original flag — C++ Reference: SealHandler.cpp:463-468
+    // Restore original flag
     world.update_inventory(sid, |inv| {
         if actual_slot < inv.len() && inv[actual_slot].item_id == item_id {
             let o_flag = inv[actual_slot].original_flag;
@@ -2406,8 +2308,6 @@ async fn item_seal_unlock(
 }
 
 /// ITEM_BOUND — bind a Krowaz item (no password, no cost).
-///
-/// C++ Reference: `SealHandler.cpp:470-510`
 async fn item_seal_bound(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -2475,8 +2375,6 @@ async fn item_seal_bound(
 }
 
 /// ITEM_UNBOUND — unbind an item (requires VIP password + binding scrolls).
-///
-/// C++ Reference: `SealHandler.cpp:510-560`
 async fn item_seal_unbound(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -2529,7 +2427,6 @@ async fn item_seal_unbound(
     }
 
     // Binding scroll cost — need `m_Bound` count from item table
-    // C++ Reference: SealHandler.cpp:553 — CheckExistItem(810890000, pTable->m_Bound)
     let bound_count = item_table.bound.unwrap_or(0) as u16;
     if bound_count > 0 && !world.check_exist_item(sid, BINDING_SCROLL_ID, bound_count) {
         return send_seal_result(session, SEAL_UNBOUND, 2, item_id, src_pos).await;
@@ -2563,8 +2460,6 @@ async fn item_seal_unbound(
 // ── Pet Hatching (sub=6) ──────────────────────────────────────────────
 
 /// Send a pet hatching failure response.
-///
-/// C++ Reference: `PetMainHandler.cpp:607-613` — error packet format.
 async fn send_pet_hatching_fail(session: &mut ClientSession, error_code: u8) -> anyhow::Result<()> {
     let mut pkt = Packet::new(Opcode::WizItemUpgrade as u8);
     pkt.write_u8(PET_HATCHING);
@@ -2575,14 +2470,10 @@ async fn send_pet_hatching_fail(session: &mut ClientSession, error_code: u8) -> 
 }
 
 /// Handle pet hatching — convert an egg item into a pet kaul.
-///
-/// C++ Reference: `CUser::HactchingTransformExchange()` in `PetMainHandler.cpp:550-668`
-///
 /// Packet format (from client, after sub-opcode):
 /// ```text
 /// [u32 npc_id] [i32 item_id] [i8 slot_pos] [dbyte_string pet_name]
 /// ```
-///
 /// DByte mode: pet_name uses u16 length prefix.
 async fn pet_hatching(
     session: &mut ClientSession,
@@ -2759,7 +2650,6 @@ async fn pet_hatching(
     session.send_packet(&pkt).await?;
 
     // Send pet spawn info packet — opens the pet status window on client.
-    // C++ Reference: CUser::PetSpawnProcess(false) — called after successful hatching.
     let spawn_info = super::pet::PetSpawnInfo {
         index: pet_index,
         name: pet_name.clone(),
@@ -2787,8 +2677,6 @@ async fn pet_hatching(
 // ── Pet Image Transform (sub=10) ──────────────────────────────────────
 
 /// Send a pet image transform failure response.
-///
-/// C++ Reference: `PetMainHandler.cpp:413-416` — error uses sub=10.
 async fn send_pet_transform_fail(session: &mut ClientSession) -> anyhow::Result<()> {
     let mut pkt = Packet::new(Opcode::WizItemUpgrade as u8);
     pkt.write_u8(PET_IMAGE_TRANSFORM);
@@ -2799,14 +2687,10 @@ async fn send_pet_transform_fail(session: &mut ClientSession) -> anyhow::Result<
 }
 
 /// Handle pet image transform — change pet appearance via transform recipe.
-///
-/// C++ Reference: `CUser::HatchingImageTransformExchange()` in `PetMainHandler.cpp:389-548`
-///
 /// Packet format (from client, after sub-opcode):
 /// ```text
 /// [u32 npc_id] [u32 item0] [u8 pos0] [u32 item1] [u8 pos1] [u32 item2] [u8 pos2] [u32 item3] [u8 pos3]
 /// ```
-///
 /// item0 = pet kaul, item1 = catalyst (used for recipe matching), item2/3 = optional.
 /// Success response uses sub=6 (PET_HATCHING), NOT sub=10.
 async fn pet_image_transform(
@@ -2935,7 +2819,7 @@ async fn pet_image_transform(
         }
     });
 
-    // Send SendStackChange for catalyst (C++ PetMainHandler.cpp:512-513)
+    // Send SendStackChange for catalyst
     let catalyst_info = world
         .get_inventory_slot(sid, catalyst_slot)
         .unwrap_or_default();
@@ -3001,8 +2885,6 @@ async fn pet_image_transform(
 }
 
 /// Fire-and-forget immediate DB save for a single inventory slot.
-///
-/// C++ Reference: `g_DBAgent.UpdateUserSealItem()` — called after each seal operation.
 fn save_seal_item_async(session: &ClientSession, slot_idx: usize) {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -3730,7 +3612,6 @@ mod tests {
     }
 
     /// Test OBJECT_ANVIL broadcast uses NPC ID, not player ID.
-    /// C++ Reference: ItemUpgradeSystem.cpp:641-645 — GetTargetID()
     #[test]
     fn test_object_anvil_broadcast_uses_npc_id() {
         use ko_protocol::Packet;
@@ -3813,7 +3694,6 @@ mod tests {
 
     // ── Sprint 285: Required items validation ───────────────────────────
 
-    /// C++ Reference: ItemUpgradeSystem.cpp:487-505
     /// After finding upgrade settings, both ReqItem1 and ReqItem2 must be
     /// verified to exist in the client items list AND in the player's inventory.
     #[test]
@@ -3840,7 +3720,6 @@ mod tests {
 
     // ── Sprint 320: gen_rate cap ────────────────────────────────────
 
-    /// C++ Reference: ItemUpgradeSystem.cpp:521-522 — gen_rate capped at 10000.
     #[test]
     fn test_gen_rate_cap_at_10000() {
         let mut gen_rate: u32 = 15000;

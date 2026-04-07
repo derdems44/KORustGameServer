@@ -1,18 +1,11 @@
 //! WIZ_GENDER_CHANGE (0x8D) handler — race/gender/appearance change.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/GenderJobChangeHandler.cpp:5-70`
-//!
 //! ## Flow
-//!
 //! 1. Client sends `[u8 sub] [u8 race] [u8 face] [u32 hair]`
 //! 2. Server validates: item exists, race matches nation/class, face/hair > 0
 //! 3. On success: updates appearance, consumes item, region re-broadcast
 //! 4. Response: `[u8 result] [u8 race] [u8 face] [u32 hair] [u8 class]` or `[u8 0]` on fail
-//!
 //! ## Item Required
-//!
 //! - `ITEM_GENDER_CHANGE (810594000)`
-//!
 //! ## Disabled during Cinderella event (checked in dispatch)
 
 #[cfg(test)]
@@ -33,22 +26,15 @@ use crate::race_constants::{
 };
 
 /// Gender Change scroll item ID.
-///
-/// C++ Reference: `Define.h` — `#define ITEM_GENDER_CHANGE 810594000`
 #[cfg(test)]
 const ITEM_GENDER_CHANGE: u32 = 810594000;
 
 /// Handle WIZ_GENDER_CHANGE from the client.
-///
-/// C++ Reference: `GenderChangeV2(Packet & pkt)` in `GenderJobChangeHandler.cpp:5-70`
-///
 /// **v2525 CONFLICT**: Client opcode 0x8D = WizTitle_2 (title sub-system),
 /// NOT GenderChange. The v2525 client's handler at `0x99F720` dispatches
 /// sub 0/1/2 as title operations. Sending GenderChange S2C packets on 0x8D
 /// causes the client to misinterpret the data as title commands.
-///
 /// We accept C2S but respond with a WIZ_CHAT notice instead of 0x8D packets.
-///
 /// Packet format: `[u8 sub] [u8 new_race] [u8 new_face] [u32 new_hair]`
 pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
@@ -70,8 +56,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
 }
 
 /// Original implementation (v2525 conflict blocks this — preserved for future client versions).
-///
-/// C++ Reference: `GenderChangeV2(Packet & pkt)` in `GenderJobChangeHandler.cpp:5-70`
 #[cfg(test)]
 #[allow(dead_code)]
 async fn handle_impl(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
@@ -79,7 +63,6 @@ async fn handle_impl(session: &mut ClientSession, pkt: Packet) -> anyhow::Result
     let sid = session.session_id();
 
     // State validation
-    // C++ Reference: GenderJobChangeHandler.cpp:9-16 — 8 busy state checks
     if world.is_player_dead(sid)
         || world.is_trading(sid)
         || world.is_store_open(sid)
@@ -139,7 +122,6 @@ async fn handle_impl(session: &mut ClientSession, pkt: Packet) -> anyhow::Result
     }
 
     // Validate race/nation compatibility
-    // C++ Reference: GenderJobChangeHandler.cpp:30-45
     if !validate_race_nation(new_race, ch.nation) {
         send_fail(session).await?;
         return Ok(());
@@ -194,7 +176,6 @@ async fn handle_impl(session: &mut ClientSession, pkt: Packet) -> anyhow::Result
     );
     world.broadcast_to_zone(pos.zone_id, Arc::new(in_pkt), Some(sid));
 
-    // C++ Reference: GenderJobChangeHandler.cpp:54-55 — InitType4(); RecastSavedMagic();
     world.clear_all_buffs(sid, false);
     world.set_user_ability(sid);
     world.recast_saved_magic(sid);
@@ -211,13 +192,10 @@ async fn handle_impl(session: &mut ClientSession, pkt: Packet) -> anyhow::Result
 }
 
 /// Validate that the new race is compatible with the player's nation.
-///
-/// C++ Reference: `GenderJobChangeHandler.cpp:30`
 /// ```c++
 /// if (gRace < 10 && GetNation() != 1 || (gRace > 10 && GetNation() != 2) || (gRace > 5 && GetNation() == 1))
 ///     goto fail_return;
 /// ```
-///
 /// - Karus (nation=1): races 1-4 only (race > 5 rejected — Kurians cannot gender change)
 /// - El Morad (nation=2): races 11-14
 #[cfg(test)]
@@ -237,7 +215,6 @@ fn validate_race_nation(race: u8, nation: u8) -> bool {
 }
 
 /// Send a gender change failure response.
-///
 /// C++ format: `[u8 result=0]`
 #[cfg(test)]
 #[allow(dead_code)]

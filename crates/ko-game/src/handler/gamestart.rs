@@ -1,7 +1,4 @@
 //! WIZ_GAMESTART (0x0D) handler — game world entry.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CharacterSelectionHandler.cpp:1004-1197`
-//!
 //! Two-phase handshake:
 //! - Phase 1 (sub-opcode 1): Server sends SendMyInfo, then empty WIZ_GAMESTART.
 //! - Phase 2 (sub-opcode 2): Server transitions user to in-game state.
@@ -41,7 +38,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         1 => handle_phase1(session).await,
         2 => handle_phase2(session).await,
         _ => {
-            // C++ Reference: CharacterSelectionHandler.cpp:1010 — goDisconnect()
             // Invalid sub-opcode disconnects the client.
             tracing::warn!(
                 "[{}] Invalid gamestart sub-opcode: {} — disconnecting",
@@ -54,9 +50,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Phase 1: Send SendMyInfo packet, then empty WIZ_GAMESTART.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:1018-1091`
-/// C++ Reference: `UserInfoSystem.cpp:10-262` (SendMyInfo)
 async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
     let char_id = session.character_id().unwrap_or("unknown").to_string();
 
@@ -91,7 +84,6 @@ async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
     let items = items_result?;
 
     // Process achieve summary for cover/skill title IDs
-    // C++ Reference: UserInfoSystem.cpp:240-241 — sends m_sCoverTitle, m_sSkillTitle
     let (cover_title, skill_title) = {
         let mut ct: u16 = 0;
         let mut st: u16 = 0;
@@ -114,7 +106,6 @@ async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
     };
 
     // Process genie data
-    // C++ Reference: DBAgent.cpp — LoadGenieData, called before SendMyInfo
     let genie_time: u16 = match genie_result {
         Ok(Some(genie)) => {
             let abs_ts = genie.genie_time.max(0) as u32;
@@ -166,7 +157,6 @@ async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
     };
 
     // Process return symbol data
-    // C++ Reference: KnightUserReturnSystem.cpp:24-43
     let return_symbol_ok: u32 = if let Ok(Some(ret)) = return_result {
         let ok_val = ret.return_symbol_ok.unwrap_or(0) as u32;
         let time_val = ret.return_symbol_time.unwrap_or(0);
@@ -182,13 +172,12 @@ async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
     };
 
     // Process daily operation cooldowns
-    // C++ Reference: LoadServerData.cpp:951 — LoadUserDailyOpTable
     if let Ok(Some(row)) = daily_op_result {
         let data = crate::world::types::UserDailyOp::from_row(&row);
         session.world().daily_ops.insert(char_id.clone(), data);
     }
 
-    // Load user rankings (NP symbols) — C++ Reference: UserInfoSystem.cpp:33
+    // Load user rankings (NP symbols)
     {
         let world = session.world();
         let sid = session.session_id();
@@ -201,7 +190,6 @@ async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // Build WIZ_MYINFO packet
-    // C++ Reference: UserInfoSystem.cpp:30-245
     let mut pkt = Packet::new(Opcode::WizMyInfo as u8);
 
     // SByte mode starts here — character name uses u8 length prefix
@@ -234,7 +222,6 @@ async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
     pkt.write_i16(ch.points as i16); // points (+3044, sub_61EE80 = i16)
 
     // MaxExp for level — C++ m_iMaxExp is int64 (8 bytes)
-    // C++ Reference: User.h:392 — int64 m_iMaxExp
     // C++ SendMyInfo: result << m_iMaxExp << m_iExp (UserInfoSystem.cpp:59-60)
     // C++ sets m_iMaxExp = GetExpByLevel(level, rebirth) at CharacterSelectionHandler.cpp:753
     let max_exp = session.world().get_exp_by_level(ch.level as u8, 0);
@@ -245,7 +232,6 @@ async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
     pkt.write_u32(ch.loyalty_monthly as u32); // monthly loyalty
 
     // Clan section — SNIFFER-VERIFIED format from original server (session 45).
-    // IDA decompile suggested a different format, but byte-by-byte comparison with
     // the original server's MyInfo proves the OLD C++ format is what the client expects:
     //   clanID(i16) + fame(u8) + [conditional clan data] + cape(u16) + cape_rgb(u32) + unknown(8)
     let clan_id = ch.knights;
@@ -291,8 +277,6 @@ async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
     pkt.write_bytes(&[0u8; 8]);
 
     // HP/MP — use proper coefficient-based formula
-    // C++ Reference: CharacterSelectionHandler.cpp:751 calls SetUserAbility() before SendMyInfo
-    // C++ Reference: UserHealtMagicSpSystem.cpp:246 — HP = HP_COEFF * level^2 * STA + ...
     let temp_ch = CharacterInfo {
         session_id: 0,
         name: String::new(),
@@ -359,7 +343,7 @@ async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
     pkt.write_i16(max_mp); // max MP (base, no item bonuses)
     pkt.write_i16(ch.mp); // current MP (from DB)
 
-    // Weight — C++ Reference: UserAbilityHandler.cpp:147
+    // Weight
     // m_sMaxWeight = (STR + level) * 50 + bonuses
     pkt.write_u32(abilities.max_weight); // max weight
     pkt.write_u32(0); // current weight (recalculated after inventory load in phase 2)
@@ -378,7 +362,6 @@ async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
     pkt.write_u8(0); // CHA item bonus
 
     // Combat stats — updated in phase 2 via SendItemMove(1,1)
-    // C++ m_sTotalHit and m_sTotalAc require full SetUserAbility with equipped items
     pkt.write_u16(0); // total hit (corrected by SendItemMove in phase 2)
     pkt.write_u16(0); // total AC (corrected by SendItemMove in phase 2)
 
@@ -721,8 +704,6 @@ async fn handle_phase1(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Phase 2: Upgrade session to in-game mode, register in world, broadcast.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:1092-1174`
 async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     let char_id = session.character_id().unwrap_or("unknown").to_string();
 
@@ -746,7 +727,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     let items = items_result?;
 
     // Load mute state from DB
-    // C++ Reference: DBAgent.cpp:560 — m_mutetimestatus loaded on login
     if ch.mute_status != 0 {
         let world = session.world();
         world.update_session(session.session_id(), |h| {
@@ -763,7 +743,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     // Use DB values directly for HP/MP. set_user_ability() (called after inventory
     // load in phase 2, line 726) will recalculate max_hp/mp with item bonuses and
     // cap hp/mp if they exceed the new max.
-    // C++ Reference: CharacterSelectionHandler.cpp:751 — SetUserAbility() adjusts HP/MP.
     let hp = ch.hp;
     let mp = ch.mp;
     // Temporary max_hp/mp from DB — will be overwritten by set_user_ability().
@@ -771,7 +750,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     let max_mp = ch.mp;
 
     // Resolve bind point — use DB bind_px/bind_pz if set.
-    // C++ Reference: DBAgent.cpp — bind, bind_px, bind_pz persist across sessions.
     // bind <= 0 means no bind point → bind_zone=0 so /town falls through to
     // start_position for the current zone instead of always warping to Moradon.
     let bind_zone = if ch.bind > 0 { ch.bind as u8 } else { 0 };
@@ -795,7 +773,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     };
 
     // Pre-compute skill points from normalized DB columns.
-    // C++ m_bstrSkill is [0..9] (index 9 unused at runtime)
     let skill_points: [u8; 10] = [
         ch.skill0 as u8,
         ch.skill1 as u8,
@@ -871,7 +848,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
         item_weight: 0,
         max_weight: 0,
         // State: restore dead state if HP <= 0, otherwise standing
-        // C++ Reference: CharacterSelectionHandler.cpp:1142-1143
         res_hp_type: if hp <= 0 { 0x03 } else { 0x01 },
         // Rivalry: no rival on login
         rival_id: -1,
@@ -892,7 +868,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     };
 
     // ── ishome zone safety checks ──────────────────────────────────────
-    // C++ Reference: CharacterSelectionHandler.cpp:709-745
     // If the player's saved zone is invalid (event ended, wrong nation, restricted),
     // relocate them to Moradon before entering the game world.
     let raw_zone = if ch.zone > 0 {
@@ -955,7 +930,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     world.register_ingame(session.session_id(), char_info, position);
 
     // 3-seal. Load sealed_exp from DB and apply to character.
-    // C++ Reference: DBAgent.cpp — sealed_exp loaded on login from user_seal_exp table.
     {
         let seal_repo = ko_db::repositories::user_data::UserDataRepository::new(&pool);
         match seal_repo.load_seal_exp(&char_id).await {
@@ -978,7 +952,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 3a. ZoneOnlineRewardStart — initialize zone online reward timers
-    // C++ Reference: CharacterSelectionHandler.cpp:1097 — ZoneOnlineRewardStart()
     // Must be called after register_ingame so the session handle exists.
     crate::systems::zone_rewards::zone_online_reward_start(&world, session.session_id());
 
@@ -1002,7 +975,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     world.set_inventory(session.session_id(), inventory);
 
     // 3b1. Remove expired items from inventory/warehouse/VIP warehouse on login.
-    // C++ Reference: CharacterSelectionHandler.cpp:1038 — UpdateCheckItemTime()
     {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1014,10 +986,9 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     // 3b2. DEFERRED — set_user_ability + send_item_move_refresh moved to END of Phase 2.
     // SNIFFER EVIDENCE: Original server sends WIZ_ITEM_MOVE (seq 43) AFTER knights/friends/quest
     // (seq 36-42), NOT at the beginning. Sending it too early clears bag items from MyInfo.
-    // See Frida proof: CHK10 has bag[0-3], CHK11 (after item_move) they're GONE.
+
 
     // 3b3. Detect fairy (CFAIRY=48) and robin loot (SHOULDER=5) on login.
-    // C++ Reference: DBAgent.cpp:639-644
     {
         let sid = session.session_id();
         const SHOULDER_SLOT: usize = 5;
@@ -1045,16 +1016,13 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 3c. Load premium subscriptions from DB and populate session premium_map
-    // C++ Reference: DBAgent.cpp — AccountPremiumData load path
     load_account_premiums(session).await;
 
     // 3d-kc. Load Knight Cash (KC) and TL balances from DB
-    // C++ Reference: `CDBAgent::LoadKnightCash()` — `DBAgent.cpp:5280-5299`
     // Loads CashPoint and BonusCashPoint from TB_USER for this account.
     crate::handler::knight_cash::load_kc_balances(session).await;
 
     // 3d. Load flash time state from DB and restore bonuses
-    // C++ Reference: CharacterSelectionHandler.cpp:1157-1158
     {
         let sid = session.session_id();
         let now = std::time::SystemTime::now()
@@ -1112,10 +1080,9 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     region::broadcast_user_in(session).await?;
 
     // 7b. If the player is dead on login, broadcast death animation so the
-    //     client shows the revive UI — C++ Reference: CharacterSelectionHandler.cpp:1143
+    //     client shows the revive UI
     if hp <= 0 {
         // 7b1. OnDeathLostExpCalc — recalculate lost EXP on dead-on-login
-        // C++ Reference: CharacterSelectionHandler.cpp:1140 — m_iLostExp = OnDeathLostExpCalc(m_iMaxExp)
         // Stores lost_exp in session for resurrection skill EXP recovery.
         {
             let s = session.session_id();
@@ -1133,7 +1100,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
         }
 
         // 7b2. CheckRespawnScroll — check for respawn scrolls in inventory
-        // C++ Reference: CharacterSelectionHandler.cpp:1141 — CheckRespawnScroll()
         check_respawn_scroll_on_login(&world, session).await;
 
         let mut dead_pkt = Packet::new(Opcode::WizDead as u8);
@@ -1150,7 +1116,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 7c. OpenEtcSkill — auto-complete class-specific skill prerequisite quests
-    // C++ Reference: QuestHandler.cpp:45-57 — OpenEtcSkill(true)
     //   if (bAuto && !g_pMain->pServerSetting.AutoQuestSkill) return;
     // Sets quest_state=2 (completed) for class skill quests if AutoQuestSkill
     // is enabled. No packet sent; just quest state manipulation.
@@ -1171,8 +1136,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     quest::send_quest_data(session).await?;
 
     // 8b. Load daily quest progress from DB and send to client
-    // C++ Reference: QuestDatabase.cpp:63-96 — load from binary blob + fill missing quests
-    // C++ Reference: CharacterSelectionHandler.cpp:904 — DailyQuestSendList() via SendLists()
     {
         let pool = session.pool().clone();
         let sid = session.session_id();
@@ -1195,7 +1158,7 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
             }
         }
 
-        // Fill missing quests with default Ongoing state (C++ QuestDatabase.cpp:84-96)
+        // Fill missing quests with default Ongoing state
         let all_defs = world.get_all_daily_quests();
         for def in &all_defs {
             dq_map
@@ -1222,18 +1185,15 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     load_and_recast_saved_magic(session).await;
 
     // 9b. BlinkStart — spawn invulnerability (10s)
-    // C++ Reference: CharacterSelectionHandler.cpp:1152 — `BlinkStart()`
     // Must be called AFTER RecastSavedMagic but BEFORE other sends.
     // activate_blink internally checks for GM, transformation, war zone, etc.
     crate::handler::regene::activate_blink(session, zone_id)?;
 
     // 9c. TempleEventGetActiveEventTime — send active temple event timer
-    // C++ Reference: CharacterSelectionHandler.cpp:1145 — TempleEventGetActiveEventTime(this)
     // Reconnecting players see the BDW/Chaos/Juraid event timer if an event is active.
     crate::systems::event_room::send_active_event_time(&world, session.session_id());
 
     // 10. Load perk data from DB and send perk info to client
-    // C++ Reference: CharacterSelectionHandler.cpp:1104 — Send_myPerks()
     crate::handler::perks::load_user_perks(session).await;
     if let Err(e) = crate::handler::perks::send_my_perks(session).await {
         tracing::warn!(
@@ -1245,7 +1205,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 11. Send initial Kurian SP if applicable
-    // C++ Reference: CharacterSelectionHandler.cpp — SendKurianSpChange after game entry
     {
         let max_sp = stats::calculate_max_sp(ch.class as u16, skill_points[8]);
         if max_sp > 0 {
@@ -1257,13 +1216,11 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 12. Send saved skill bar data so the client restores shortcuts on login
-    // C++ Reference: UserSkillShortcutSystem.cpp:49-53 — SkillDataLoad
     // The client normally requests this via WIZ_SKILLDATA(SKILL_DATA_LOAD),
     // but auto-sending on game entry ensures the skill bar persists across sessions.
     send_skill_bar_data(session).await;
 
     // 13. PK zone ranking — add player to ranking if in a PK zone
-    // C++ Reference: User.cpp:1920-1929 — PlayerKillingAddPlayerRank on zone entry
     // GMs are excluded from ranking (C++ NewRankingSystem.cpp:512 — if (isGM()) return;)
     let sid = session.session_id();
     let player_nation = ch.nation as u8;
@@ -1277,8 +1234,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 14. GmListProcess(false) — add to GM online list if GM
-    // C++ Reference: CharacterSelectionHandler.cpp:1103 — GmListProcess(false)
-    // C++ ref: User.cpp:4986 — isGM() || isGMUser() — authority=0 or authority=2
     if player_authority == 0 || player_authority == 2 {
         world.gm_list_add(&char_id);
         let gm_pkt = world.build_gm_list_packet();
@@ -1286,7 +1241,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 14d. GM invisible on login
-    // C++ Reference: CharacterSelectionHandler.cpp:1033 — if (isGM()) m_bAbnormalType = ABNORMAL_INVISIBLE;
     // AUTHORITY_GAME_MASTER = 0 → auto-invisible on login
     if player_authority == 0 {
         world.update_session(sid, |h| {
@@ -1295,7 +1249,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 14b. Load user achievement data from DB into session
-    // C++ Reference: CDBAgent::LoadAchieveData() — called during character selection
     {
         let achieve_repo = ko_db::repositories::achieve::AchieveRepository::new(&pool);
         match achieve_repo.load_user_achieves(&char_id).await {
@@ -1338,7 +1291,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
                     h.achieve_summary.cover_id = summary.cover_id as u16;
                     h.achieve_summary.skill_id = summary.skill_id as u16;
                     // Set login time for play_time tracking
-                    // C++ Reference: AchieveHandler.cpp:55 — m_bAchieveLoginTime
                     h.achieve_login_time = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
@@ -1346,7 +1298,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
                 });
 
                 // 14c. Restore skill title stat bonuses from DB
-                // C++ Reference: CDBAgent::LoadAchieveData — restores title bonuses on load
                 let skill_id = summary.skill_id as u16;
                 if skill_id > 0 {
                     let main_entry = world.achieve_main(skill_id as i32);
@@ -1372,7 +1323,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
                 }
 
                 // 14d. Set cover_title on CharacterInfo for broadcast
-                // C++ Reference: CDBAgent::LoadAchieveData — resolves m_sCoverTitle
                 let cover_id = summary.cover_id as u16;
                 if cover_id > 0 {
                     let resolved = world
@@ -1398,7 +1348,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 14e. Send persistent login messages (send_type=1)
-    // C++ Reference: CharacterSelectionHandler.cpp:1106-1127 — m_SendMessageArray
     {
         let login_msgs = world.get_login_messages();
         for msg in &login_msgs {
@@ -1421,7 +1370,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 15. RobChaosSkillItems — remove leftover chaos skill items on login
-    // C++ Reference: CharacterSelectionHandler.cpp:1134 — RobChaosSkillItems()
     // NOTE: C++ does NOT check zone, removes unconditionally on login.
     {
         use crate::handler::dead::{ITEM_DRAIN_RESTORE, ITEM_KILLING_BLADE, ITEM_LIGHT_PIT};
@@ -1432,7 +1380,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 15b. AchieveNormalCountAdd(AchieveReachLevel) — update level-based achievements
-    // C++ Reference: CharacterSelectionHandler.cpp:1132
     // if (GetLevel() >= 1 && GetLevel() <= g_pMain->m_byMaxLevel)
     //     AchieveNormalCountAdd(UserAchieveNormalTypes::AchieveReachLevel, 0, nullptr);
     {
@@ -1443,12 +1390,10 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 16. KnightsClanBuffUpdate(true) — increment online member count, broadcast bonus
-    // C++ Reference: CharacterSelectionHandler.cpp:1139 — if (isInClan()) KnightsClanBuffUpdate(true)
     if ch.knights > 0 {
         world.knights_clan_buff_update(ch.knights as u16, true, sid);
 
         // 16b. SendClanPremium — send clan premium status to client on game entry
-        // C++ Reference: CharacterSelectionHandler.cpp:1063-1078
         // C++ calls SendClanPremium(pKnights, false) which checks isInPremium()
         // and sets m_bClanPremiumInUse = 13 if active.
         let now = std::time::SystemTime::now()
@@ -1476,7 +1421,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 17. ChangeFame — promote commander back to chief if still clan leader
-    // C++ Reference: CharacterSelectionHandler.cpp:1160
     // if (GetFame() == COMMAND_CAPTAIN && isClanLeader()) ChangeFame(CHIEF);
     // After a war ends, commanders should revert to CHIEF if they're the clan leader.
     {
@@ -1511,7 +1455,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 17b. War commander promotion on login
-    // C++ Reference: CharacterSelectionHandler.cpp:1181-1196
     // if (isWarOpen() && name in m_CommanderArray && fame != COMMAND_CAPTAIN) ChangeFame(COMMAND_CAPTAIN)
     {
         let fame = ch.fame as u8;
@@ -1534,7 +1477,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 18. Daily Reward — send current state on login
-    // C++ Reference: HandleHShieldSoftwareDailyReward() via SendLists()
     if let Err(e) = crate::handler::ext_hook::send_daily_reward_on_login(session).await {
         tracing::warn!(
             "[{}] Failed to send daily reward for {}: {}",
@@ -1545,7 +1487,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 19. Collection Race game-entry refresh.
-    // C++ Reference: CollectionRaceHandler.cpp:231-283 — CUser::CollectionRaceFirstLoad()
     // Sends the current CR event state so reconnecting players see the event UI.
     {
         let cr = world.collection_race_event().clone();
@@ -1559,14 +1500,12 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
         }
     }
 
-    // ── SendLists — C++ Reference: CUser::SendLists() ─────────────────────
+    // ── SendLists
     tracing::info!("[{}] Phase2 step20: SendLists begin", session.addr());
-    // C++ Reference: CharacterSelectionHandler.cpp:901-914
     // Order: SendAntiAfkList, SendWheelData, DailyQuestSendList (already sent),
     //        PusRefundSendList, SendEventTimerList
 
     // 20a. Anti-AFK NPC list.
-    // C++ Reference: CUser::SendAntiAfkList() — CharacterSelectionHandler.cpp:1208-1228
     if let Err(e) = super::ext_hook::send_anti_afk_list(session).await {
         tracing::warn!(
             "[{}] Failed to send anti-afk list for {}: {}",
@@ -1577,7 +1516,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 20b. Wheel of Fun data.
-    // C++ Reference: CUser::SendWheelData() — WheelOfFun.cpp
     if let Err(e) = super::wheel_of_fun::send_wheel_data(session).await {
         tracing::warn!(
             "[{}] Failed to send wheel data for {}: {}",
@@ -1588,7 +1526,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 20c. PUS refund list (cash item refunds pending for this account).
-    // C++ Reference: CUser::PusRefundSendList() — PusRefund.cpp
     if let Err(e) = super::pus_refund::load_and_send_refund_list(session).await {
         tracing::warn!(
             "[{}] Failed to send PUS refund list for {}: {}",
@@ -1599,7 +1536,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 20d. Event timer schedule list.
-    // C++ Reference: CUser::SendEventTimerList() — CharacterSelectionHandler.cpp:917-931
     if let Err(e) = super::ext_hook::send_event_timer_list(session).await {
         tracing::warn!(
             "[{}] Failed to send event timer list for {}: {}",
@@ -1610,7 +1546,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 20e. Right-click exchange item lists (6 packets by exchange type).
-    // C++ Reference: HandleHShieldSoftwareRightExchangeLoadderHandler() — XGuard.cpp:3052-3147
     if let Err(e) = super::ext_hook::send_right_exchange_list(session).await {
         tracing::warn!(
             "[{}] Failed to send right exchange list for {}: {}",
@@ -1621,7 +1556,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 20f. Lottery game start state (if active).
-    // C++ Reference: CUser::LotteryGameStartSend() — called from SendLists path.
     {
         let lottery_proc = world.lottery_process().clone();
         if let Err(e) = super::lottery::send_on_game_entry(session, &lottery_proc).await {
@@ -1635,7 +1569,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 20g. Letter unread notification — notify client if there are unread letters.
-    // C++ Reference: CDBAgent::GetUnreadLetterCount — called from SendLists path.
     {
         let letter_repo = ko_db::repositories::letter::LetterRepository::new(&pool);
         match letter_repo.count_unread(&char_id).await {
@@ -1662,7 +1595,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 20h. Send preset stat/skill reset cost.
-    // C++ Reference: CharacterSelectionHandler.cpp:1170 — SendPresetReqMoney()
     {
         let level = world
             .get_character_info(session.session_id())
@@ -1681,7 +1613,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 20i. Send CastleSiegeWarfareFlag when logging in at Delos.
-    // C++ Reference: CharacterSelectionHandler.cpp:1171-1173
     if zone_id == ZONE_DELOS {
         let owner_clan = world.get_csw_master_knights();
         let flag_pkt = super::siege::build_castle_flag_packet(&world, owner_clan);
@@ -1689,7 +1620,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 20j. Send ZindanWar score when logging in at a special event zone.
-    // C++ Reference: CharacterSelectionHandler.cpp:1161-1163
     if crate::handler::attack::is_in_special_event_zone(zone_id) && world.is_zindan_event_opened() {
         let pkt = {
             let zws = world.zindan_war_state.read();
@@ -1711,7 +1641,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 21. Load daily rank raw stats from DB.
-    // C++ Reference: DBAgent.cpp:5471-5498 — LOAD_DAILY_RANK_USER(?)
     {
         let dr_repo = ko_db::repositories::daily_rank::DailyRankRepository::new(&pool);
         match dr_repo.load_user_stats(&char_id).await {
@@ -1898,7 +1827,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 25. Welcome message from server_settings.
-    // C++ Reference: CUser::SendLoginNotice() — disabled for v2525 (#if __VERSION < 2369),
     // but WIZ_CHAT type 7 works in v2525. Send if welcome_msg is non-empty.
     {
         let welcome_msg = world.get_server_settings().and_then(|s| {
@@ -1958,9 +1886,6 @@ async fn handle_phase2(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Check if a player's saved zone requires relocation on login.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:709-745`
-///
 /// Returns `Some((zone, x, z))` if the player must be relocated, `None` if safe.
 /// When relocation is needed, the target zone is usually Moradon with
 /// nation-specific start_position coords.
@@ -2013,19 +1938,16 @@ fn check_ishome_relocation(
     }
 
     // 5. Cinderella war active → kick from any zone (C++ line 714 first condition)
-    // C++: g_pMain->pCindWar.isON()
     if !ishome && world.is_cinderella_active() {
         ishome = true;
     }
 
     // 6. In temple event zone → kick (C++ line 714 second condition)
-    // C++: isInTotalTempleEventZone() — Unit.h:154-166 covers 11 zones
     if !ishome && is_in_total_temple_event_zone(zone_id) {
         ishome = true;
     }
 
     // 6b. War PK zone kickout during active war (C++ line 714 third condition)
-    // C++: isOpenWarZoneKickOutOtherZone() && isWarOpen()
     // Unit.h:168-174: Ardream, RLB, Ronark, Bifrost, Krowaz Dominion
     if !ishome && world.is_war_open() && is_war_zone_kickout(zone_id) {
         ishome = true;
@@ -2088,8 +2010,6 @@ fn check_ishome_relocation(
 }
 
 /// Get Moradon relocation coordinates using start_position table.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:727-741`
 /// Falls back to hardcoded Moradon coords if start_position lookup fails.
 fn get_moradon_coords(nation: u8, world: &crate::world::WorldState) -> Option<(u16, f32, f32)> {
     use rand::Rng;
@@ -2120,8 +2040,6 @@ fn get_moradon_coords(nation: u8, world: &crate::world::WorldState) -> Option<(u
 }
 
 /// PK zone check for ishome relocation.
-///
-/// C++ Reference: `Unit::isInPKZone()` — simplified version for login safety.
 fn is_pk_zone_for_ishome(zone_id: u16) -> bool {
     use crate::world::{ZONE_ARDREAM, ZONE_RONARK_LAND, ZONE_RONARK_LAND_BASE};
     zone_id == ZONE_RONARK_LAND
@@ -2131,8 +2049,6 @@ fn is_pk_zone_for_ishome(zone_id: u16) -> bool {
 }
 
 /// Check if zone is a total temple event zone (always kick on login).
-///
-/// C++ Reference: `Unit.h:154-166` — `isInTotalTempleEventZone()`
 /// Covers: BDW(84), Chaos(85), Juraid(87), Stone(81-83), FT(55),
 /// Dungeon Defence(89), Draki Tower(95), Under Castle(86), Knight Royale(76).
 fn is_in_total_temple_event_zone(zone_id: u16) -> bool {
@@ -2143,8 +2059,6 @@ fn is_in_total_temple_event_zone(zone_id: u16) -> bool {
 }
 
 /// Check if zone qualifies for war-zone kickout during active war.
-///
-/// C++ Reference: `Unit.h:168-174` — `isOpenWarZoneKickOutOtherZone()`
 /// Covers: Ardream(10), RLB(72), Ronark Land(71), Bifrost(31), Krowaz Dominion(75).
 fn is_war_zone_kickout(zone_id: u16) -> bool {
     zone_id == ZONE_ARDREAM
@@ -2171,9 +2085,6 @@ fn parse_skill_data(str_skill: &Option<String>) -> [u8; 9] {
 }
 
 /// Re-send WIZ_MYINFO from in-memory state (no DB hit).
-///
-/// C++ Reference: `CUser::SendMyInfo()` in `UserInfoSystem.cpp:10-262`
-///
 /// Called when the client needs a full character info refresh (e.g. after +gm toggle).
 /// Unlike phase 1 gamestart, this reads ALL data from WorldState session handles.
 pub(crate) async fn send_myinfo_refresh(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -2349,7 +2260,6 @@ pub(crate) async fn send_myinfo_refresh(session: &mut ClientSession) -> anyhow::
     pkt.write_i8(p_out);
 
     // ── Skills (9 bytes: m_bstrSkill[0..9]) ─────────────────────────
-    // C++ Reference: UserInfoSystem.cpp:166 — result.append(m_bstrSkill, 9)
     for i in 0..9 {
         pkt.write_u8(ch.skill_points.get(i).copied().unwrap_or(0));
     }
@@ -2471,9 +2381,7 @@ pub(crate) async fn send_myinfo_refresh(session: &mut ClientSession) -> anyhow::
 }
 
 /// Load premium subscriptions for the WIZ_MYINFO packet (phase 1).
-///
 /// Returns a list of (premium_type, remaining_hours) entries and the premium_in_use value.
-/// C++ Reference: `UserInfoSystem.cpp:199-214` — SendMyInfo premium section
 async fn load_premium_for_myinfo(pool: &ko_db::DbPool, account_id: &str) -> (Vec<(u8, u16)>, u8) {
     let repo = PremiumRepository::new(pool);
     let rows = match repo.load_account_premium(account_id).await {
@@ -2517,9 +2425,7 @@ async fn load_premium_for_myinfo(pool: &ko_db::DbPool, account_id: &str) -> (Vec
 }
 
 /// Load account premium subscriptions from DB and populate session premium_map.
-///
 /// Called during phase 2 (game entry) to wire premium state into the session.
-/// C++ Reference: `CDBAgent::AccountPremiumData()` load path
 async fn load_account_premiums(session: &mut ClientSession) {
     let account_id = match session.account_id() {
         Some(id) => id.to_string(),
@@ -2601,10 +2507,7 @@ async fn load_account_premiums(session: &mut ClientSession) {
 }
 
 /// Load saved magic from DB and populate the session's saved_magic_map.
-///
 /// After loading, iterates each saved buff and re-applies it (recast).
-/// C++ Reference: `CDBAgent::LoadSavedMagic` + `CUser::RecastSavedMagic`
-///
 /// In C++, RecastSavedMagic creates a MagicInstance with bIsRecastingSavedMagic=true
 /// and calls Run(). For now we simply load the map so saved durations are tracked;
 /// the buffs will be re-applied via the Type4 system on next cast or via
@@ -2648,7 +2551,6 @@ async fn load_and_recast_saved_magic(session: &mut ClientSession) {
     world.load_saved_magic(sid, &entries);
 
     // Recast saved magic — restore persistent buffs on login
-    // C++ Reference: CharacterSelectionHandler.cpp:1150-1151 — InitType4(); RecastSavedMagic();
     world.clear_all_buffs(sid, false);
     let recast_count = world.recast_saved_magic(sid);
 
@@ -2662,14 +2564,10 @@ async fn load_and_recast_saved_magic(session: &mut ClientSession) {
 }
 
 /// Auto-send saved skill bar data during game entry.
-///
 /// Loads the character's skill shortcut data from the database and sends
 /// a WIZ_SKILLDATA(SKILL_DATA_LOAD) response packet. This ensures the
 /// client's skill bar is restored on login without requiring an explicit
 /// client request.
-///
-/// C++ Reference: `UserSkillShortcutSystem.cpp:49-53` — `CUser::SkillDataLoad`
-/// C++ Reference: `DatabaseThread.cpp:1333-1340` — `CUser::ReqSkillDataLoad`
 async fn send_skill_bar_data(session: &mut ClientSession) {
     let char_name = match session.world().get_character_info(session.session_id()) {
         Some(ch) => ch.name.clone(),
@@ -2732,14 +2630,12 @@ async fn send_skill_bar_data(session: &mut ClientSession) {
     }
 }
 
-/// Respawn scroll item IDs — C++ Reference: `UserHealtMagicSpSystem.cpp:964-977`
+/// Respawn scroll item IDs
 const RESPAWN_SCROLL_IDS: [u32; 7] = [
     800036000, 800039000, 910022000, 900699000, 810036000, 900136000, 910948000,
 ];
 
 /// Check inventory for respawn scrolls when the player logs in dead.
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:961-985` — `CUser::CheckRespawnScroll()`
 /// If any of the 7 respawn scroll IDs are found in the bag inventory with count >= 1,
 /// sends WIZ_DEAD with sub-opcode 18483 so the client shows the scroll-revive UI.
 async fn check_respawn_scroll_on_login(
@@ -2771,8 +2667,6 @@ async fn check_respawn_scroll_on_login(
 }
 
 /// Check if a zone qualifies for PK zone ranking tracking.
-///
-/// C++ Reference: `User.cpp:1920-1926` — zones that trigger `PlayerKillingAddPlayerRank()`.
 /// Ardream, Ronark Land, Ronark Land Base, and Bifrost are PK ranking zones.
 fn is_pk_ranking_zone(zone_id: u16) -> bool {
     zone_id == ZONE_ARDREAM
@@ -2782,12 +2676,9 @@ fn is_pk_ranking_zone(zone_id: u16) -> bool {
 }
 
 /// Check and update level-based normal achievements on login.
-///
-/// C++ Reference: `CUser::AchieveNormalCountAdd(AchieveReachLevel, 0, nullptr)`
 /// - CharacterSelectionHandler.cpp:1132
 /// - AchieveHandler.cpp:471-510 (AchieveNormalCountAdd)
 /// - AchieveHandler.cpp:787-793 (AchieveNormalCheck — AchieveReachLevel case)
-///
 /// Iterates user's achieve_map, finds normal-type achievements with
 /// AchieveReachLevel sub-type, sets count to current level, and marks
 /// as finished if count threshold is met.
@@ -2906,14 +2797,9 @@ fn achieve_normal_reach_level(
 }
 
 /// Auto-complete class-specific skill prerequisite quests.
-///
-/// C++ Reference: `CUser::OpenEtcSkill(true)` in `QuestHandler.cpp:45-57`
-/// Decompile (GameServer.exe.c:370028): level >= 0x46 (70) check required.
-///
-/// Logic per quest (decompile lines 370044-370049):
+/// Logic per quest :
 ///   1. Ensure quest entry exists (SaveEvent with state 0)
 ///   2. If quest state != 2 (completed), mark as completed (SaveEvent with state 2)
-///
 /// Quest IDs by class (from `_getEtcList(false)`):
 /// - Warrior:  334, 359, 365, 273, 390
 /// - Rogue:    335, 347, 360, 366, 273
@@ -2928,7 +2814,6 @@ fn open_etc_skill(
 ) {
     use super::quest::job_group_check;
 
-    // Decompile: `if ( ... && this->m_bLevel >= 0x46u )` -- level >= 70 required
     if level < 70 {
         return;
     }
@@ -2960,7 +2845,6 @@ fn open_etc_skill(
         return;
     }
 
-    // Decompile logic (370044-370049):
     //   for each quest_id:
     //     SaveEvent(id, 0)  -- ensure entry exists with state 0
     //     if GetData(id) is null OR QuestState != 2:
@@ -3457,7 +3341,6 @@ mod tests {
     /// Integration: HP/MP formulas use proper coefficient-based calculation.
     ///
     /// Verifies: recalculate_abilities() uses quadratic level^2 formula.
-    /// C++ Reference: UserHealtMagicSpSystem.cpp:246 — HP_COEFF * level^2 * STA
     #[test]
     fn test_integration_hp_mp_uses_coefficient_formulas() {
         use ko_db::models::CoefficientRow;
@@ -3617,7 +3500,6 @@ mod tests {
     // ── Sprint 283: BlinkStart on game entry ────────────────────────────
 
     /// Verify that activate_blink is called during game start phase 2.
-    /// C++ Reference: CharacterSelectionHandler.cpp:1152 — `BlinkStart()` called
     /// immediately after InitType4() + RecastSavedMagic().
     #[test]
     fn test_blink_on_game_start_constants() {
@@ -3743,7 +3625,6 @@ mod tests {
     }
 
     /// Test login message chat packet format.
-    /// C++ Reference: CharacterSelectionHandler.cpp:1125 — system_msg=23, sender_id=-1
     #[test]
     fn test_login_message_chat_packet_format() {
         let pkt = super::super::chat::build_chat_packet(
@@ -3768,7 +3649,6 @@ mod tests {
     }
 
     /// Test GM authority values for GM list access.
-    /// C++ ref: User.cpp:4986 — isGM() || isGMUser()
     #[test]
     fn test_gm_list_authority_values() {
         let is_gm_or_gmuser = |auth: u8| auth == 0 || auth == 2;
@@ -4032,7 +3912,7 @@ mod tests {
         }
     }
 
-    /// Respawn scroll magic code 18483 matches C++ reference.
+    /// Respawn scroll magic code 18483 matches expected value.
     #[test]
     fn test_respawn_scroll_magic_code() {
         // C++ UserHealtMagicSpSystem.cpp:977 — WIZ_DEAD sub-opcode 18483

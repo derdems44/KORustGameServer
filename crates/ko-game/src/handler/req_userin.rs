@@ -1,25 +1,16 @@
 //! WIZ_REQ_USERIN (0x16) handler — respond with user info for requested IDs.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:2005-2106`
-//!
 //! When the client receives a region user list (WIZ_REGIONCHANGE), it requests
 //! detailed info for each user it doesn't know about via this opcode.
-//!
 //! ## Request (Client -> Server)
-//!
 //! | Type  | Description                  |
 //! |-------|------------------------------|
 //! | u16le | Requested user count         |
 //! | u32le | Socket ID (repeated count×)  |
-//!
 //! ## Response (Server -> Client) — compressed
-//!
 //! | Type  | Description                  |
 //! |-------|------------------------------|
 //! | u16le | Actual user count returned   |
-//!
 //! Per user:
-//!
 //! | Type  | Description                  |
 //! |-------|------------------------------|
 //! | u8    | Type marker (0x00)           |

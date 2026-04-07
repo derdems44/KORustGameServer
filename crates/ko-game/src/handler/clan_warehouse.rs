@@ -1,14 +1,10 @@
 //! WIZ_CLAN_WAREHOUSE (0xD1) handler — clan (shared) warehouse.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/ClanBank.cpp`
-//!
-//! Sub-opcodes (C++ `ClanBankOpcodes` in `packets.h:716-723`):
+//! Sub-opcodes (`ClanBankOpcodes` in `packets.h:716-723`):
 //! - 1 = ClanBankOpen: Load + send all 192 clan warehouse slots
 //! - 2 = ClanBankInput: Move item from inventory -> clan warehouse
 //! - 3 = ClanBankOutput: Move item from clan warehouse -> inventory
 //! - 4 = ClanBankMove: Rearrange items within clan warehouse
 //! - 5 = ClanBankInventoryMove: Rearrange items within inventory (while bank open)
-//!
 //! Access rules:
 //! - Open: any clan member
 //! - Input (deposit): any clan member
@@ -31,7 +27,7 @@ use crate::world::{
     ITEM_GOLD, ITEM_NO_TRADE_MAX, ITEM_NO_TRADE_MIN,
 };
 
-/// Clan warehouse sub-opcodes (C++ `ClanBankOpcodes` in `packets.h:716-723`).
+/// Clan warehouse sub-opcodes (`ClanBankOpcodes` in `packets.h:716-723`).
 const CLAN_BANK_OPEN: u8 = 0x01;
 const CLAN_BANK_INPUT: u8 = 0x02;
 const CLAN_BANK_OUTPUT: u8 = 0x03;
@@ -46,7 +42,6 @@ use crate::inventory_constants::{ITEMS_PER_PAGE, WAREHOUSE_MAX};
 use crate::clan_constants::{CHIEF, VICECHIEF};
 
 /// In-memory clan warehouse cache: clan_id -> (items, gold).
-///
 /// Shared across all sessions. Loaded lazily from DB on first ClanBankOpen.
 /// Modified in-memory by Input/Output/Move, persisted to DB asynchronously.
 static CLAN_WAREHOUSES: LazyLock<DashMap<u16, ClanWarehouseData>> = LazyLock::new(DashMap::new);
@@ -84,12 +79,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let sub_opcode = reader.read_u8().unwrap_or(0);
 
     // Genie state check — genie blocks clan warehouse.
-    // C++ Reference: ClanBank.cpp:13 — if (isInGenie()) { WarehouseSendError(opcode); return; }
     if world.with_session(sid, |h| h.genie_active).unwrap_or(false) {
         return session.send_packet(&build_result(sub_opcode, 0)).await;
     }
 
-    // Clan premium gate — C++ Reference: ClanBank.cpp:63-74
+    // Clan premium gate
     //   if (g_pMain->pServerSetting.ClanBankWithPremium) {
     //     if (!isInClan() || !sClanPremStatus) → fail;
     //   }
@@ -133,8 +127,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
 /// Common validation: must be in-game, not dead, not trading, not merchanting,
 /// not mining, not fishing.
-///
-/// C++ Reference: ClanBank.cpp — repeated checks at top of each sub-handler.
 fn validate_basic_state(session: &ClientSession) -> bool {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -206,9 +198,6 @@ async fn ensure_loaded(session: &ClientSession, clan_id: u16) -> anyhow::Result<
 }
 
 /// Handle ClanBankOpen (sub-opcode 1).
-///
-/// C++ Reference: ClanBank.cpp:41-117
-///
 /// Packet in: `[u8 sub=1] [u16 npc_id]`
 /// Packet out (success): `[u8 sub=1] [u8 1] [u32 clan_gold]` + 192 items
 /// Packet out (fail): `[u8 sub=1] [u8 0]`
@@ -219,7 +208,6 @@ async fn handle_open(
     let npc_id = reader.read_u16().unwrap_or(0);
 
     // NPC range check — prevent remote clan warehouse access
-    // C++ Reference: ClanBank.cpp — validates NPC proximity before allowing access
     if !session
         .world()
         .is_in_npc_range(session.session_id(), npc_id as u32)
@@ -312,9 +300,6 @@ async fn handle_open(
 }
 
 /// Handle ClanBankInput (sub-opcode 2) — inventory -> clan warehouse.
-///
-/// C++ Reference: ClanBank.cpp:119-344
-///
 /// Packet in: `[u8 sub=2] [u16 npc_id] [u32 item_id] [u8 page] [u8 src_pos] [u8 dst_pos] [u32 count]`
 async fn handle_input(
     session: &mut ClientSession,
@@ -581,7 +566,6 @@ async fn handle_input(
     save_inventory_slot_async(session, src_slot_idx);
 
     // Send clan warehouse deposit notification to all clan members
-    // C++ Reference: ClanBank.cpp:298-338
     send_clan_bank_notice(&world, clan_id, sid, item_id, count, true);
 
     // FerihaLog: ClanBankInsertLog (deposit)
@@ -617,9 +601,6 @@ async fn handle_input(
 }
 
 /// Handle ClanBankOutput (sub-opcode 3) — clan warehouse -> inventory.
-///
-/// C++ Reference: ClanBank.cpp:346-579
-///
 /// Packet in: `[u8 sub=3] [u16 npc_id] [u32 item_id] [u8 page] [u8 src_pos] [u8 dst_pos] [u32 count]`
 async fn handle_output(
     session: &mut ClientSession,
@@ -882,7 +863,6 @@ async fn handle_output(
     save_inventory_slot_async(session, dst_slot_idx);
 
     // Send clan warehouse withdraw notification to all clan members
-    // C++ Reference: ClanBank.cpp:533-573
     send_clan_bank_notice(&world, clan_id, sid, item_id, count, false);
 
     // FerihaLog: ClanBankInsertLog (withdraw)
@@ -918,9 +898,6 @@ async fn handle_output(
 }
 
 /// Handle ClanBankMove (sub-opcode 4) — rearrange within clan warehouse.
-///
-/// C++ Reference: ClanBank.cpp:581-683
-///
 /// Packet in: `[u8 sub=4] [u16 npc_id] [u32 item_id] [u8 page] [u8 src_pos] [u8 dst_pos]`
 async fn handle_move(
     session: &mut ClientSession,
@@ -1051,9 +1028,6 @@ async fn handle_move(
 
 /// Handle ClanBankInventoryMove (sub-opcode 5) — rearrange items within
 /// inventory while clan warehouse UI is open.
-///
-/// C++ Reference: ClanBank.cpp:685-784
-///
 /// Packet in: `[u8 sub=5] [u16 npc_id] [u32 item_id] [u8 page] [u8 src_pos] [u8 dst_pos]`
 async fn handle_inventory_move(
     session: &mut ClientSession,
@@ -1235,8 +1209,6 @@ pub fn evict_cache(clan_id: u16) {
 }
 
 /// Send clan warehouse deposit/withdraw notification to all clan members.
-///
-/// C++ Reference: `ClanBank.cpp:298-338` (deposit) and `:533-573` (withdraw).
 /// Uses `ChatType::Gm` (12) for the notification, which displays as a system message.
 fn send_clan_bank_notice(
     world: &std::sync::Arc<crate::world::WorldState>,

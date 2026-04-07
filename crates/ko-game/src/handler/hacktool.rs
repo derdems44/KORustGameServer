@@ -1,7 +1,4 @@
 //! WIZ_HACKTOOL (0x72) handler — hack tool detection.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:509,641,916`
-//!
 //! The C++ server ignores this packet entirely (`break;` with no processing).
 //! We do the same — accept and discard silently.
 

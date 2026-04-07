@@ -1,10 +1,7 @@
 //! Bot patrol waypoint data for PK zones.
-//!
-//! C++ Reference: `BotMovement.cpp` — `MoveProcessRonarkLandTown()` and
 //! `MoveProcessArdreamLandTown()`. Each zone has pre-defined patrol routes
 //! with nation-specific coordinates. Bots randomly select a route on spawn
 //! or after completing a route.
-//!
 //! Data format: each waypoint is `(karus_x, karus_z, elmo_x, elmo_z)`.
 //! A `(0, 0)` coordinate means the waypoint is invalid for that nation.
 
@@ -14,18 +11,13 @@ use crate::world::NATION_KARUS;
 // ── Route count per zone ────────────────────────────────────────────────
 
 /// Number of patrol routes for Ronark Land.
-///
-/// C++ Reference: `BotHandler.h:481` — `s_MoveProcess = myrand(1, 10)`
 const RONARK_ROUTE_COUNT: u8 = 10;
 
 /// Number of patrol routes for Ardream.
-///
-/// C++ Reference: `BotMovement.cpp:167-213` — `ZoneArdreamMoveType`
 const ARDREAM_ROUTE_COUNT: u8 = 10;
 
 // ── Max waypoint counts per route (Ronark Land) ─────────────────────────
 //
-// C++ Reference: `BotMovement.cpp:215-342` — `ZoneRonarkLandMoveType`
 // Format: (karus_max, elmo_max)
 
 const RONARK_MAX: [(u8, u8); 10] = [
@@ -43,7 +35,6 @@ const RONARK_MAX: [(u8, u8); 10] = [
 
 // ── Max waypoint counts per route (Ardream) ─────────────────────────────
 //
-// C++ Reference: `BotMovement.cpp:167-213` — `ZoneArdreamMoveType`
 
 const ARDREAM_MAX: [(u8, u8); 10] = [
     (14, 14), // Route 1
@@ -579,9 +570,6 @@ const ARDREAM_ROUTES: [&[(i16, i16, i16, i16)]; 10] = [
 // ── Public API ──────────────────────────────────────────────────────────
 
 /// Select a random patrol route for the given zone.
-///
-/// C++ Reference: `BotHandler.h:481` — `s_MoveProcess = myrand(1, 10)`
-///
 /// Returns a route ID (1-based) or 0 if the zone has no routes.
 pub fn random_route(zone_id: u16) -> u8 {
     let count = match zone_id {
@@ -594,9 +582,6 @@ pub fn random_route(zone_id: u16) -> u8 {
 }
 
 /// Get the maximum waypoint count for a route in the given zone/nation.
-///
-/// C++ Reference: `ZoneRonarkLandMoveType` / `ZoneArdreamMoveType`
-///
 /// Returns the max waypoint index (1-based) for the given route and nation.
 pub fn route_max_waypoints(zone_id: u16, route: u8, nation: u8) -> u8 {
     let maxes = match zone_id {
@@ -617,9 +602,6 @@ pub fn route_max_waypoints(zone_id: u16, route: u8, nation: u8) -> u8 {
 }
 
 /// Get the waypoint coordinates for a specific route/state/nation.
-///
-/// C++ Reference: `MoveProcessRonarkLandTown` / `MoveProcessArdreamLandTown`
-///
 /// `route` is 1-based, `state` is 1-based (matching C++ m_MoveState).
 /// Returns `Some((x, z))` or `None` if the waypoint is invalid (0,0) or
 /// the state/route is out of range.

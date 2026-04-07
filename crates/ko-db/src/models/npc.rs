@@ -1,11 +1,8 @@
 //! NPC/Monster model structs — maps to `npc_template` and `npc_spawn` PostgreSQL tables.
-//!
-//! C++ Reference:
 //! - `shared/database/NpcTableSet.h` — K_NPC / K_MONSTER table loader
 //! - `shared/database/NpcPosSet.h` — K_NPCPOS spawn position loader
 
 /// A single NPC/Monster template row from the database.
-///
 /// Represents the static data for an NPC or monster type (stats, appearance, etc.).
 /// K_NPC and K_MONSTER share the same 45-column schema; `is_monster` distinguishes them.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -59,8 +56,6 @@ pub struct NpcTemplateRow {
 }
 
 /// A monster summon list entry — defines summonable monsters from scrolls/stones.
-///
-/// C++ Reference: `MONSTER_SUMMON_LIST` table
 /// bType: 1 = standard summon, 2 = special summon
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MonsterSummonRow {
@@ -72,8 +67,6 @@ pub struct MonsterSummonRow {
 }
 
 /// A monster respawn loop entry — chain respawn when a monster dies.
-///
-/// C++ Reference: `MONSTER_RESPAWNLOOP_LIST` table
 /// When monster `idead` dies, monster `iborn` spawns after `deadtime` seconds.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MonsterRespawnLoopRow {
@@ -85,8 +78,6 @@ pub struct MonsterRespawnLoopRow {
 }
 
 /// A boss random spawn pool entry — candidate positions for timed boss spawns.
-///
-/// C++ Reference: `MONSTER_BOSS_RANDOM_SPAWN` table
 /// Multiple entries per stage; a random one is picked for each spawn cycle.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MonsterBossRandomSpawnRow {
@@ -102,7 +93,6 @@ pub struct MonsterBossRandomSpawnRow {
 }
 
 /// A single NPC spawn position row from the database.
-///
 /// Defines where and how many NPCs/Monsters should spawn in a zone.
 /// Coordinates are raw world units (NOT multiplied by 100).
 #[derive(Debug, Clone, sqlx::FromRow)]

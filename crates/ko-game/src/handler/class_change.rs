@@ -1,11 +1,5 @@
 //! WIZ_CLASS_CHANGE (0x34) handler — job change, stat reset, skill reset.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/NPCHandler.cpp:227-414`
-//!                `KOOriginalGameServer/GameServer/GenderJobChangeHandler.cpp:139-528`
-//!                `KOOriginalGameServer/GameServer/UserSkillStatPointSystem.cpp:45-491`
-//!
 //! ## Sub-opcodes
-//!
 //! | Sub | Name                | Description                          |
 //! |-----|---------------------|--------------------------------------|
 //! | 0x01| CLASS_CHANGE_REQ    | Client checks if class change is ok  |
@@ -23,36 +17,24 @@ use std::sync::Arc;
 use crate::session::{ClientSession, SessionState};
 
 // ── Sub-opcode constants ─────────────────────────────────────────────
-/// C++ Reference: `packets.h:761`
 const CLASS_CHANGE_REQ: u8 = 0x01;
-/// C++ Reference: `packets.h:762`
 const CLASS_CHANGE_RESULT: u8 = 0x02;
-/// C++ Reference: `packets.h:763`
 const ALL_POINT_CHANGE: u8 = 0x03;
-/// C++ Reference: `packets.h:764`
 const ALL_SKILLPT_CHANGE: u8 = 0x04;
-/// C++ Reference: `packets.h:765`
 const CHANGE_MONEY_REQ: u8 = 0x05;
-/// C++ Reference: `packets.h:766`
 const PROMOTE_NOVICE: u8 = 0x06;
-/// C++ Reference: `packets.h` / `NPCHandler.cpp:301`
 const REB_STAT_CHANGE: u8 = 0x07;
-/// C++ Reference: `packets.h` / `NPCHandler.cpp:355`
 const REB_STAT_RESET: u8 = 0x08;
 
 /// Item required for rebirth.
-/// C++ Reference: `Define.h` — `QUALIFICATION_OF_REBITH 900579000`
 const QUALIFICATION_OF_REBIRTH: u32 = 900_579_000;
 /// Gold cost for rebirth stat reset (100M).
-/// C++ Reference: `NPCHandler.cpp:378`
 const REBIRTH_RESET_GOLD: u32 = 100_000_000;
 /// Premium types that grant free rebirth reset.
-/// C++ Reference: `NPCHandler.cpp:376-377`
 const PREMIUM_REBIRTH_FREE_1: u8 = 12;
 const PREMIUM_REBIRTH_FREE_2: u8 = 13;
 
 // ── Class constants ──────────────────────────────────────────────────
-/// C++ Reference: `GameDefine.h:12-42`
 const KARUWARRIOR: u16 = 101;
 const KARUROGUE: u16 = 102;
 const KARUWIZARD: u16 = 103;
@@ -89,13 +71,10 @@ use crate::race_constants::{
 };
 
 // ── Item constants ───────────────────────────────────────────────────
-/// C++ Reference: `Define.h:304-305`
 const ITEM_JOB_CHANGE: u32 = 700112000;
 const ITEM_JOB_CHANGE2: u32 = 700113000;
-/// C++ Reference: `Define.h:350`
 const RETURNTOKENS: u32 = 810512000;
 /// Premium type that grants free stat/skill reset.
-/// C++ Reference: `NPCHandler.cpp:255,278 — GetPremium() == 12`
 const PREMIUM_WARP: u8 = 12;
 
 use super::SLOT_MAX;
@@ -112,7 +91,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let mut reader = PacketReader::new(&pkt.data);
     let sub_opcode = reader.read_u8().unwrap_or(0);
 
-    // C++ Reference: UserSkillStatPointSystem.cpp:56,91,137 — FreeSkillandStat → free reset
     let free_by_setting = session
         .world()
         .get_server_settings()
@@ -160,9 +138,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle CLASS_CHANGE_REQ (0x01) — check if player can class change.
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:1149-1164` (ClassChangeReq)
-///
 /// Response: `[u8 CLASS_CHANGE_RESULT] [u8 result]`
 /// - 1 = can change, 2 = level too low, 3 = already changed
 async fn handle_class_change_req(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -204,13 +179,9 @@ async fn handle_class_change_req(session: &mut ClientSession) -> anyhow::Result<
 }
 
 /// Handle ALL_POINT_CHANGE (0x03) — reset all stat points.
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:116-491` (AllPointChange)
-///
 /// Response on success: `[u8 ALL_POINT_CHANGE] [u8 1] [u32 gold] [u16 str] [u16 sta]
 ///   [u16 dex] [u16 int] [u16 cha] [i16 max_hp] [i16 max_mp] [u16 total_hit]
 ///   [u16 max_weight] [u16 free_points]`
-///
 /// Response on failure: `[u8 ALL_POINT_CHANGE] [u8 result] [i32 money]`
 pub(crate) async fn handle_all_point_change(
     session: &mut ClientSession,
@@ -247,14 +218,13 @@ pub(crate) async fn handle_all_point_change(
         return Ok(());
     }
 
-    // Apply discount if active — C++ Reference: UserSkillStatPointSystem.cpp:1117-1118
+    // Apply discount if active
     let mut effective_money = money_required;
     if !free && world.is_discount_active(char_info.nation) {
         effective_money /= 2;
     }
 
     // Gold check: skip when reset is free (premium/token).
-    // C++ Reference: NPCHandler.cpp:255-257 — `AllPointChange(true)` skips cost.
     let cost = if free {
         0u32
     } else {
@@ -274,7 +244,6 @@ pub(crate) async fn handle_all_point_change(
         get_base_stats_for_class(char_info.class);
 
     // Calculate free points: 10 + (level-1)*3 + 2*(level-60) if level>60.
-    // C++ Reference: UserSkillStatPointSystem.cpp:461-465
     let mut free_points: u16 = 10 + (char_info.level as u16 - 1) * 3;
     if char_info.level > 60 {
         free_points += 2 * (char_info.level as u16 - 60);
@@ -334,11 +303,7 @@ pub(crate) async fn handle_all_point_change(
 }
 
 /// Handle ALL_SKILLPT_CHANGE (0x04) — reset all skill points.
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:69-113` (AllSkillPointChange)
-///
 /// Response on success: `[u8 ALL_SKILLPT_CHANGE] [u8 1] [u32 gold] [u8 free_skill_points]`
-///
 /// Response on failure: `[u8 ALL_SKILLPT_CHANGE] [u8 type] [i32 money]`
 pub(crate) async fn handle_all_skill_point_change(
     session: &mut ClientSession,
@@ -376,14 +341,13 @@ pub(crate) async fn handle_all_skill_point_change(
         return Ok(());
     }
 
-    // Apply discount if active — C++ Reference: UserSkillStatPointSystem.cpp:1000-1001
+    // Apply discount if active
     let mut effective_money = money_required;
     if !free && world.is_discount_active(char_info.nation) {
         effective_money /= 2;
     }
 
     // Gold check: skip when reset is free (premium/token).
-    // C++ Reference: NPCHandler.cpp:278-280 — `AllSkillPointChange(true)` skips cost.
     let cost = if free {
         0u32
     } else {
@@ -398,7 +362,6 @@ pub(crate) async fn handle_all_skill_point_change(
         return Ok(());
     }
 
-    // C++ Reference: m_bstrSkill[0] = (GetLevel() - 9) * 2
     let free_skill_points = (char_info.level.saturating_sub(9) as u16) * 2;
     let new_gold = char_info.gold.saturating_sub(cost);
 
@@ -432,9 +395,6 @@ pub(crate) async fn handle_all_skill_point_change(
 }
 
 /// Handle CHANGE_MONEY_REQ (0x05) — query cost for stat/skill reset.
-///
-/// C++ Reference: `NPCHandler.cpp:249-299`
-///
 /// Response: `[u8 CHANGE_MONEY_REQ] [i32 money]`
 async fn handle_change_money_req(session: &mut ClientSession, sub_type: u8) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -446,7 +406,6 @@ async fn handle_change_money_req(session: &mut ClientSession, sub_type: u8) -> a
     };
 
     // Premium type 12, Return Token, or FreeSkillandStat setting grants free reset.
-    // C++ Reference: NPCHandler.cpp:255,278 + UserSkillStatPointSystem.cpp:91
     let premium_type = world.with_session(sid, |h| h.premium_in_use).unwrap_or(0);
     let free_by_setting = world
         .get_server_settings()
@@ -467,12 +426,11 @@ async fn handle_change_money_req(session: &mut ClientSession, sub_type: u8) -> a
     let mut money = get_reset_money(char_info.level);
 
     // Skill point reset costs 1.5x more.
-    // C++ Reference: NPCHandler.cpp:294
     if sub_type == 2 {
         money = (money as f32 * 1.5) as i32;
     }
 
-    // Apply discount if active — C++ Reference: User.cpp:3677-3679
+    // Apply discount if active
     if world.is_discount_active(char_info.nation) {
         money /= 2;
     }
@@ -493,11 +451,7 @@ async fn handle_change_money_req(session: &mut ClientSession, sub_type: u8) -> a
 }
 
 /// Handle PROMOTE_NOVICE (0x06) — job change.
-///
-/// C++ Reference: `GenderJobChangeHandler.cpp:139-528` (JobChange)
-///
 /// Incoming: `[u8 type (0=normal, 1=master)] [u8 NewJob (1-5)]`
-///
 /// Job change result codes:
 /// - 1 = success
 /// - 2 = invalid job
@@ -557,7 +511,6 @@ async fn handle_job_change(
 
     if has_equipment {
         // Send equipment-worn error with ALL_POINT_CHANGE sub-opcode format.
-        // C++ Reference: GenderJobChangeHandler.cpp:175-178
         let mut resp = Packet::new(Opcode::WizClassChange as u8);
         resp.write_u8(ALL_POINT_CHANGE);
         resp.write_u8(4);
@@ -661,7 +614,6 @@ async fn handle_job_change(
     send_job_change_result(session, 1).await?;
 
     // Notify party members of class change.
-    // C++ Reference: NPCHandler.cpp:501-508 — ClassChange() calls SendPartyClassChange()
     super::party::broadcast_party_class_change(&world, sid, new_class);
 
     // Fire-and-forget DB saves.
@@ -710,8 +662,6 @@ async fn send_job_change_fail(session: &mut ClientSession, result_code: u8) -> a
 }
 
 /// Send rebirth result packet (used by both REB_STAT_CHANGE and REB_STAT_RESET).
-///
-/// C++ Reference: `NPCHandler.cpp:349-352,405-408`
 /// Response: `[u8 sub_opcode] [u8 result] [u32 0]`
 async fn send_reb_result(
     session: &mut ClientSession,
@@ -728,15 +678,11 @@ async fn send_reb_result(
 // ── Class / Race Helpers ─────────────────────────────────────────────
 
 /// Get the class type (class % 100).
-///
-/// C++ Reference: `GetClassType()` in `User.h`
 pub(crate) fn get_class_type(class: u16) -> u16 {
     class % 100
 }
 
 /// Check if the character is already in the target job group.
-///
-/// C++ Reference: `GenderJobChangeHandler.cpp:167-171`
 fn is_same_job_group(class: u16, new_job: u8) -> bool {
     let ct = get_class_type(class);
     match new_job {
@@ -808,9 +754,6 @@ fn has_item_in_inventory(
 }
 
 /// Determine new class and race after job change.
-///
-/// C++ Reference: `GenderJobChangeHandler.cpp:182-488` (JobChange logic)
-///
 /// Returns `Some((new_class, new_race))` on success, `None` on invalid combination.
 fn determine_new_class_and_race(
     current_class: u16,
@@ -1102,9 +1045,6 @@ fn determine_new_class_and_race(
 }
 
 /// Get base stats for a class (used during stat point reset).
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:152-457` (AllPointChange)
-///
 /// Returns `(str, sta, dex, int, cha)`.
 fn get_base_stats_for_class(class: u16) -> (u8, u8, u8, u8, u8) {
     if is_warrior(class) || is_portu_kurian(class) {
@@ -1120,8 +1060,6 @@ fn get_base_stats_for_class(class: u16) -> (u8, u8, u8, u8, u8) {
 }
 
 /// Calculate money required for stat/skill reset.
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:45-58` (getskillpointreqmoney)
 fn get_reset_money(level: u8) -> i32 {
     let base = (level as f64 * 2.0).powf(3.4) as i32;
     if level < 30 {
@@ -1195,20 +1133,14 @@ fn save_class_change_async(session: &ClientSession, new_class: u16, new_race: u8
 }
 
 /// Handle REB_STAT_CHANGE (0x07) — allocate rebirth stat points.
-///
-/// C++ Reference: `NPCHandler.cpp:301-354`
-///
 /// Incoming: `[u8 str] [u8 sta] [u8 dex] [u8 int] [u8 cha]`
 /// The 5 values must sum to exactly 2.
-///
 /// Response: `[u8 REB_STAT_CHANGE] [u8 result] [u32 0]`
 /// - 1 = success, 0 = failure
-///
 /// Requirements:
 /// - rebirth_level < 9
 /// - Sum of requested stats == 2
 /// - Must have QUALIFICATION_OF_REBIRTH item (900579000)
-///
 /// Side effects on success:
 /// - rebirth_level++
 /// - exp = 0
@@ -1230,20 +1162,17 @@ async fn handle_reb_stat_change(
         None => return Ok(()),
     };
 
-    // C++ Reference: NPCHandler.cpp:304 — if (GetRebirthLevel() > 9) return;
     if char_info.rebirth_level > 9 {
         send_reb_result(session, REB_STAT_CHANGE, 0).await?;
         return Ok(());
     }
 
-    // C++ Reference: NPCHandler.cpp:310-311 — stats must sum to exactly 2
     let total = rec_str as u16 + rec_sta as u16 + rec_dex as u16 + rec_int as u16 + rec_cha as u16;
     if total != 2 {
         send_reb_result(session, REB_STAT_CHANGE, 0).await?;
         return Ok(());
     }
 
-    // C++ Reference: NPCHandler.cpp:314 — must have QUALIFICATION_OF_REBIRTH item
     if !world.check_exist_item(sid, QUALIFICATION_OF_REBIRTH, 1) {
         send_reb_result(session, REB_STAT_CHANGE, 0).await?;
         return Ok(());
@@ -1272,7 +1201,6 @@ async fn handle_reb_stat_change(
     world.rob_item(sid, QUALIFICATION_OF_REBIRTH, 1);
 
     // Remove rebirth quests if rebirth_level < 9
-    // C++ Reference: NPCHandler.cpp:337-347 — quests 1119-1122
     if new_rebirth_level < 9 {
         world.update_session(sid, |h| {
             for qid in [1119u16, 1120, 1121, 1122] {
@@ -1327,15 +1255,10 @@ async fn handle_reb_stat_change(
 }
 
 /// Handle REB_STAT_RESET (0x08) — redistribute rebirth stat points.
-///
-/// C++ Reference: `NPCHandler.cpp:355-410`
-///
 /// Incoming: `[u8 str] [u8 sta] [u8 dex] [u8 int] [u8 cha]`
 /// The 5 values must sum to exactly `rebirth_level * 2`.
-///
 /// Response: `[u8 REB_STAT_RESET] [u8 result] [u32 0]`
 /// - 1 = success, 0 = failure
-///
 /// Requirements:
 /// - rebirth_level > 0
 /// - Sum of requested stats == rebirth_level * 2
@@ -1356,13 +1279,11 @@ async fn handle_reb_stat_reset(
         None => return Ok(()),
     };
 
-    // C++ Reference: NPCHandler.cpp:358 — if (GetRebirthLevel() == 0) return;
     if char_info.rebirth_level == 0 {
         send_reb_result(session, REB_STAT_RESET, 0).await?;
         return Ok(());
     }
 
-    // C++ Reference: NPCHandler.cpp:365-368 — sum must equal rebirth_level * 2
     let total = rec_str as u16 + rec_sta as u16 + rec_dex as u16 + rec_int as u16 + rec_cha as u16;
     let required_total = char_info.rebirth_level as u16 * 2;
     if total != required_total {
@@ -1370,7 +1291,6 @@ async fn handle_reb_stat_reset(
         return Ok(());
     }
 
-    // C++ Reference: NPCHandler.cpp:376-378 — 100M gold or premium 12/13
     let premium_type = world.with_session(sid, |h| h.premium_in_use).unwrap_or(0);
     let has_free_reset =
         premium_type == PREMIUM_REBIRTH_FREE_1 || premium_type == PREMIUM_REBIRTH_FREE_2;
@@ -1468,7 +1388,6 @@ mod tests {
         // Server -> Client: [u8 ALL_POINT_CHANGE] [u8 1] [u32 gold]
         //   [u16 str] [u16 sta] [u16 dex] [u16 int] [u16 cha]
         //   [i16 max_hp] [i16 max_mp] [u16 total_hit] [u32 max_weight] [u16 free_points]
-        // C++ Reference: UserSkillStatPointSystem.cpp:484
         //   m_sMaxWeight is uint32 (User.h:394)
         let mut pkt = Packet::new(Opcode::WizClassChange as u8);
         pkt.write_u8(ALL_POINT_CHANGE);
@@ -1790,7 +1709,6 @@ mod tests {
 
     #[test]
     fn test_job_change_triggers_disconnect() {
-        // C++ Reference: GenderJobChangeHandler.cpp:526
         // `goDisconnect("Character Changed Job.", __FUNCTION__);`
         // After a successful job change, the server disconnects the player.
         // In Rust, this is done by returning anyhow::bail!() which breaks
@@ -1807,7 +1725,6 @@ mod tests {
     // ── Sprint 328: Premium free reset tests ─────────────────────────
 
     /// Test that premium type 12 or Return Token constant is correct.
-    /// C++ Reference: Define.h:350 — RETURNTOKENS = 810512000
     #[test]
     fn test_return_token_constant() {
         assert_eq!(RETURNTOKENS, 810512000);
@@ -1815,7 +1732,6 @@ mod tests {
     }
 
     /// Test that free reset skips gold cost.
-    /// C++ Reference: NPCHandler.cpp:255-259
     #[test]
     fn test_free_reset_cost_is_zero() {
         let free = true;

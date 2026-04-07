@@ -1,16 +1,10 @@
 //! WIZ_SELECT_MSG (0x55) handler — NPC dialog menu selection.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/NPCHandler.cpp:528-599`
-//!
 //! ## Flow
-//!
-//!
 //! 1. Server sends `SelectMsg()` to client with menu buttons (from Lua quest scripts)
 //!    - Stores event IDs in `m_iSelMsgEvent[12]` and sets `m_bSelectMsgFlag`
 //! 2. Client sends `RecvSelectMsg` with the selected button index
 //!    - Packet: `[u8 menu_id] [sbyte_string lua_filename] [i8 selected_reward]`
 //! 3. Server looks up `m_iSelMsgEvent[menu_id]` and runs the quest event via Lua engine
-//!
 //! The handler validates the selection and dispatches to `quest::quest_v2_run_event`.
 
 use ko_protocol::{Opcode, Packet, PacketReader};
@@ -19,13 +13,9 @@ use tracing::debug;
 use crate::session::{ClientSession, SessionState};
 
 /// Maximum number of dialog button events.
-///
-/// C++ Reference: `Define.h:32` — `#define MAX_MESSAGE_EVENT 12`
 const MAX_MESSAGE_EVENT: usize = 12;
 
 /// Handle WIZ_SELECT_MSG from the client.
-///
-/// C++ Reference: `CUser::RecvSelectMsg` in NPCHandler.cpp:528-541
 pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -94,7 +84,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     }
 
     // Handle special case: selected_reward == -1 && flag == 5
-    // C++ Reference: NPCHandler.cpp:555-558
     let (effective_menu_id, effective_reward) = if selected_reward == -1 && select_msg_flag == 5 {
         (0u8, menu_id as i8)
     } else {
@@ -111,7 +100,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     };
 
     // Store selected reward and clear stored events in a single lock
-    // C++ Reference: NPCHandler.cpp:552 (bySelectedReward = SelectedReward)
     world.update_session(sid, |h| {
         h.by_selected_reward = effective_reward;
         h.select_msg_events = [-1; 12];
@@ -128,7 +116,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     }
 
     // Look up the quest helper to get the Lua filename
-    // C++ Reference: NPCHandler.cpp:562
     let helper = match world.get_quest_helper(quest_helper_id) {
         Some(h) => h,
         None => {
@@ -156,9 +143,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
 }
 
 /// Send a SelectMsg dialog menu to a client.
-///
-/// C++ Reference: `CUser::SelectMsg` in NPCHandler.cpp:577-599
-///
 /// Builds and sends the WIZ_SELECT_MSG packet and stores the event IDs
 /// so `RecvSelectMsg` can look them up when the player selects an option.
 #[allow(clippy::too_many_arguments)]
@@ -173,7 +157,6 @@ pub fn send_select_msg(
     lua_filename: &str,
 ) {
     // Get event SID for the packet
-    // C++ Reference: NPCHandler.cpp:587 — sends m_sEventSid (NPC proto ID)
     let event_sid = world.with_session(sid, |h| h.event_sid as u32).unwrap_or(0);
 
     // Build the packet

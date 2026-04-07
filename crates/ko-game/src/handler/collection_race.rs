@@ -1,17 +1,8 @@
 //! Collection Race event handler — WIZ_EXT_HOOK (0xE9) sub-opcode CR (0xAF).
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CollectionRaceHandler.cpp`
-//! C++ Reference: `KOOriginalGameServer/GameServer/GameDefine.h` — `_COLLECTION_RACE_EVENT`, `_CR_USER_LIST`
-//! C++ Reference: `KOOriginalGameServer/shared/packets.h` — `ExtSub::CR = 0xAF`
-//! C++ Reference: `KOOriginalGameServer/shared/database/CollectionRaceEventSet.h`
-//!
 //! ## Overview
-//!
 //! Collection Race is a server-wide timed kill-count event. Players must kill
 //! specified monsters (up to 3 types, each with a required count) to finish.
-//!
 //! ## Sub-opcode flow (ExtSub::CR = 0xAF) — SERVER → CLIENT only
-//!
 //! | sub | Direction          | Description                                    |
 //! |-----|--------------------|------------------------------------------------|
 //! | 0x00| Server → Client    | Event start broadcast (new event begins)       |
@@ -20,9 +11,7 @@
 //! | 0x03| Server → Client    | Total count update broadcast (counter change)  |
 //! | 0x04| Server → Client    | Event end / finished (hide UI)                 |
 //! | 0x05| Server → Client    | Hide event UI (player out of range/level)      |
-//!
 //! ## Packet formats (WIZ_EXT_HOOK = 0xE9)
-//!
 //! ### Start (sub=0x00) — sent to all eligible players on event start
 //! ```text
 //! 0xE9 << u8(0xAF) << u8(0x00)
@@ -31,7 +20,6 @@
 //!   << u32(event_duration_secs) << u16(total_count * rank_bug)
 //!   << u16(user_limit) << u8(nation) << sbyte_string(event_name) << u8(zone_id)
 //! ```
-//!
 //! ### Game-entry / refresh (sub=0x01) — sent to reconnecting player
 //! ```text
 //! 0xE9 << u8(0xAF) << u8(0x01)
@@ -40,28 +28,23 @@
 //!   << u32(remaining_secs) << u16(total_count * rank_bug)
 //!   << u16(user_limit) << u8(nation) << sbyte_string(event_name) << u8(zone_id)
 //! ```
-//!
 //! ### Kill progress (sub=0x02) — sent to the killing player on each kill
 //! ```text
 //! 0xE9 << u8(0xAF) << u8(0x02)
 //!   << u16(proto_id) << u16(kill_count[0]) << u16(kill_count[1]) << u16(kill_count[2])
 //! ```
-//!
 //! ### Total count update (sub=0x03) — broadcast to all eligible on completion
 //! ```text
 //! 0xE9 << u8(0xAF) << u8(0x03) << u16(total_count * rank_bug) << u16(user_limit)
 //! ```
-//!
 //! ### End / finish (sub=0x04) — sent to finisher or all on event end
 //! ```text
 //! 0xE9 << u8(0xAF) << u8(0x04)
 //! ```
-//!
 //! ### Hide (sub=0x05) — sent to player leaving eligible level/zone
 //! ```text
 //! 0xE9 << u8(0xAF) << u8(0x05)
 //! ```
-//!
 //! ## WIZ_QUEST sub=0x0A — reward packet sent on completion
 //! ```text
 //! WIZ_QUEST(0x64) << u8(0x0A)
@@ -91,43 +74,27 @@ use crate::zone::SessionId;
 pub(crate) use super::ext_hook::EXT_SUB_COLLECTION_RACE;
 
 /// Sub-opcode: event start broadcast (sent to all eligible players).
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:155-166` — build inside `ReqCollectionRaceStart`
 pub const SUB_START: u8 = 0x00;
 
 /// Sub-opcode: game-entry / refresh (sent when player enters during active event).
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:260-282` — `CUser::CollectionRaceFirstLoad()`
 pub const SUB_REFRESH: u8 = 0x01;
 
 /// Sub-opcode: kill progress update (sent to killer on each qualifying kill).
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:483-492` — `CollectionRaceSendDead()`
 pub const SUB_KILL_UPDATE: u8 = 0x02;
 
 /// Sub-opcode: total count update broadcast (sent to all on finisher).
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:374-382` — `CollectionRaceCounter()`
 pub const SUB_COUNT_UPDATE: u8 = 0x03;
 
 /// Sub-opcode: event end / player finished (sent to finisher or all on end).
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:453-458` — `CollectionRaceSendDead()`
 pub const SUB_END: u8 = 0x04;
 
 /// Sub-opcode: hide event UI.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:327-331` — `CUser::CollectionRaceHide()`
 pub const SUB_HIDE: u8 = 0x05;
 
 /// Number of monster slots per event (always 3).
-///
-/// C++ Reference: `_COLLECTION_RACE_EVENT::m_bProtoID[3]`
 pub const CR_SLOTS: usize = 3;
 
 /// Number of reward slots per event (always 3, same as monster slots).
-///
-/// C++ Reference: `_COLLECTION_RACE_EVENT::RewardItemID[3]`
 pub const CR_REWARD_SLOTS: usize = 3;
 
 use crate::world::{ITEM_COUNT, ITEM_EXP, ITEM_RANDOM};
@@ -137,8 +104,6 @@ use crate::world::{ITEM_COUNT, ITEM_EXP, ITEM_RANDOM};
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Per-user kill progress in the active Collection Race.
-///
-/// C++ Reference: `_CR_USER_LIST` in `GameDefine.h:4080`
 #[derive(Debug, Clone, Default)]
 pub struct CrUserList {
     /// How many of each monster type the user has killed.
@@ -147,13 +112,10 @@ pub struct CrUserList {
     pub is_finish: bool,
     /// How many full completions the user has done (for repeat-mode).
     ///
-    /// C++ Reference: `m_bUserStatus` — at status==1, required count is ×2.5
     pub user_status: u8,
 }
 
 /// Active Collection Race event state (server-wide singleton).
-///
-/// C++ Reference: `_COLLECTION_RACE_EVENT` in `GameDefine.h:4093`
 #[derive(Debug, Clone)]
 pub struct CollectionRaceEvent {
     /// Whether an event is currently active.
@@ -174,7 +136,6 @@ pub struct CollectionRaceEvent {
     pub event_name: String,
     /// Repeat mode: 0=finish&close, 1=repeat×2.5, 2=all-repeat
     ///
-    /// C++ Reference: `m_bCollectionEventListStatus`
     pub event_list_status: u8,
     /// Monster proto IDs for each slot (0 = unused).
     pub proto_ids: [u16; CR_SLOTS],
@@ -192,7 +153,7 @@ pub struct CollectionRaceEvent {
     pub reward_sessions: [u8; CR_REWARD_SLOTS],
     /// Total number of players who have finished.
     pub total_count: u16,
-    /// Random rank multiplier for display (C++ `m_bRankBug`).
+    /// Random rank multiplier for display
     pub rank_bug: u32,
     /// Per-user kill progress and finish status, keyed by character name (uppercase).
     pub user_list: HashMap<String, CrUserList>,
@@ -233,8 +194,6 @@ pub fn new_collection_race_event() -> SharedCollectionRaceEvent {
 }
 
 /// Static event definition loaded from DB.
-///
-/// C++ Reference: `_COLLECTION_RACE_EVENT_LIST` in `GameDefine.h:4147`
 #[derive(Debug, Clone)]
 pub struct CrEventDef {
     /// Event ID (primary key from DB).
@@ -270,11 +229,7 @@ pub struct CrEventDef {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a CR start broadcast packet (sub=0x00).
-///
 /// Sent to all eligible players when a new Collection Race event begins.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:155-166` — inside `ReqCollectionRaceStart()`
-///
 /// Wire format (all little-endian):
 /// ```text
 /// 0xE9 << u8(0xAF) << u8(0x00)
@@ -309,12 +264,8 @@ pub fn build_start_packet(ev: &CollectionRaceEvent, duration_secs: u32, nation: 
 }
 
 /// Build a CR refresh/game-entry packet (sub=0x01).
-///
 /// Sent to a player who logs in while an event is active. Includes their
 /// per-user kill progress and the adjusted required counts (×2.5 if in repeat).
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:260-282` — `CUser::CollectionRaceFirstLoad()`
-///
 /// Wire format:
 /// ```text
 /// 0xE9 << u8(0xAF) << u8(0x01)
@@ -366,11 +317,7 @@ pub fn build_refresh_packet(
 }
 
 /// Build a kill-progress update packet (sub=0x02).
-///
 /// Sent to the killer after each qualifying kill.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:483-492` — inside `CollectionRaceSendDead()`
-///
 /// Wire format:
 /// ```text
 /// 0xE9 << u8(0xAF) << u8(0x02)
@@ -389,11 +336,7 @@ pub fn build_kill_update_packet(proto_id: u16, kill_counts: [u16; CR_SLOTS]) -> 
 }
 
 /// Build a total count update broadcast packet (sub=0x03).
-///
 /// Broadcast to all eligible players when a player finishes.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:374-382` — `CollectionRaceCounter()`
-///
 /// Wire format:
 /// ```text
 /// 0xE9 << u8(0xAF) << u8(0x03) << u16(total_count * rank_bug) << u16(user_limit)
@@ -408,11 +351,7 @@ pub fn build_count_update_packet(total_count: u16, rank_bug: u32, user_limit: u1
 }
 
 /// Build an event-end / finish packet (sub=0x04).
-///
 /// Sent to the player who finishes (closes the CR UI) or to all when event ends.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:453-458`, `CollectionRaceHandler.cpp:641-644`
-///
 /// Wire format:
 /// ```text
 /// 0xE9 << u8(0xAF) << u8(0x04)
@@ -425,11 +364,7 @@ pub fn build_end_packet() -> Packet {
 }
 
 /// Build a hide packet (sub=0x05).
-///
 /// Sent when player's level is outside event range or on other exclusion events.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:327-331` — `CUser::CollectionRaceHide()`
-///
 /// Wire format:
 /// ```text
 /// 0xE9 << u8(0xAF) << u8(0x05)
@@ -442,9 +377,6 @@ pub fn build_hide_packet() -> Packet {
 }
 
 /// Build a WIZ_QUEST sub=0x0A reward packet (sent to finisher).
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:625-631` — `CUser::CollectionRaceFinish()`
-///
 /// Wire format:
 /// ```text
 /// WIZ_QUEST(0x64) << u8(0x0A)
@@ -473,9 +405,7 @@ pub fn build_quest_reward_packet(
 // Chat Helper
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Build a server-wide PUBLIC_CHAT announcement (mirrors C++ `SendChat<PUBLIC_CHAT>`).
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:203-204`, `CollectionRaceHandler.cpp:638`
+/// Build a server-wide PUBLIC_CHAT announcement (mirrors `SendChat<PUBLIC_CHAT>`).
 pub fn build_cr_announce(msg: &str) -> Packet {
     build_chat_packet(
         ChatType::Public as u8,
@@ -494,11 +424,7 @@ pub fn build_cr_announce(msg: &str) -> Packet {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Start a Collection Race event from the given definition.
-///
 /// Called by the GM command `+cropen <index>` → `CollectionRaceStart()`.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:207-229` — `CGameServerDlg::CollectionRaceStart()`
-///
 /// Returns `false` if another event is already running or definition is invalid.
 pub fn start_event(
     cr: &SharedCollectionRaceEvent,
@@ -583,8 +509,6 @@ fn apply_start(
 }
 
 /// Reset/end the active Collection Race event.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:649-661` — `CGameServerDlg::CollectionRaceDataReset()`
 pub fn reset_event(cr: &SharedCollectionRaceEvent) {
     let mut ev = cr.write();
     ev.is_active = false;
@@ -613,11 +537,8 @@ pub fn reset_event(cr: &SharedCollectionRaceEvent) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Send Collection Race state to a player on game entry.
-///
 /// Called from `gamestart` when a player enters the world while a CR event
 /// is active. Mirrors `CUser::CollectionRaceFirstLoad()`.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:231-283`
 pub async fn send_on_game_entry(
     session: &mut ClientSession,
     cr: &SharedCollectionRaceEvent,
@@ -684,18 +605,13 @@ pub async fn send_on_game_entry(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Process a monster kill by a player for the active Collection Race event.
-///
 /// Called from `handle_npc_death` for the killer when an NPC dies.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:385-493` — `CGameServerDlg::CollectionRaceSendDead()`
-///
 /// This function:
 /// 1. Checks the CR is active and the killer is in level range.
 /// 2. Increments the appropriate kill counter if the proto_id matches.
 /// 3. Checks if the player has completed all required kills.
 /// 4. If finished, awards rewards and sends counter broadcast.
 /// 5. If event user_limit reached, ends the event.
-///
 /// Returns a packet to send to the killer (kill-progress update).
 pub async fn handle_kill(
     world: &WorldState,
@@ -961,8 +877,6 @@ pub async fn handle_kill(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Give Collection Race rewards to the finisher.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:525-631` — `CUser::CollectionRaceFinish()`
 async fn give_rewards(
     world: &WorldState,
     sid: SessionId,
@@ -1011,24 +925,20 @@ async fn give_rewards(
     for (i, item_id, count, item_time) in accepted {
         match item_id {
             ITEM_GOLD => {
-                // C++: GoldGain(count)
                 world.gold_gain(sid, count);
                 debug!("[CR] gave gold reward: {} gold to sid={}", count, sid);
             }
             ITEM_EXP => {
-                // C++: ExpChange("collection race", count, true)
                 // exp_change is async — call and await directly
                 exp_change(world, sid, count as i64).await;
                 debug!("[CR] gave exp reward: {} exp to sid={}", count, sid);
             }
             ITEM_COUNT => {
-                // C++: SendLoyaltyChange("collection race", count) — uses defaults (false,false,true)
                 send_loyalty_change(world, sid, count as i32, false, false, true);
                 debug!("[CR] gave loyalty reward: {} NP to sid={}", count, sid);
             }
             ITEM_RANDOM => {
                 // Random item from pool — same pattern as daily_quest.rs:516-532
-                // C++ Reference: CollectionRaceHandler.cpp — ITEM_RANDOM virtual ID
                 let random_items = world.get_item_random_by_session(0);
                 if !random_items.is_empty() {
                     let idx = (std::time::SystemTime::now()
@@ -1096,10 +1006,7 @@ async fn give_rewards(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// End the active Collection Race event.
-///
 /// Broadcasts end packet to all eligible players and resets state.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:634-661`
 pub fn end_event(world: &WorldState, cr: &SharedCollectionRaceEvent) {
     {
         let ev = cr.read();
@@ -1116,10 +1023,7 @@ pub fn end_event(world: &WorldState, cr: &SharedCollectionRaceEvent) {
 }
 
 /// Check Collection Race timer each second.
-///
 /// Called from the second-tick background task.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:334-360` — `CollectionRaceTimer()`
 pub fn tick_timer(world: &WorldState, cr: &SharedCollectionRaceEvent, now: u32) {
     let ev = cr.read();
     if !ev.is_active {
@@ -1152,8 +1056,6 @@ pub fn tick_timer(world: &WorldState, cr: &SharedCollectionRaceEvent, now: u32) 
 }
 
 /// Broadcast a packet to all eligible players (in level range).
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:663-683` — `CGameServerDlg::CollectionRaceSend()`
 fn broadcast_to_eligible(world: &WorldState, pkt: &Packet, ev: &CollectionRaceEvent) {
     let arc_pkt = Arc::new(pkt.clone());
     let sids: Vec<SessionId> = world.all_ingame_session_ids();
@@ -1173,8 +1075,6 @@ fn broadcast_to_eligible(world: &WorldState, pkt: &Packet, ev: &CollectionRaceEv
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// GM +cropen command: open a Collection Race event by index.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:5-29` — `CUser::HandleCollectionRaceStart()`
 pub fn gm_open(world: &WorldState, event_index: i16) -> Result<&'static str, &'static str> {
     let def = match world.get_collection_race_def(event_index) {
         Some(d) => d,
@@ -1235,8 +1135,6 @@ pub fn gm_open(world: &WorldState, event_index: i16) -> Result<&'static str, &'s
 }
 
 /// GM +crclose command: close the active Collection Race event.
-///
-/// C++ Reference: `CollectionRaceHandler.cpp:32-45` — `CUser::HandleCollectionRaceClose()`
 pub fn gm_close(world: &WorldState) -> Result<&'static str, &'static str> {
     let cr = world.collection_race_event();
     {
@@ -1286,7 +1184,6 @@ mod tests {
 
     #[test]
     fn test_ext_sub_collection_race_opcode_constant() {
-        // C++ Reference: shared/packets.h:207 — CR = 0xAF
         assert_eq!(EXT_SUB_COLLECTION_RACE, 0xAF);
     }
 
@@ -1300,7 +1197,6 @@ mod tests {
 
     #[test]
     fn test_build_start_packet_format() {
-        // C++ Reference: CollectionRaceHandler.cpp:155-166
         let ev = make_active_event();
         let pkt = build_start_packet(&ev, 3600, 2); // nation=2
 
@@ -1385,7 +1281,6 @@ mod tests {
 
     #[test]
     fn test_build_kill_update_packet_format() {
-        // C++ Reference: CollectionRaceHandler.cpp:483-492
         let pkt = build_kill_update_packet(8013, [15, 20, 5]);
 
         assert_eq!(pkt.opcode, Opcode::EXT_HOOK_S2C);
@@ -1401,7 +1296,6 @@ mod tests {
 
     #[test]
     fn test_build_count_update_packet_format() {
-        // C++ Reference: CollectionRaceHandler.cpp:374-382
         let pkt = build_count_update_packet(3, 2, 2500);
 
         let mut r = PacketReader::new(&pkt.data);
@@ -1432,7 +1326,6 @@ mod tests {
 
     #[test]
     fn test_build_quest_reward_packet_format() {
-        // C++ Reference: CollectionRaceHandler.cpp:625-631
         // WIZ_QUEST(0x64) << u8(0x0A) << [3x: u32 id, u32 count] << 4x u32(0)
         let ids = [389_196_000u32, 0, 0];
         let counts = [20u32, 0, 0];

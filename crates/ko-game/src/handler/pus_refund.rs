@@ -1,19 +1,12 @@
 //! PUS Refund / Item Return handler.
-//!
-//! C++ Reference: `PusRefund.cpp` — `HandleItemReturn()`, `PusRefundSendList()`,
 //! `PusRefundPurchase()`, `ItemReturnSendErrorOpcode()`
-//!
 //! ## Overview
-//!
 //! After purchasing items from the cash shop, players have a 1-hour window
 //! to return unused items for a full refund. The refund map is loaded from
 //! DB on game entry and maintained in-memory per session.
-//!
 //! ## Wire Format
-//!
 //! All packets use `WIZ_EXT_HOOK (0xE9)` with sub-opcode `PusRefund = 0xD4`.
-//!
-//! **Sub-opcodes (C++ `enum class pusrefunopcode`):**
+//! **Sub-opcodes (`enum class pusrefunopcode`):**
 //! ```text
 //! ireturn          = 0  — client requests item return
 //! listsend         = 1  — server sends refund list on game entry
@@ -39,18 +32,13 @@ use crate::zone::SessionId;
 pub(crate) use super::ext_hook::EXT_SUB_PUS_REFUND;
 
 /// Rate limit between refund attempts (seconds).
-///
-/// C++ Reference: `PusRefund.cpp:73` — `m_pusrefundtime + 5 > UNIXTIME`
 const REFUND_COOLDOWN_SECS: u64 = 5;
 
 /// Refund window after purchase (seconds) — 1 hour.
-///
-/// C++ Reference: `PusRefund.cpp:112` — `UNIXTIME + 3600`
 const REFUND_WINDOW_SECS: u64 = 3600;
 
 // ── pusrefunopcode sub-opcodes ──────────────────────────────────────────────
 
-/// C++ Reference: `GameDefine.h:4969` — `enum class pusrefunopcode`
 mod subop {
     /// Client requests item return.
     pub const IRETURN: u8 = 0;
@@ -73,8 +61,6 @@ mod subop {
 }
 
 /// In-memory refund record for a session.
-///
-/// C++ Reference: `struct _PUS_REFUND` in `GameDefine.h:4627`
 #[derive(Debug, Clone)]
 pub struct PusRefundEntry {
     /// Game item ID.
@@ -96,8 +82,6 @@ pub struct PusRefundEntry {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build an error response packet for a refund error.
-///
-/// C++ Reference: `CUser::ItemReturnSendErrorOpcode()` — `PusRefund.cpp:157-163`
 fn build_error_packet(error_code: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
     pkt.write_u8(EXT_SUB_PUS_REFUND);
@@ -106,9 +90,6 @@ fn build_error_packet(error_code: u8) -> Packet {
 }
 
 /// Build the refund list packet sent on game entry.
-///
-/// C++ Reference: `CUser::PusRefundSendList()` — `PusRefund.cpp:39-67`
-///
 /// Wire: `[0xE9][0xD4][u8=1 (listsend)][u16 count]([u64 serial][u32 item_id][u32 price][u32 expiry])×N`
 fn build_refund_list_packet(entries: &[(u64, &PusRefundEntry)]) -> Packet {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
@@ -125,9 +106,6 @@ fn build_refund_list_packet(entries: &[(u64, &PusRefundEntry)]) -> Packet {
 }
 
 /// Build a "list add" packet to inform client of a new refundable purchase.
-///
-/// C++ Reference: `PusRefund.cpp:133-140` — `PusRefundPurchase()`
-///
 /// Wire: `[sub][u8=8][u64 serial][u32 itemid][u16 count][u32 price][u16 duration][u32 buytime][u8 buytype]`
 fn build_listadd_packet(serial: u64, entry: &PusRefundEntry) -> Packet {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
@@ -144,9 +122,6 @@ fn build_listadd_packet(serial: u64, entry: &PusRefundEntry) -> Packet {
 }
 
 /// Build the success packet after a successful item return.
-///
-/// C++ Reference: `PusRefund.cpp:100-104`
-///
 /// Wire: `[sub][u8=7][u64 serial][u32 item_id]`
 fn build_success_packet(serial: u64, item_id: u32) -> Packet {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
@@ -174,9 +149,6 @@ fn unix_now() -> u64 {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Load refund records from DB and store in session state, then send list to client.
-///
-/// C++ Reference: `CDBAgent::LoadPusRefund()` and `CUser::PusRefundSendList()`
-///
 /// Called during game entry (after character selection).
 pub async fn load_and_send_refund_list(session: &mut ClientSession) -> anyhow::Result<()> {
     let account_id = match session.account_id() {
@@ -259,8 +231,6 @@ pub async fn load_and_send_refund_list(session: &mut ClientSession) -> anyhow::R
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle `WIZ_EXT_HOOK (0xE9)` sub-opcode `PusRefund (0xD4)` from client.
-///
-/// C++ Reference: `PusRefund.cpp:68-130` — `HandleItemReturn()`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     let mut reader = PacketReader::new(&pkt.data);
     let sub = reader.read_u8().unwrap_or(0xFF);
@@ -279,8 +249,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Process an item return request.
-///
-/// C++ Reference: `CUser::HandleItemReturn()` — `PusRefund.cpp:68-130`
 async fn handle_item_return(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -293,7 +261,6 @@ async fn handle_item_return(
     let now = unix_now();
 
     // Rate limit check (5s cooldown)
-    // C++ Reference: `if (m_pusrefundtime + 5 > UNIXTIME) return error`
     let last_refund_time = world
         .with_session(sid, |h| h.pus_refund_last_time)
         .unwrap_or(0);
@@ -327,7 +294,6 @@ async fn handle_item_return(
     }
 
     // Find item in inventory by matching item_id
-    // C++ Reference: checks nSerialNum == serial && nNum == itemid
     let item_id = entry.item_id;
     let found_slot = world.with_session(sid, |h| {
         // Search bag slots (SLOT_MAX to SLOT_MAX+HAVE_MAX)
@@ -366,7 +332,6 @@ async fn handle_item_return(
     }
 
     // Clear item from inventory and send stack change to sync client UI
-    // C++ Reference: `PusRefund.cpp:78-82` — clears slot + SendStackChange
     world.update_session(sid, |h| {
         if let Some(slot) = h.inventory.get_mut(slot_idx) {
             slot.item_id = 0;
@@ -376,7 +341,6 @@ async fn handle_item_return(
     });
 
     // SendStackChange — notify client to update inventory slot
-    // C++ Reference: `SendStackChange(item_id, 0, 0, pos - SLOT_MAX, false, expiry)`
     {
         let mut sc_pkt = Packet::new(Opcode::WizItemCountChange as u8);
         sc_pkt.write_u16(1); // count_type
@@ -435,8 +399,6 @@ async fn handle_item_return(
 }
 
 /// Register a new refundable purchase (called after a successful shop purchase).
-///
-/// C++ Reference: `CUser::PusRefundPurchase()` — `PusRefund.cpp:108-140`
 pub fn register_purchase(
     world: &crate::world::WorldState,
     sid: SessionId,

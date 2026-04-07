@@ -1,8 +1,4 @@
 //! Timer_UpdateConcurrent — periodic server population update.
-//!
-//! C++ Reference: `CGameServerDlg::Timer_UpdateConcurrent()` /
-//! `CGameServerDlg::ReqUpdateConcurrent()` (ServerStartStopHandler.cpp:378-524)
-//!
 //! Counts all in-game players + active bots every 120 seconds and persists
 //! the total to the `game_server_list.concurrent_users` column so the login
 //! server can report the population to launchers.
@@ -17,18 +13,12 @@ use tracing::{debug, warn};
 use crate::world::WorldState;
 
 /// Default server number — matches `DEFAULT_SERVER_NO` in server_index.rs.
-///
-/// C++ Reference: `CGameServerDlg::m_nServerNo`
 const SERVER_NO: i16 = 1;
 
 /// Interval between concurrent user updates (120 seconds = 2 minutes).
-///
-/// C++ Reference: `sleep(120 * SECOND)` in Timer_UpdateConcurrent
 const UPDATE_INTERVAL: Duration = Duration::from_secs(120);
 
 /// Start the concurrent user update background task.
-///
-/// C++ Reference: `CGameServerDlg::Timer_UpdateConcurrent()`
 pub fn start_concurrent_update_task(
     world: Arc<WorldState>,
     pool: DbPool,
@@ -42,8 +32,6 @@ pub fn start_concurrent_update_task(
 }
 
 /// Count online players + bots and update the database.
-///
-/// C++ Reference: `CGameServerDlg::ReqUpdateConcurrent()` — iterates all
 /// users checking `isInGame()`, adds bot count, sends to DB agent.
 async fn update_concurrent_count(world: &WorldState, pool: &DbPool) {
     // Count players (sessions with an active character) + active bots

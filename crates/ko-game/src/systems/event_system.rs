@@ -1,12 +1,7 @@
 //! Event state machine coordinator and scheduler.
-//!
-//! C++ Reference: `EventMainTimer.cpp`, `EventMainSystem.cpp`
-//!
 //! This module provides the top-level event scheduling and state machine
 //! that coordinates BDW, Juraid, Chaos, and other room-based events.
-//!
 //! ## State Machine Flow
-//!
 //! ```text
 //!   Inactive ──[schedule trigger]──> Registration
 //!   Registration ──[sign timer expires]──> Active
@@ -14,9 +9,7 @@
 //!   Rewards ──[finish delay expires]──> Cleanup
 //!   Cleanup ──[rooms destroyed]──> Inactive
 //! ```
-//!
 //! ## GM Manual Override
-//!
 //! GMs can open events manually (bypassing the schedule) or close them early.
 //! Manual close triggers immediate winner determination, then proceeds to Rewards.
 
@@ -40,21 +33,14 @@ use ko_db::models::event_schedule::EventRewardRow;
 // ── Background Task ─────────────────────────────────────────────────────────
 
 /// Event tick interval in seconds.
-///
-/// C++ Reference: `VirtualEventTimer` runs every 1 second.
 const EVENT_TICK_INTERVAL_SECS: u64 = 1;
 
 /// Start the event system background task.
-///
 /// Spawns a tokio task that calls [`event_tick_at`] every second,
 /// processing BDW, Juraid, and other room-based event state machines.
-///
 /// BDW and Juraid managers are created locally within the task since they
 /// are not stored on `WorldState`.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
-///
-/// C++ Reference: `CGameServerDlg::VirtualEventTimer()` in `EventMainTimer.cpp`
 pub fn start_event_system_task(
     world: std::sync::Arc<crate::world::WorldState>,
 ) -> tokio::task::JoinHandle<()> {
@@ -71,13 +57,11 @@ pub fn start_event_system_task(
             let active_event_i16 = erm.read_temple_event(|s| s.active_event);
 
             // ── Schedule auto-trigger ─────────────────────────────────────
-            // C++ Reference: `VirtualEventTimer()` schedule loop in
             // EventMainTimer.cpp:491-523
             // When no event is active, check schedules against current time.
             if active_event_i16 < 0 {
                 if let Some((event_type, sign_secs)) = try_schedule_trigger(erm, now) {
                     // Broadcast sign-up announcement to all online players.
-                    // C++ Reference: TempleEventStart() in EventMainSystem.cpp:607-633
                     // C++ skips: isInTempleEventZone(), isInMonsterStoneZone(), ZONE_PRISON
                     let start_pkt = event_room::build_event_start_broadcast(
                         event_type as i16,
@@ -94,28 +78,23 @@ pub fn start_event_system_task(
             };
 
             // Cinderella War per-second timer tick
-            // C++ Reference: CGameServerDlg::CindirellaTimer() in CindirellaWar.cpp:706-861
             crate::handler::cinderella::cinderella_timer_tick(&world);
 
             // Wanted/Vanguard event position broadcast tick
-            // C++ Reference: WantedEventUserisMove() in User.cpp:1197-1198 (1s in Timer_UpdateSessions)
             // tick_wanted_position_broadcasts() internally throttles to 60s intervals
             crate::handler::vanguard::tick_wanted_position_broadcasts(&world, now);
 
             // Wanted event lifecycle state machine (selecting, inviting, running, finishing)
-            // C++ Reference: CGameServerDlg::NewWantedEventMainTimer() in WandetEvent.cpp:29-68
             crate::handler::vanguard::tick_wanted_event_lifecycle(&world, now);
 
             // Distribute rewards when transitioning to Rewards phase.
             //
-            // C++ Reference: `TempleEventFinish()` in `EventMainSystem.cpp:1249-1967`
             //
             // Chaos uses per-user EXP from kills/deaths (not winner/loser table rewards).
             // BDW and Juraid use the EVENT_REWARD table (winner/loser items + level bonus).
             match &action {
                 EventTickAction::TransitionedToRewards(results) => {
                     // Send winner screen to all room users before distributing rewards.
-                    // C++ Reference: TempleEventSendWinnerScreen() in EventMainSystem.cpp:442-603
                     event_room::send_winner_screen(&world, active_event_i16, now);
 
                     if active_event_i16 == 24 {
@@ -129,7 +108,6 @@ pub fn start_event_system_task(
                 }
                 EventTickAction::BdwAltarRespawns(room_ids) => {
                     // Restore altar NPC HP and broadcast respawn packet
-                    // C++ Reference: BDWMonumentAltarRespawn() in JuraidBdwFragSystem.cpp:40-44
                     //   pAltar->SetHP(pAltar->GetMaxHP());
                     {
                         let bdw_mgr = world.bdw_manager_read();
@@ -156,10 +134,6 @@ pub fn start_event_system_task(
                     // Teleport all room-assigned users into the event zone,
                     // send timer overlay packets, and create parties.
                     //
-                    // C++ Reference: `TempleEventTeleportUsers()` in
-                    // EventMainSystem.cpp:1017-1247
-                    // C++ Reference: `TempleEventCreateParties()` in
-                    // EventMainSystem.cpp:884-1014
                     let event_type = erm.read_temple_event(|s| {
                         event_room::TempleEventType::from_i16(s.active_event)
                     });
@@ -168,7 +142,6 @@ pub fn start_event_system_task(
                         event_room::teleport_users_to_event(&world, et);
 
                         // Create auto-parties for BDW and Juraid (Chaos is FFA).
-                        // C++ Reference: TempleEventCreateParties() — called
                         // after TeleportUsers for BDW and Juraid only.
                         if et != TempleEventType::ChaosDungeon {
                             event_room::temple_event_create_parties(&world, et);
@@ -179,8 +152,6 @@ pub fn start_event_system_task(
                 | EventTickAction::ManualCloseCleanup(et, user_sids) => {
                     // Per-user cleanup before kick teleport.
                     //
-                    // C++ Reference: `TempleEventKickOutUser()` in
-                    // EventMainSystem.cpp:2016-2053
                     //   - BDW: RemoveType4Buff(BUFF_TYPE_FRAGMENT_OF_MANES)
                     //   - Clear event session data
                     //
@@ -216,8 +187,6 @@ pub fn start_event_system_task(
                 EventTickAction::JuraidBridgesOpened(indices) => {
                     // Juraid bridge open — open bridge state in all rooms.
                     //
-                    // C++ Reference: `TempleEventBridgeCheck()` in
-                    // EventMainSystem.cpp:332-382
                     // C++ sends WIZ_NPC_INOUT (OUT then IN) for bridge gate NPCs,
                     // per-nation to each room. The NPC m_byGateOpen is set to 2.
                     let room_ids: Vec<u8> = juraid_mgr.room_states.keys().copied().collect();
@@ -245,7 +214,6 @@ pub fn start_event_system_task(
             }
 
             // ── Per-room finish countdown (TempleEventRoomClose) ────────
-            // C++ Reference: `TempleEventRoomClose()` in EventMainSystem.cpp:385-439
             // After the winner screen is sent (Rewards phase), each room has a
             // 20-second countdown. When it expires, users are kicked from that
             // room individually. This runs every tick during Rewards phase.
@@ -261,7 +229,6 @@ pub fn start_event_system_task(
             }
 
             // ── Monster Stone timer tick ─────────────────────────────────
-            // C++ Reference: `TempleMonsterStoneTimer()` in MonsterStoneSystem.cpp:399-418
             // Check all active rooms for expiry (30-minute timeout or 20s boss-kill grace).
             // Expired rooms: teleport users to Moradon, despawn NPCs, reset room.
             {
@@ -277,8 +244,6 @@ pub fn start_event_system_task(
                     };
 
                     // Teleport all users to Moradon and clear status
-                    // C++ Reference: TempleMonsterStoneAutoResetRoom() lines 426-434
-                    // C++ Reference: MonsterStoneSystem.cpp:432 — m_sMonsterStoneStatus = false
                     for &uid in &users {
                         world.update_session(uid, |h| {
                             h.event_room = 0;
@@ -294,7 +259,6 @@ pub fn start_event_system_task(
                     }
 
                     // Despawn all event NPCs in the room
-                    // C++ Reference: TempleMonsterStoneResetNpcs(roomid, zoneid)
                     let event_room_id = room_id + 1; // 1-based
                     world.despawn_room_npcs(zone_id as u16, event_room_id);
 
@@ -310,7 +274,6 @@ pub fn start_event_system_task(
             }
 
             // ── Draki Tower room tick ──────────────────────────────────────
-            // C++ Reference: `CUser::DrakiTowerKickTimer()` in DrakiTowerSystem.cpp:429-497
             // Called every second for each active room. Handles sub-stage expiry,
             // kick-out timers, town-out timers, and room close countdown.
             {
@@ -448,7 +411,6 @@ pub fn start_event_system_task(
             }
 
             // ── Draki Tower daily entrance limit reset ────────────────────
-            // C++ Reference: `DrakiTowerLimitReset()` — resets at 18:00:00 daily.
             {
                 use crate::handler::draki_tower;
                 let local_now = chrono::Local::now();
@@ -480,7 +442,6 @@ pub fn start_event_system_task(
             }
 
             // ── Dungeon Defence room tick ─────────────────────────────────
-            // C++ Reference: `DungeonDefenceTimer()` in DungeonDefenceSystem.cpp:240-290
             // Called every 1s for each active room. Handles spawn timers,
             // room close countdowns, and finish out timers.
             {
@@ -548,7 +509,6 @@ pub fn start_event_system_task(
                     }
 
                     // Send stage counter packet BEFORE spawning monsters
-                    // C++ Reference: SendDungeonDefenceDetail() lines 367-407
                     if let Some((max_stage, display_stage)) =
                         dungeon_defence::get_stage_display(difficulty, stage_id)
                     {
@@ -565,7 +525,6 @@ pub fn start_event_system_task(
                     }
 
                     // Spawn all monsters for this stage
-                    // C++ Reference: SummonDungeonDefenceMonsters() lines 436-457
                     for &(npc_id, is_monster, px, pz, count, dir) in &spawn_list {
                         world.spawn_event_npc_ex(
                             npc_id,
@@ -589,7 +548,6 @@ pub fn start_event_system_task(
                 }
 
                 // Process kick events
-                // C++ Reference: DungeonDefenceUserisOut() lines 293-366
                 for room_id in kick_rooms {
                     // Find all users in this DD room and teleport them to Moradon
                     let user_sids = world.collect_sessions_by(|h| {
@@ -599,7 +557,6 @@ pub fn start_event_system_task(
 
                     for sid in &user_sids {
                         // Remove Monster Coins and restore normal HP before teleport
-                        // C++ Reference: DungeonDefenceRobItemSkills() + SetMaxHp(1)
                         world.rob_all_of_item(*sid, dungeon_defence::MONSTER_COIN_ITEM);
                         world.recalculate_max_hp_mp(*sid);
                         world.update_session(*sid, |h| {
@@ -635,7 +592,6 @@ pub fn start_event_system_task(
             }
 
             // ── Forgotten Temple timer tick ───────────────────────────────
-            // C++ Reference: `ForgettenTempleTimerProc()` in FTHandler.cpp:119-187
             // Called every 1s while the event is active. Handles summon phase,
             // stage spawning, victory detection, and finish/kick logic.
             {
@@ -770,7 +726,6 @@ pub fn start_event_system_task(
             }
 
             // ── Under The Castle timer tick ───────────────────────────────
-            // C++ Reference: `UnderTheCastleTimerProc()` in UnderTheCastleSystem.cpp:240-284
             // Called every 1s while the event is active. Handles monster spawn,
             // movie trigger, countdown, and event end/kick.
             {
@@ -830,7 +785,6 @@ pub fn start_event_system_task(
                                 }
 
                                 // Register gate NPCs: trap_number 1-3 maps to gate index 0-2
-                                // C++ Reference: NpcThread.cpp — m_nSummonSpecialID gate assignment
                                 if (1..=3).contains(&trap_number) && !ids.is_empty() {
                                     under_castle::set_gate_id(
                                         utc_state,
@@ -891,7 +845,6 @@ pub fn start_event_system_task(
             }
 
             // ── Soccer event timer tick ──────────────────────────────────
-            // C++ Reference: `TempleSoccerEventTimer()` in SoccerSystem.cpp:197-327
             // Called every 1s for each Moradon zone (21-25). Handles match
             // timer countdown, ball position checks, goal detection, match
             // end, and cooldown.
@@ -964,7 +917,6 @@ pub fn start_event_system_task(
                                             );
 
                                             // Reset ball NPC to center of the field
-                                            // C++ Reference: SoccerSystem.cpp:250-256
                                             teleport_ball_npc(
                                                 &world,
                                                 npc_id,
@@ -983,7 +935,6 @@ pub fn start_event_system_task(
                                         }
                                         soccer::TEAM_COLOUR_OUTSIDE => {
                                             // Ball went out — reset to center
-                                            // C++ Reference: SoccerSystem.cpp:254-260
                                             teleport_ball_npc(
                                                 &world,
                                                 npc_id,
@@ -1011,7 +962,6 @@ pub fn start_event_system_task(
                             let end_pkt = soccer::build_end_packet(winner, blue_goals, red_goals);
 
                             // Send end packet to all registered users and teleport them
-                            // C++ Reference: SoccerSystem.cpp:280-292
                             let Some(room) = state.get_room_mut(zone_id) else {
                                 continue;
                             };
@@ -1055,7 +1005,6 @@ pub fn start_event_system_task(
             }
 
             // ── Lottery event timer tick ──────────────────────────────────
-            // C++ Reference: `LotteryEventTimer()` in LotterySystem.cpp:442-476
             // Called every 1s. Sends countdown warnings at 15/10/5/3/2/1 min
             // remaining. When time expires: draws winners, sends reward
             // letters, broadcasts winner announcement, resets state.
@@ -1067,7 +1016,6 @@ pub fn start_event_system_task(
 
                 match lottery::lottery_timer_tick(&lottery_proc, now_u32) {
                     lottery::LotteryTickResult::CountdownWarning(minutes) => {
-                        // C++ Reference: LotterySystem.cpp:452-463 — LogosYolla
                         let msg = format!("[Lottery Event] Remaining Minute {}", minutes);
                         let announce_pkt = lottery::build_lottery_announce(&msg);
                         world.broadcast_to_all(Arc::new(announce_pkt), None);
@@ -1078,7 +1026,6 @@ pub fn start_event_system_task(
                     }
                     lottery::LotteryTickResult::Expired { winners } => {
                         // ── 1. Broadcast winner announcement ─────────────────
-                        // C++ Reference: LotterySystem.cpp:413-439 — LotterySendGift
                         let header_msg = "------Lottery Event Winners------";
                         let header_pkt = lottery::build_lottery_announce(header_msg);
                         world.broadcast_to_all(Arc::new(header_pkt), None);
@@ -1099,8 +1046,6 @@ pub fn start_event_system_task(
                         }
 
                         // ── 2. Send reward letters to winners ────────────────
-                        // C++ Reference: LotterySystem.cpp:326-335 — LotteryEventLetterProcess
-                        // C++ Reference: LotterySystem.cpp:294-315 — ReqLotteryReward
                         if let Some(pool) = world.db_pool() {
                             for (name, item_id) in &winners {
                                 match crate::handler::letter::create_system_letter(
@@ -1141,7 +1086,6 @@ pub fn start_event_system_task(
                         }
 
                         // ── 3. Broadcast end packet + finish announcement ────
-                        // C++ Reference: LotterySystem.cpp:493-500 — LotterySystemReset
                         let end_pkt = lottery::build_end_packet();
                         world.broadcast_to_all(Arc::new(end_pkt), None);
 
@@ -1159,7 +1103,6 @@ pub fn start_event_system_task(
             }
 
             // ── Bifrost event timer tick ──────────────────────────────────
-            // C++ Reference: `SingleOtherEventLocalTimer()` in EventMainTimer.cpp:320-331
             //                `EventMainTimer()` in EventMainTimer.cpp:244-258
             // Decrements remaining seconds, checks farming phase expiry,
             // and handles loser nation sign-in.
@@ -1181,7 +1124,6 @@ pub fn start_event_system_task(
                         // Farming phase ended — broadcast finish, kick, reset
                         bifrost::broadcast_beef_notice(&world, bifrost::NOTICE_FINISH);
 
-                        // C++ Reference: KickOutZoneUsers(ZONE_BIFROST, ZONE_RONARK_LAND)
                         let sessions = world.sessions_in_zone(ZONE_BIFROST);
                         for sid in sessions {
                             crate::handler::zone_change::server_teleport_to_zone(
@@ -1206,7 +1148,6 @@ pub fn start_event_system_task(
 }
 
 /// Broadcast a packet to all active users in a BDW room.
-///
 /// Used by the event tick task to send altar respawn broadcasts.
 fn broadcast_to_bdw_room(world: &WorldState, room_id: u8, pkt: &ko_protocol::Packet) {
     let Some(room) = world
@@ -1225,7 +1166,6 @@ fn broadcast_to_bdw_room(world: &WorldState, room_id: u8, pkt: &ko_protocol::Pac
 }
 
 /// Collect all active (non-logged-out) users from an event room.
-///
 /// Returns a list of `(SessionId, user_name)` tuples for teleport operations.
 fn collect_room_users(
     erm: &EventRoomManager,
@@ -1250,9 +1190,7 @@ fn collect_room_users(
 }
 
 /// Collect all active session IDs from ALL rooms for an event type.
-///
 /// Used to snapshot user sessions before `cleanup_event` destroys rooms.
-/// C++ Reference: `TempleEventFinish()` teleport loop in `EventMainSystem.cpp:1959-1966`
 fn collect_all_room_sessions(
     erm: &EventRoomManager,
     event_type: TempleEventType,
@@ -1269,15 +1207,11 @@ fn collect_all_room_sessions(
 }
 
 /// Try to open an event based on the loaded schedule entries.
-///
 /// Called once per tick when no event is active. Compares current time
 /// (weekday, hour, minute) against all schedule entries and opens the
 /// first matching event via [`open_virtual_event`].
-///
 /// Returns `Some((event_type, sign_secs))` if an event was opened, so the
 /// caller can broadcast the sign-up announcement.
-///
-/// C++ Reference: `VirtualEventTimer()` schedule loop in
 /// EventMainTimer.cpp:491-523. Match is exact: `hour == h && minute == m`.
 /// Only triggers at second == 0 (once per minute), simulated here by
 /// comparing against the `now` timestamp.
@@ -1354,13 +1288,9 @@ fn try_schedule_trigger(erm: &EventRoomManager, now: u64) -> Option<(TempleEvent
 // ── Event State ─────────────────────────────────────────────────────────────
 
 /// High-level event lifecycle state.
-///
 /// This is a logical overlay on top of `TempleEventState` fields, providing
 /// clearer semantics for state machine transitions.
-///
-/// C++ Reference: Derived from flags in `_TEMPLE_EVENT_STATUS`
 /// (`isActive`, `bAllowJoin`, `EventTimerFinishControl`, etc.)
-///
 /// Note: C++ does not have a distinct "Scoring" phase — winner determination
 /// and reward distribution happen atomically. The flow goes directly from
 /// Active to Rewards (via `TempleEventSendWinnerScreen` + `EventTimerFinishControl`).
@@ -1406,17 +1336,13 @@ fn is_on_day(entry: &EventScheduleEntry, weekday: u32) -> bool {
 }
 
 /// Check if a schedule entry matches the current time and day.
-///
 /// Returns the index of the matching start time (0..4), or None.
-///
-/// C++ Reference: `VirtualEventTimer()` time comparison loop
 pub fn check_schedule_trigger(
     entry: &EventScheduleEntry,
     weekday: u32,
     hour: u32,
     minute: u32,
 ) -> Option<usize> {
-    // C++ Reference: VirtualEventTimer() EventMainTimer.cpp:498 —
     //   `pTempleEvent.type == VirtualRoom`
     // Only VirtualRoom (type == 2) schedule entries should trigger events.
     if !entry.status || entry.event_type != 2 || !is_on_day(entry, weekday) {
@@ -1436,8 +1362,6 @@ pub fn check_schedule_trigger(
 }
 
 /// Map an `EventLocalId` to the virtual room config index (0=BDW, 1=Chaos, 2=JR).
-///
-/// C++ Reference: `VirtualEventOpen(uint8 id, ...)` — `id` param mapping
 pub fn local_id_to_vroom_index(local_id: EventLocalId) -> Option<u8> {
     match local_id {
         EventLocalId::BorderDefenceWar => Some(0),
@@ -1460,8 +1384,6 @@ pub fn vroom_index_to_event_type(index: u8) -> Option<TempleEventType> {
 // ── Event Open Logic ────────────────────────────────────────────────────────
 
 /// Parameters for opening a virtual room event.
-///
-/// C++ Reference: `VirtualEventOpen()` parameters
 #[derive(Debug, Clone)]
 pub struct EventOpenParams {
     /// Vroom config index (0=BDW, 1=Chaos, 2=JR).
@@ -1483,11 +1405,8 @@ pub struct EventOpenParams {
 }
 
 /// Open a virtual room event (transition to Registration phase).
-///
 /// Resets the temple event state and configures sign-up parameters.
 /// Returns true if the event was successfully opened.
-///
-/// C++ Reference: `CGameServerDlg::VirtualEventOpen()` in `EventMainTimer.cpp:376-420`
 pub fn open_virtual_event(mgr: &EventRoomManager, params: &EventOpenParams) -> bool {
     let now = unix_now();
 
@@ -1514,7 +1433,6 @@ pub fn open_virtual_event(mgr: &EventRoomManager, params: &EventOpenParams) -> b
 }
 
 /// Get the current event phase from `TempleEventState` flags.
-///
 /// Maps the C++ flag-based state to our clean enum.
 pub fn current_phase(mgr: &EventRoomManager) -> EventPhase {
     mgr.read_temple_event(|s| {
@@ -1538,8 +1456,6 @@ pub fn current_phase(mgr: &EventRoomManager) -> EventPhase {
 }
 
 /// Close sign-up and transition to Active state.
-///
-/// C++ Reference: Sign → Active transition in `VirtualEventTimer()` per-event blocks
 pub fn transition_to_active(mgr: &EventRoomManager) {
     mgr.update_temple_event(|s| {
         s.allow_join = false;
@@ -1551,8 +1467,6 @@ pub fn transition_to_active(mgr: &EventRoomManager) {
 }
 
 /// Transition to the finishing state (winner screen sent).
-///
-/// C++ Reference: `pTempleEvent.EventTimerFinishControl = true` after
 /// `TempleEventSendWinnerScreen()` call
 pub fn transition_to_finish(mgr: &EventRoomManager) {
     mgr.update_temple_event(|s| {
@@ -1561,8 +1475,6 @@ pub fn transition_to_finish(mgr: &EventRoomManager) {
 }
 
 /// Transition to full cleanup/reset.
-///
-/// C++ Reference: `TempleEventFinish()` + `TempleEventReset()` calls
 pub fn transition_to_reset(mgr: &EventRoomManager) {
     mgr.update_temple_event(|s| {
         s.timer_reset_control = true;
@@ -1570,11 +1482,8 @@ pub fn transition_to_reset(mgr: &EventRoomManager) {
 }
 
 /// Process GM manual close request.
-///
 /// Sets the manual close flag and records the timestamp.
 /// The timer loop will handle the actual cleanup after the configured finish delay.
-///
-/// C++ Reference: `BorderDefenceWarManuelClosed()` etc. in `EventMainTimer.cpp`
 pub fn manual_close(mgr: &EventRoomManager) -> bool {
     let now = unix_now();
 
@@ -1594,9 +1503,6 @@ pub fn manual_close(mgr: &EventRoomManager) -> bool {
 // ── Timer Checks ────────────────────────────────────────────────────────────
 
 /// Check if the sign-up period has expired.
-///
-/// C++ Reference: `UNIXTIME >= (pTempleEvent.StartTime + EventSignFinishTime)`
-///
 /// BDW uses strict `>` (C++ EventMainTimer.cpp:440), while Chaos/Juraid
 /// use `>=`. This means BDW transitions one second later.
 pub fn is_sign_expired(mgr: &EventRoomManager, vroom_opts: &VroomOpt) -> bool {
@@ -1605,16 +1511,12 @@ pub fn is_sign_expired(mgr: &EventRoomManager, vroom_opts: &VroomOpt) -> bool {
 }
 
 /// Check if the sign-up period has expired using an explicit timestamp.
-///
 /// Test-friendly version that accepts `now` as a parameter.
-///
-/// C++ Reference: `EventMainTimer.cpp:440` — BDW uses `>` (strict) while
 /// Chaos/Juraid use `>=`. Audited in Sprint 202: only called from the main
 /// event tick loop (Registration phase). No separate real-time path exists.
 pub fn is_sign_expired_at(mgr: &EventRoomManager, vroom_opts: &VroomOpt, now: u64) -> bool {
     let sign_secs = (vroom_opts.sign as u64) * 60;
     mgr.read_temple_event(|s| {
-        // C++ Reference: EventMainTimer.cpp:440 — BDW uses `>` (strict)
         // EventMainTimer.cpp:530,630 — Chaos/Juraid use `>=`
         if s.active_event == TempleEventType::BorderDefenceWar as i16 {
             now > s.start_time + sign_secs
@@ -1625,8 +1527,6 @@ pub fn is_sign_expired_at(mgr: &EventRoomManager, vroom_opts: &VroomOpt, now: u6
 }
 
 /// Check if the attack-open time has been reached.
-///
-/// C++ Reference: `UNIXTIME >= (pTempleEvent.StartTime + EventAttackOpenTime)`
 pub fn is_attack_open_time(mgr: &EventRoomManager, vroom_opts: &VroomOpt) -> bool {
     let now = unix_now();
     let attack_open_secs = ((vroom_opts.sign + vroom_opts.attack_open) as u64) * 60;
@@ -1634,8 +1534,6 @@ pub fn is_attack_open_time(mgr: &EventRoomManager, vroom_opts: &VroomOpt) -> boo
 }
 
 /// Check if the attack-close time has been reached.
-///
-/// C++ Reference: `UNIXTIME >= (pTempleEvent.StartTime + EventAttackStopTime)`
 pub fn is_attack_close_time(mgr: &EventRoomManager, vroom_opts: &VroomOpt) -> bool {
     let now = unix_now();
     let attack_close_secs = ((vroom_opts.sign + vroom_opts.attack_close) as u64) * 60;
@@ -1643,8 +1541,6 @@ pub fn is_attack_close_time(mgr: &EventRoomManager, vroom_opts: &VroomOpt) -> bo
 }
 
 /// Check if the play timer has expired (event should finish).
-///
-/// C++ Reference: `UNIXTIME >= (pTempleEvent.StartTime + EventFinishTime)`
 pub fn is_play_expired(mgr: &EventRoomManager, vroom_opts: &VroomOpt) -> bool {
     let now = unix_now();
     let finish_secs = ((vroom_opts.sign + vroom_opts.play) as u64) * 60;
@@ -1652,7 +1548,6 @@ pub fn is_play_expired(mgr: &EventRoomManager, vroom_opts: &VroomOpt) -> bool {
 }
 
 /// Check if the play timer has expired using an explicit timestamp.
-///
 /// Test-friendly version that accepts `now` as a parameter.
 pub fn is_play_expired_at(mgr: &EventRoomManager, vroom_opts: &VroomOpt, now: u64) -> bool {
     let finish_secs = ((vroom_opts.sign + vroom_opts.play) as u64) * 60;
@@ -1660,18 +1555,13 @@ pub fn is_play_expired_at(mgr: &EventRoomManager, vroom_opts: &VroomOpt, now: u6
 }
 
 /// Check if the reset timer has expired (cleanup should happen).
-///
-/// C++ Reference: `UNIXTIME >= (pTempleEvent.StartTime + EventResetTime + finish_delay)`
 pub fn is_reset_expired(mgr: &EventRoomManager, vroom_opts: &VroomOpt, active_event: i16) -> bool {
     let now = unix_now();
     is_reset_expired_at(mgr, vroom_opts, now, active_event)
 }
 
 /// Check if the reset timer has expired using an explicit timestamp.
-///
 /// Test-friendly version that accepts `now` as a parameter.
-///
-/// C++ Reference:
 /// - BDW/Juraid: `(sign + play + 1) * MINUTE + finish`
 /// - Chaos: `(sign + play) * MINUTE + finish` (no +1)
 pub fn is_reset_expired_at(
@@ -1680,7 +1570,6 @@ pub fn is_reset_expired_at(
     now: u64,
     active_event: i16,
 ) -> bool {
-    // C++: Chaos uses (sign + play), BDW/Juraid use (sign + play + 1)
     let extra_min: i32 = if active_event == TempleEventType::ChaosDungeon as i16 {
         0
     } else {
@@ -1692,8 +1581,6 @@ pub fn is_reset_expired_at(
 }
 
 /// Check if a manual close should trigger cleanup.
-///
-/// C++ Reference: `UNIXTIME >= pTempleEvent.ManuelClosedTime + finish_delay`
 pub fn is_manual_close_expired(mgr: &EventRoomManager, finish_delay: u64) -> bool {
     let now = unix_now();
     mgr.read_temple_event(|s| {
@@ -1707,7 +1594,6 @@ pub fn is_manual_close_expired(mgr: &EventRoomManager, finish_delay: u64) -> boo
 // ── Event Tick ───────────────────────────────────────────────────────────────
 
 /// Result of a single event tick, used for testing and logging.
-///
 /// Describes what action (if any) was taken during this tick.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventTickAction {
@@ -1733,14 +1619,9 @@ pub enum EventTickAction {
 }
 
 /// Process one event tick with explicit timestamp.
-///
 /// This is the main event state machine driver. Called every second from
 /// the background tick task in `start_event_system_task`.
-///
-/// C++ Reference: `CGameServerDlg::VirtualEventTimer()` in `EventMainTimer.cpp:432-801`
-///
 /// ## State transitions
-///
 /// 1. **Registration → Active**: When sign timer expires, assigns users to rooms
 ///    and transitions to Active phase.
 /// 2. **Active → Rewards**: When play timer expires, determines winners and
@@ -1865,7 +1746,6 @@ pub fn event_tick_at(
             }
 
             // ── Attack open timer ──────────────────────────────────────
-            // C++ Reference: VirtualEventTimer() per-event attack_open checks
             // Sets is_attackable=true when attack_open time is reached.
             {
                 let (already_open, attackable) =
@@ -1887,7 +1767,6 @@ pub fn event_tick_at(
             }
 
             // ── Attack close timer ─────────────────────────────────────
-            // C++ Reference: VirtualEventTimer() per-event attack_close checks
             // Sets is_attackable=false when attack_close time is reached.
             {
                 let (already_closed, attackable) =
@@ -1998,7 +1877,6 @@ pub fn event_tick_at(
 }
 
 /// Clean up event state (destroy rooms, reset managers).
-///
 /// Called when transitioning to Cleanup/Inactive.
 fn cleanup_event(
     erm: &EventRoomManager,
@@ -2025,10 +1903,7 @@ fn cleanup_event(
 // ── Reward Distribution ─────────────────────────────────────────────────────
 
 /// Aggregated reward totals from one or more `EventRewardRow` entries.
-///
 /// Collects all non-zero items and sums exp/loyalty/noah across rows.
-///
-/// C++ Reference: `TempleEventSendReward()` aggregates multiple reward rows
 /// before distributing to players.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AggregatedReward {
@@ -2043,7 +1918,6 @@ pub struct AggregatedReward {
 }
 
 /// Aggregate multiple reward rows into a single `AggregatedReward`.
-///
 /// Collects all non-zero item slots and sums scalar rewards.
 pub fn aggregate_rewards(rows: &[&EventRewardRow]) -> AggregatedReward {
     let mut result = AggregatedReward::default();
@@ -2065,8 +1939,6 @@ pub fn aggregate_rewards(rows: &[&EventRewardRow]) -> AggregatedReward {
 }
 
 /// Convert an event `local_id` (from schedule table) to `TempleEventType`.
-///
-/// C++ Reference: Schedule uses local_id 9 for BDW, 10 for Chaos, 11 for Juraid.
 /// `TempleEventType` uses internal enum values (4, 24, 100).
 fn local_id_to_event_type(local_id: i16) -> Option<TempleEventType> {
     match local_id {
@@ -2078,11 +1950,8 @@ fn local_id_to_event_type(local_id: i16) -> Option<TempleEventType> {
 }
 
 /// Convert a `TempleEventType` discriminant (`active_event`) to `EventLocalId`.
-///
-/// C++ Reference: `EventMainSystem.cpp:1252-1258` — the C++ code explicitly
 /// converts from `ActiveEvent` (TempleEventType) to `EventLocalID` before
 /// looking up reward rows.
-///
 /// `active_event` stores TempleEventType values (4, 24, 100) but reward
 /// tables are keyed by EventLocalId values (9, 10, 11).
 fn active_event_to_local_id(active_event: i16) -> i16 {
@@ -2095,12 +1964,9 @@ fn active_event_to_local_id(active_event: i16) -> i16 {
 }
 
 /// Grant a single `AggregatedReward` to a player.
-///
 /// Distributes items, exp, loyalty, and gold using existing WorldState methods.
 /// Experience is granted via `exp_change_with_bonus` which handles level-up
 /// processing (unlike the old `grant_exp_sync` which skipped it).
-///
-/// C++ Reference: `TempleEventSendReward()` inner loop — `GiveItem()`,
 ///   `ExpChange()`, `SendLoyaltyChange()`, `GoldGain()`.
 async fn grant_reward(world: &WorldState, sid: SessionId, reward: &AggregatedReward) {
     // Items
@@ -2147,13 +2013,9 @@ async fn grant_reward(world: &WorldState, sid: SessionId, reward: &AggregatedRew
 }
 
 /// Distribute Forgotten Temple victory rewards to all eligible players in zone 55.
-///
-/// C++ Reference: `CGameServerDlg::ForgettenTempleSendItem()` in `FTHandler.cpp:64-110`
-///
 /// Iterates all in-game, alive players in ZONE_FORGOTTEN_TEMPLE and grants
 /// rewards from the EVENT_REWARD table (local_id=13). Each active reward row's
 /// items, exp, loyalty, and noah are given to every eligible player.
-///
 /// Eligibility: player must be in-game, alive (not dead), and in zone 55.
 pub async fn distribute_ft_rewards(world: &WorldState) {
     use crate::handler::forgotten_temple;
@@ -2183,7 +2045,6 @@ pub async fn distribute_ft_rewards(world: &WorldState) {
     let aggregated = aggregate_rewards(&active_rows);
 
     // Collect all eligible players in FT zone
-    // C++ Reference: FTHandler.cpp:81-88 — skips nullptr, !isInGame, isDead, wrong zone
     let ft_users: Vec<SessionId> = world.collect_sessions_by(|h| {
         h.character.is_some()
             && h.position.zone_id == forgotten_temple::ZONE_FORGOTTEN_TEMPLE
@@ -2212,19 +2073,13 @@ pub async fn distribute_ft_rewards(world: &WorldState) {
 }
 
 /// Distribute event rewards for a completed BDW or Juraid event.
-///
 /// Loads reward rows from `WorldState::get_event_rewards(local_id)` and
 /// separates them into winner and loser reward sets. For each room, iterates
 /// over participants and grants appropriate rewards to winners and losers.
-///
 /// Players who have already received rewards (`prize_given`) or logged out
 /// during the event (`logged_out`) are skipped.
-///
 /// Experience rewards are granted via `exp_change_with_bonus` which properly
 /// handles level-up processing (stat/skill points, HP/MP recalc, broadcast).
-///
-/// C++ Reference: `CGameServerDlg::TempleEventSendReward()` in `EventMainReward.cpp`
-///
 /// # Arguments
 /// * `world` — Shared world state for reward data lookup and granting.
 /// * `local_id` — Event local ID (9=BDW, 11=Juraid).
@@ -2319,7 +2174,7 @@ pub async fn distribute_event_rewards(
                 &loser_reward
             };
 
-            // BDW: add per-player level-based exp bonus (C++ EventMainSystem.cpp:1484-1496)
+            // BDW: add per-player level-based exp bonus
             if local_id == 9 {
                 if let Some(ch) = world.get_character_info(sid) {
                     let level_bonus = bdw_level_exp_bonus(ch.level);
@@ -2354,7 +2209,6 @@ pub async fn distribute_event_rewards(
 }
 
 /// Partition event reward rows into (winner_rewards, loser_rewards).
-///
 /// Only active rewards (status=true) are included.
 pub fn partition_rewards_by_winner(
     rewards: &[EventRewardRow],
@@ -2375,9 +2229,6 @@ pub fn partition_rewards_by_winner(
 }
 
 /// Calculate BDW per-player level-based experience bonus.
-///
-/// C++ Reference: `EventMainSystem.cpp:1484-1496`
-///
 /// Low-level players (< 58) get a smaller bonus that scales from level 20.
 /// High-level players (>= 58) get a larger bonus.
 /// Players at or below level 20 receive no level bonus.
@@ -2391,13 +2242,10 @@ fn bdw_level_exp_bonus(level: u8) -> i64 {
 }
 
 /// Calculate BDW per-user EXP reward based on individual contribution points.
-///
-/// C++ Reference: `NewRankingSystem.cpp:426`
 /// ```text
 /// nGainedExp = level^3 * 0.15 * (5 * bdw_points)
 /// nPremiumGainedExp = nGainedExp * 2
 /// ```
-///
 /// Returns `(normal_exp, premium_exp)` both clamped to their respective caps.
 pub fn bdw_user_point_exp(level: u8, bdw_points: u32) -> (i64, i64) {
     let raw = (level as f64).powi(3) * 0.15 * (5 * bdw_points as i64) as f64;
@@ -2407,13 +2255,10 @@ pub fn bdw_user_point_exp(level: u8, bdw_points: u32) -> (i64, i64) {
 }
 
 /// Calculate Chaos Dungeon per-user EXP reward based on kill/death stats.
-///
-/// C++ Reference: `NewRankingSystem.cpp:493`, `EventMainSystem.cpp:1336`
 /// ```text
 /// nGainedExp = level^3 * 0.15 * (5 * kills - deaths)
 /// nPremiumGainedExp = nGainedExp * 2
 /// ```
-///
 /// Returns `(normal_exp, premium_exp)` both clamped to their respective caps.
 pub fn chaos_user_exp(level: u8, kills: u32, deaths: u32) -> (i64, i64) {
     let kill_score = 5i64 * kills as i64 - deaths as i64;
@@ -2426,8 +2271,6 @@ pub fn chaos_user_exp(level: u8, kills: u32, deaths: u32) -> (i64, i64) {
 // ── Reward Configuration ────────────────────────────────────────────────────
 
 /// Reward configuration for an event outcome (winner or loser).
-///
-/// C++ Reference: `_EVENT_REWARD` struct loaded from `EVENT_REWARD` table
 #[derive(Debug, Clone, Default)]
 pub struct EventReward {
     /// Whether this reward entry is active.
@@ -2453,15 +2296,11 @@ pub struct EventReward {
 // ── Chaos Finish EXP Distribution ───────────────────────────────────────────
 
 /// Distribute per-user EXP and rank-based rewards at Chaos Dungeon event finish.
-///
-/// C++ Reference: `EventMainSystem.cpp:1307-1378` — Chaos finish reward loop.
-///
 /// For each room:
 /// 1. Calculates per-user EXP from kills/deaths via [`chaos_user_exp`].
 /// 2. Determines each user's rank (1-based, sorted by kills descending).
 /// 3. Grants rank-based rewards from `event_chaos_rewards` table:
 ///    items, cash, additional EXP, loyalty, and noah.
-///
 /// This is called **instead of** `distribute_event_rewards` for Chaos events,
 /// because Chaos uses per-user kills/deaths EXP rather than winner/loser
 /// table rewards.
@@ -2484,7 +2323,6 @@ pub async fn distribute_chaos_finish_exp(world: &crate::world::WorldState) {
                 continue;
             }
 
-            // C++ Reference: EventMainSystem.cpp:1317 — `pRoomInfo->m_bFinished = true;`
             room.finished = true;
 
             let mut users = Vec::new();
@@ -2500,12 +2338,10 @@ pub async fn distribute_chaos_finish_exp(world: &crate::world::WorldState) {
         }; // room lock dropped
 
         // Build a ranking list sorted by kills descending (for rank-based rewards)
-        // C++ Reference: NewRankingSystem.cpp:859-860 — sort by c_KillCount desc
         let mut ranked = participants.clone();
         ranked.sort_by(|a, b| b.1.cmp(&a.1));
 
         // Grant EXP and rank-based rewards to each participant
-        // C++ Reference: EventMainSystem.cpp:1336-1361
         for (sid, kills, deaths) in &participants {
             let Some(ch) = world.get_character_info(*sid) else {
                 continue;
@@ -2513,7 +2349,6 @@ pub async fn distribute_chaos_finish_exp(world: &crate::world::WorldState) {
 
             let (normal_exp, premium_exp) = chaos_user_exp(ch.level, *kills, *deaths);
 
-            // C++ Reference: EventMainSystem.cpp:1343
             // nChangeExp = pUser->GetPremium() != 0 ? nPremiumGainedExp : nGainedExp;
             let is_premium = world.with_session(*sid, |h| h.premium_in_use).unwrap_or(0) != 0;
             let exp = if is_premium { premium_exp } else { normal_exp };
@@ -2523,11 +2358,9 @@ pub async fn distribute_chaos_finish_exp(world: &crate::world::WorldState) {
             }
 
             // Rank-based rewards: pChaosReward[rank - 1]
-            // C++ Reference: EventMainSystem.cpp:1346-1361
             let user_rank = get_player_chaos_rank(&ranked, *sid);
 
             // Daily rank stat: CWCounterWin++ for rank 1 winners
-            // C++ Reference: EventMainSystem.cpp:1366 — `if (nUserRank == 1) pUser->pUserDailyRank.CWCounterWin++`
             if user_rank == 1 {
                 world.update_session(*sid, |h| {
                     h.dr_cw_counter_win += 1;
@@ -2628,10 +2461,6 @@ pub async fn distribute_chaos_finish_exp(world: &crate::world::WorldState) {
 }
 
 /// Get a player's 1-based rank in the Chaos Dungeon ranking.
-///
-/// C++ Reference: `CUser::GetPlayerRank(RANK_TYPE_CHAOS_DUNGEON)` in
-/// `NewRankingSystem.cpp:843-875`
-///
 /// Iterates the pre-sorted (kills desc) participant list and returns the
 /// player's 1-based position. Returns 0 if not found.
 fn get_player_chaos_rank(ranked: &[(SessionId, u32, u32)], sid: SessionId) -> u16 {
@@ -2656,8 +2485,6 @@ pub fn unix_now() -> u64 {
 // ── Soccer Helper Functions ──────────────────────────────────────────────────
 
 /// Teleport a ball NPC to a new position by despawning and respawning.
-///
-/// C++ Reference: `SoccerSystem.cpp:254-260` — `SendInOut(INOUT_OUT, ...)` + `SendInOut(INOUT_IN, x, z)`
 fn teleport_ball_npc(world: &WorldState, npc_id: u32, zone_id: u16, new_x: f32, new_z: f32) {
     use crate::npc::{build_npc_inout, NPC_IN, NPC_OUT};
 
@@ -2687,9 +2514,6 @@ fn teleport_ball_npc(world: &WorldState, npc_id: u32, zone_id: u16, new_x: f32, 
 }
 
 /// Warp a player within the same zone (lightweight, no ClientSession needed).
-///
-/// C++ Reference: `CUser::ZoneChange()` same-zone path in `SoccerSystem.cpp:280`
-///
 /// Updates position and sends WIZ_WARP to the client so they teleport to new
 /// coordinates. Region management will be handled by the client's next
 /// movement packet or region check.
@@ -3312,7 +3136,7 @@ mod tests {
         assert_eq!(action, EventTickAction::None);
 
         // At exact sign expiry (10 min = 600s) — BDW uses strict `>`, so
-        // should NOT trigger yet (C++ EventMainTimer.cpp:440 uses `>`)
+        // should NOT trigger yet
         let action = event_tick_at(
             &erm,
             &mut bdw_mgr,
@@ -5285,7 +5109,7 @@ mod tests {
 
         distribute_chaos_finish_exp(&world).await;
 
-        // After: room.finished must be true (C++ EventMainSystem.cpp:1317)
+        // After: room.finished must be true
         assert!(
             erm.get_room(TempleEventType::ChaosDungeon, 1)
                 .unwrap()
@@ -6371,7 +6195,6 @@ mod tests {
 
     #[test]
     fn test_check_schedule_trigger_requires_virtual_room_type() {
-        // C++ Reference: EventMainTimer.cpp:498 — pTempleEvent.type == VirtualRoom
         // Schedule entries with event_type != 2 should NOT trigger.
         let entry = EventScheduleEntry {
             status: true,
@@ -6412,7 +6235,6 @@ mod tests {
 
     #[test]
     fn test_bdw_sign_expiry_uses_strict_greater_than() {
-        // C++ Reference: EventMainTimer.cpp:440 — BDW uses `>` (strict)
         // At exactly start_time + sign_secs, BDW should NOT be expired
         let erm = EventRoomManager::new();
         let opts = VroomOpt {
@@ -6439,7 +6261,6 @@ mod tests {
 
     #[test]
     fn test_chaos_sign_expiry_uses_greater_or_equal() {
-        // C++ Reference: EventMainTimer.cpp:530 — Chaos uses `>=`
         // At exactly start_time + sign_secs, Chaos SHOULD be expired
         let erm = EventRoomManager::new();
         let opts = VroomOpt {

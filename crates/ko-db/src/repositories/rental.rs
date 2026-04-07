@@ -1,7 +1,4 @@
 //! Rental item repository — user_rental_item table access.
-//!
-//! C++ Reference: `CDBAgent::LoadRentalData()` in `DBAgent.cpp:308-355`
-//!
 //! Provides CRUD operations for the `user_rental_item` table which tracks
 //! player-to-player item rentals (lender/borrower relationships).
 
@@ -22,7 +19,6 @@ impl<'a> RentalRepository<'a> {
 
     /// Load all rental items for a character.
     ///
-    /// C++ Reference: `CDBAgent::LoadRentalData()` — loads by account_id,
     /// then filters by char_id.
     pub async fn load_by_user(&self, user_id: &str) -> Result<Vec<UserRentalItemRow>, sqlx::Error> {
         sqlx::query_as::<_, UserRentalItemRow>(

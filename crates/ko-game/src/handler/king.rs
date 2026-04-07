@@ -1,9 +1,5 @@
 //! WIZ_KING (0x78) handler — King system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/KingSystem.cpp`
-//!
-//! ## Main Sub-opcodes (C++ `KingType` enum in `packets.h:461-466`)
-//!
+//! ## Main Sub-opcodes (`KingType` enum in `packets.h:461-466`)
 //! | Opcode | Name              | Description                           |
 //! |--------|-------------------|---------------------------------------|
 //! | 1      | KING_ELECTION     | Election system (schedule, nominate)  |
@@ -11,16 +7,13 @@
 //! | 3      | KING_TAX          | Tax / tariff / scepter                |
 //! | 4      | KING_EVENT        | King events (noah, exp, prize, etc.)  |
 //! | 6      | KING_NATION_INTRO | Nation introduction text              |
-//!
 //! ## Implementation Status
-//!
 //! Implemented:
 //! - Tax system (tariff lookup, tariff update, tax collection, king scepter)
 //! - Event system (noah, exp, prize, weather, notice)
 //! - Election system (schedule, nomination, notice board, poll/vote, resign)
 //! - Impeachment UI open checks
 //! - Nation introduction
-//!
 //! Also implemented (from C++ empty stubs):
 //! - Impeachment request, request elect, list, elect (basic validation + response)
 
@@ -43,15 +36,11 @@ use crate::world::{
 };
 
 /// King's scepter item ID.
-///
-/// C++ Reference: `Define.h:313` — `#define KING_SCEPTER 910074311`
 const KING_SCEPTER: u32 = 910_074_311;
 
 use super::{HAVE_MAX, SLOT_MAX};
 
 /// Handle incoming WIZ_KING (0x78) packet.
-///
-/// C++ Reference: `CKingSystem::PacketProcess()` + `KingPacketProcess()` in `KingSystem.cpp:518-569`
 pub async fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -112,8 +101,6 @@ fn get_player_name(session: &ClientSession) -> Option<String> {
 // ── Election System ─────────────────────────────────────────────────────
 
 /// Handle KING_ELECTION (1) sub-packet.
-///
-/// C++ Reference: `CKingSystem::ElectionSystem()` in `KingSystem.cpp:579-603`
 async fn handle_election(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -141,9 +128,6 @@ async fn handle_election(
 }
 
 /// Handle election schedule confirmation.
-///
-/// C++ Reference: `CKingSystem::ElectionScheduleConfirmation()` in `KingSystem.cpp:613-671`
-///
 /// Responds with the next election date or impeachment schedule.
 async fn handle_election_schedule(session: &mut ClientSession) -> anyhow::Result<()> {
     let nation = match get_nation(session) {
@@ -221,9 +205,6 @@ async fn handle_election_schedule(session: &mut ClientSession) -> anyhow::Result
 }
 
 /// Handle candidacy recommendation (nomination).
-///
-/// C++ Reference: `CKingSystem::CandidacyRecommend()` in `KingSystem.cpp:682-741`
-///
 /// Only top-10 clan leaders (senators) can nominate candidates during NOMINATION phase.
 async fn handle_candidacy_recommend(
     session: &mut ClientSession,
@@ -369,8 +350,6 @@ async fn handle_candidacy_recommend(
 }
 
 /// Handle candidacy notice board (read/write platform statements).
-///
-/// C++ Reference: `CKingSystem::CandidacyNoticeBoard()` in `KingSystem.cpp:812-979`
 async fn handle_candidacy_notice_board(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -549,8 +528,6 @@ async fn handle_candidacy_notice_board(
 }
 
 /// Handle election poll (view candidates / vote for king).
-///
-/// C++ Reference: `CKingSystem::ElectionPoll()` in `KingSystem.cpp:989-1073`
 async fn handle_election_poll(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -639,7 +616,6 @@ async fn handle_election_poll(
             }
 
             // Check voter NP (national points / loyalty)
-            // C++ Reference: KingSystem.cpp:7 — `#define MIN_NP_VOTER 10000`
             let voter_loyalty = world
                 .get_character_info(session.session_id())
                 .map(|c| c.loyalty)
@@ -729,8 +705,6 @@ async fn handle_election_poll(
 }
 
 /// Handle candidacy resignation.
-///
-/// C++ Reference: `CKingSystem::CandidacyResign()` in `KingSystem.cpp:1138-1191`
 async fn handle_candidacy_resign(session: &mut ClientSession) -> anyhow::Result<()> {
     let nation = match get_nation(session) {
         Some(n) => n,
@@ -838,8 +812,6 @@ async fn handle_candidacy_resign(session: &mut ClientSession) -> anyhow::Result<
 // ── Impeachment System ──────────────────────────────────────────────────
 
 /// Handle KING_IMPEACHMENT (2) sub-packet.
-///
-/// C++ Reference: `CKingSystem::ImpeachmentSystem()` in `KingSystem.cpp:1201-1232`
 async fn handle_impeachment(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -868,8 +840,6 @@ async fn handle_impeachment(
 }
 
 /// Handle impeachment request UI open.
-///
-/// C++ Reference: `CKingSystem::ImpeachmentRequestUiOpen()` in `KingSystem.cpp:1259-1278`
 async fn handle_impeachment_request_ui_open(session: &mut ClientSession) -> anyhow::Result<()> {
     let nation = match get_nation(session) {
         Some(n) => n,
@@ -887,7 +857,6 @@ async fn handle_impeachment_request_ui_open(session: &mut ClientSession) -> anyh
     result.write_u8(KING_IMPEACHMENT_REQUEST_UI_OPEN);
 
     // Not able to make an impeachment request right now
-    // C++ Reference: if (m_byImType != 1) → -1
     if ks.im_type != 1 {
         result.write_i16(-1);
     } else {
@@ -919,8 +888,6 @@ async fn handle_impeachment_request_ui_open(session: &mut ClientSession) -> anyh
 }
 
 /// Handle impeachment election UI open.
-///
-/// C++ Reference: `CKingSystem::ImpeachmentElectionUiOpen()` in `KingSystem.cpp:1288-1298`
 async fn handle_impeachment_election_ui_open(session: &mut ClientSession) -> anyhow::Result<()> {
     let nation = match get_nation(session) {
         Some(n) => n,
@@ -943,9 +910,6 @@ async fn handle_impeachment_election_ui_open(session: &mut ClientSession) -> any
 }
 
 /// Handle impeachment request (sub-opcode 1).
-///
-/// C++ Reference: `CKingSystem::ImpeachmentRequest()` in `KingSystem.cpp:1237-1239`
-///
 /// A senator requests impeachment of the current king. The C++ implementation
 /// is an empty stub. We implement basic validation: the requester must be a
 /// senator and im_type must be 1 (impeachment request window). On success,
@@ -1011,9 +975,6 @@ async fn handle_impeachment_request(
 }
 
 /// Handle impeachment request elect (sub-opcode 2).
-///
-/// C++ Reference: `CKingSystem::ImpeachmentRequestElect()` in `KingSystem.cpp:1240-1241`
-///
 /// Players vote on whether to proceed with the impeachment. The C++ implementation
 /// is an empty stub. We implement a basic vote recording mechanism.
 async fn handle_impeachment_request_elect(
@@ -1056,7 +1017,6 @@ async fn handle_impeachment_request_elect(
     }
 
     // Check voter NP (national points / loyalty)
-    // C++ Reference: KingSystem.cpp:7 — MIN_NP_VOTER = 10000
     let voter_loyalty = world
         .get_character_info(session.session_id())
         .map(|c| c.loyalty)
@@ -1081,9 +1041,6 @@ async fn handle_impeachment_request_elect(
 }
 
 /// Handle impeachment list (sub-opcode 3).
-///
-/// C++ Reference: `CKingSystem::ImpeachmentList()` in `KingSystem.cpp:1243-1245`
-///
 /// View the current king's info for the impeachment UI. The C++ implementation
 /// is an empty stub. We send the king's name and basic info.
 async fn handle_impeachment_list(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -1126,9 +1083,6 @@ async fn handle_impeachment_list(session: &mut ClientSession) -> anyhow::Result<
 }
 
 /// Handle impeachment elect (sub-opcode 4).
-///
-/// C++ Reference: `CKingSystem::ImpeachmentElect()` in `KingSystem.cpp:1246-1248`
-///
 /// Players vote on the actual impeachment. The C++ implementation is an empty stub.
 /// We implement a basic vote recording mechanism.
 async fn handle_impeachment_elect(
@@ -1171,7 +1125,6 @@ async fn handle_impeachment_elect(
     }
 
     // Check voter NP (national points / loyalty)
-    // C++ Reference: KingSystem.cpp:7 — MIN_NP_VOTER = 10000
     let voter_loyalty = world
         .get_character_info(session.session_id())
         .map(|c| c.loyalty)
@@ -1198,8 +1151,6 @@ async fn handle_impeachment_elect(
 // ── Tax System ──────────────────────────────────────────────────────────
 
 /// Handle KING_TAX (3) sub-packet.
-///
-/// C++ Reference: `CKingSystem::KingTaxSystem()` in `KingSystem.cpp:1308-1397`
 async fn handle_tax(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -1329,7 +1280,6 @@ async fn handle_tax(
             );
         }
         // King's scepter
-        // C++ Reference: `CKingSystem::KingTax()` case 7 in `KingSystem.cpp:1376-1394`
         7 => {
             let world = session.world();
             let sid = session.session_id();
@@ -1377,8 +1327,6 @@ async fn handle_tax(
 // ── Event System ────────────────────────────────────────────────────────
 
 /// Handle KING_EVENT (4) sub-packet.
-///
-/// C++ Reference: `CKingSystem::KingSpecialEvent()` in `KingSystem.cpp:1407-1606`
 async fn handle_event(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -1680,8 +1628,6 @@ async fn handle_event(
 // ── Nation Intro ────────────────────────────────────────────────────────
 
 /// Handle KING_NATION_INTRO (6) sub-packet.
-///
-/// C++ Reference: `CKingSystem::KingNationIntro()` in `KingSystem.cpp:1616-1647`
 async fn handle_nation_intro(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -1731,9 +1677,6 @@ async fn handle_nation_intro(
 // ── Election Timer (called from server tick) ────────────────────────────
 
 /// Check king election timer for a specific nation.
-///
-/// C++ Reference: `CKingSystem::CheckKingTimer()` in `KingSystem.cpp:50-230`
-///
 /// This should be called once per minute from the server tick for each nation.
 /// It handles:
 /// 1. Special event expiry (noah/exp events)
@@ -1763,7 +1706,6 @@ pub fn check_king_timer(world: &crate::world::WorldState, nation: u8, pool: &ko_
         ELECTION_TYPE_NO_TERM => {
             // Nominations start 2 days before the scheduled election
             // Simplified: check if we're at the nomination start time
-            // C++: dt = election time; dt.AddDays(-2); compare with cur time
             let nom_day = if ks.day >= 2 { ks.day - 2 } else { ks.day + 28 };
             let nom_month = if ks.day >= 2 {
                 ks.month
@@ -1979,7 +1921,6 @@ pub fn check_king_timer(world: &crate::world::WorldState, nation: u8, pool: &ko_
         }
         ELECTION_TYPE_TERM_ENDED => {
             // 5 minutes after election ends: assign new king
-            // C++: dt = election time; dt.AddMinutes(5); compare
             let assign_minute = (ks.minute + 5) % 60;
             let assign_hour = ks.hour + if ks.minute + 5 >= 60 { 1 } else { 0 };
 
@@ -2062,8 +2003,6 @@ pub fn check_king_timer(world: &crate::world::WorldState, nation: u8, pool: &ko_
 }
 
 /// Check if special events (noah/exp) should expire.
-///
-/// C++ Reference: `CKingSystem::CheckSpecialEvent()` in `KingSystem.cpp:318-368`
 fn check_special_event(
     world: &crate::world::WorldState,
     nation: u8,

@@ -1,11 +1,7 @@
 //! Server settings, damage settings, and home position models.
-//!
-//! C++ Reference: `_SERVER_SETTING`, `_DAMAGE_SETTING` in `GameDefine.h`
 //! Source: MSSQL `SERVER_SETTINGS`, `DAMAGE_SETTINGS`, `HOME` tables
 
 /// Server-wide configuration (single row).
-///
-/// C++ Reference: `_SERVER_SETTING` struct in `GameDefine.h:3859`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ServerSettingsRow {
     pub server_no: i16,
@@ -53,11 +49,8 @@ pub struct ServerSettingsRow {
 }
 
 /// Damage balance multipliers (single row).
-///
 /// All values are `f32` multipliers applied to base damage.
 /// Naming: `attacker_to_target` (e.g. `warrior_to_rogue`).
-///
-/// C++ Reference: `_DAMAGE_SETTING` struct in `GameDefine.h:293`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DamageSettingsRow {
     pub id: i32,
@@ -103,7 +96,6 @@ pub struct DamageSettingsRow {
 }
 
 /// Per-nation home/respawn coordinates by zone type.
-///
 /// Source: MSSQL `HOME` table (2 rows: nation 1=Karus, 2=Elmorad)
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct HomeRow {

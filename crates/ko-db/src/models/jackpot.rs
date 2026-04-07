@@ -1,11 +1,7 @@
 //! JackPot setting models — maps to `jackpot_settings` table.
-//!
-//! C++ Reference: `_JACKPOT_SETTING` struct (GameDefine.h:188).
 //! Two rows: iType 0 = EXP jackpot, iType 1 = Noah/gold jackpot.
 
 /// A jackpot setting row loaded at startup.
-///
-/// C++ Reference: `_JACKPOT_SETTING` — probability thresholds for multiplier tiers.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct JackPotSettingRow {
     /// 0 = EXP, 1 = Noah.

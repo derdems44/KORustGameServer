@@ -1,7 +1,4 @@
 //! Daily quest repository — definitions and user progress.
-//!
-//! C++ Reference: `CDailyQyestSet` in `DailyQuestSet.h`,
-//!                `CDBAgent::LoadQuestData`, `CDBAgent::UpdateQuestData` in `QuestDatabase.cpp`.
 
 use sqlx::{PgPool, QueryBuilder};
 
@@ -22,7 +19,6 @@ impl<'a> DailyQuestRepository<'a> {
 
     /// Load all daily quest definitions from the database.
     ///
-    /// C++ Reference: `CDailyQyestSet::Fetch()` — loaded into `m_DailyQuestArray`.
     pub async fn load_all_definitions(&self) -> Result<Vec<DailyQuestRow>, sqlx::Error> {
         sqlx::query_as::<_, DailyQuestRow>(
             "SELECT id, quest_name, quest_id, time_type, kill_type, \
@@ -40,7 +36,6 @@ impl<'a> DailyQuestRepository<'a> {
 
     /// Load all daily quest progress for a character.
     ///
-    /// C++ Reference: Loaded from binary blob in `QuestDatabase.cpp:64-72`,
     /// each entry is 8 bytes: (quest_id:u8, status:u8, kcount:u16, replaytime:u32).
     pub async fn load_user_quests(
         &self,

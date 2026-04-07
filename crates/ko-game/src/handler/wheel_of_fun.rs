@@ -1,24 +1,16 @@
 //! Wheel of Fun event handler.
-//!
-//! C++ Reference: `WheelOfFun.cpp` — `CUser::WheelOfFun()` and `CUser::SendWheelData()`
-//!
 //! ## Overview
-//!
 //! The Wheel of Fun is a KC-cost gacha spin. The client sends a spin request
 //! via `WIZ_EXT_HOOK (0xE9)` with sub-opcode `WheelData = 0xDA`.
-//!
 //! ## Wire Format
-//!
 //! **Client → Server (spin request):**
 //! ```text
 //! WIZ_EXT_HOOK (0xE9) << u8(0xDA)
 //! ```
-//!
 //! **Server → Client (wheel data — sent on game entry):**
 //! ```text
 //! WIZ_EXT_HOOK (0xE9) << u8(0xDA) << u16(count) << [u32 item_id; count]
 //! ```
-//!
 //! **Server → Client (item notice — sent after successful spin):**
 //! ```text
 //! WIZ_EXT_HOOK (0xE9) << u8(0xBA) << u8(3) << u32(item_id)
@@ -35,18 +27,12 @@ use super::ext_hook::EXT_SUB_AUTODROP;
 pub(crate) use super::ext_hook::EXT_SUB_WHEEL_DATA;
 
 /// KC cost per wheel spin.
-///
-/// C++ Reference: `WheelOfFun.cpp:8` — `if (m_nKnightCash < 350)`
 const WHEEL_SPIN_COST: i32 = 350;
 
 /// Maximum entries in the random slot array.
-///
-/// C++ Reference: `WheelOfFun.cpp:12` — `uint32 bRandArray[10000]`
 const MAX_RAND_SLOTS: usize = 9999;
 
 /// Maximum number of wheel settings entries to send to client.
-///
-/// C++ Reference: `WheelOfFun.cpp:59` — `if (m_sItemWheelArray.size() > 25) return;`
 const MAX_WHEEL_ENTRIES: usize = 25;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,9 +40,6 @@ const MAX_WHEEL_ENTRIES: usize = 25;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build the wheel data packet sent to client on game entry.
-///
-/// C++ Reference: `CUser::SendWheelData()` — `WheelOfFun.cpp:52-66`
-///
 /// Wire: `WIZ_EXT_HOOK (0xE9) << u8(0xDA) << u16(count) << [u32 item_id; count]`
 pub fn build_wheel_data_packet(item_ids: &[u32]) -> Packet {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
@@ -69,9 +52,6 @@ pub fn build_wheel_data_packet(item_ids: &[u32]) -> Packet {
 }
 
 /// Build the item notice packet (AUTODROP type=3).
-///
-/// C++ Reference: `CUser::ExtHook_ItemNotice()` — `XGuard.cpp:94-100`
-///
 /// Wire: `WIZ_EXT_HOOK (0xE9) << u8(0xBA) << u8(3) << u32(item_id)`
 fn build_item_notice_packet(item_id: u32) -> Packet {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
@@ -86,9 +66,6 @@ fn build_item_notice_packet(item_id: u32) -> Packet {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Send wheel data to the client on game entry.
-///
-/// C++ Reference: `CUser::SendWheelData()` — called from `SendLists()`.
-///
 /// Loads wheel settings from the world's cached table, builds the item list,
 /// and sends it. Skips if settings are empty or exceed 25 entries.
 pub async fn send_wheel_data(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -116,9 +93,6 @@ pub async fn send_wheel_data(session: &mut ClientSession) -> anyhow::Result<()> 
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle a Wheel of Fun spin request from the client.
-///
-/// C++ Reference: `CUser::WheelOfFun()` — `WheelOfFun.cpp:1-50`
-///
 /// 1. Check in-game, not trading/merchanting
 /// 2. Check KC >= 350
 /// 3. Build weighted random array from settings
@@ -132,7 +106,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     let world = session.world().clone();
 
     // Guard: in-game, not trading/merchanting
-    // C++ Reference: `if (!isInGame() || isMerchanting() || isTrading()) return;`
     let is_valid = world
         .with_session(sid, |h| h.character.is_some())
         .unwrap_or(false);
@@ -159,7 +132,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // Build weighted random array and pick a winner
-    // C++ Reference: for each entry, fill (drop_rate / 5) slots with its index
     let (item_id, item_count) = {
         let mut rand_array: Vec<usize> = Vec::with_capacity(MAX_RAND_SLOTS);
         for (i, setting) in settings.iter().enumerate() {
@@ -196,7 +168,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     };
 
     // Guard: free inventory slots (>= 2)
-    // C++ Reference: `if (bFreeSlots <= 1) return;`
     let free_slots = world.count_free_slots(sid);
     if free_slots <= 1 {
         debug!(
@@ -308,7 +279,7 @@ mod tests {
         assert_eq!(pkt.data.len(), 6);
     }
 
-    /// MAX_WHEEL_ENTRIES = 25 (C++ WheelOfFun.cpp:59).
+    /// MAX_WHEEL_ENTRIES = 25
     #[test]
     fn test_max_wheel_entries_constant() {
         assert_eq!(MAX_WHEEL_ENTRIES, 25);

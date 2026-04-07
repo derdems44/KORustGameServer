@@ -1,6 +1,4 @@
 //! Character creation repository — loads starting equipment and stats from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `CDBAgent::LoadNewCharSet()` — stored procedure `LOAD_NEW_CHAR_SET`
 //! - `CDBAgent::LoadNewCharValue()` — stored procedure `LOAD_NEW_CHAR_VALUE`
 
@@ -20,7 +18,6 @@ impl<'a> CharCreationRepository<'a> {
 
     /// Load all starting equipment entries (375 rows: 5 classes x 75 slots).
     ///
-    /// C++ Reference: `LOAD_NEW_CHAR_SET` stored procedure
     pub async fn load_all_char_set(&self) -> Result<Vec<CreateNewCharSetRow>, sqlx::Error> {
         sqlx::query_as::<_, CreateNewCharSetRow>(
             "SELECT id, class_type, slot_id, item_id, item_duration, item_count, \
@@ -33,7 +30,6 @@ impl<'a> CharCreationRepository<'a> {
 
     /// Load all starting stat/level/gold entries (25 rows: 5 classes x 5 job types).
     ///
-    /// C++ Reference: `LOAD_NEW_CHAR_VALUE` stored procedure
     pub async fn load_all_char_value(&self) -> Result<Vec<CreateNewCharValueRow>, sqlx::Error> {
         sqlx::query_as::<_, CreateNewCharValueRow>(
             "SELECT n_index, class_type, job_type, level, exp, strength, health, \

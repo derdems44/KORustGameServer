@@ -1,7 +1,4 @@
 //! WIZ_MERCHANT (0x68) + WIZ_MERCHANT_INOUT (0x69) handler — player merchant (personal shop).
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/MerchantHandler.cpp`
-//!
 //! Selling merchant sub-opcodes:
 //! - MERCHANT_OPEN (1): Open merchant setup UI
 //! - MERCHANT_CLOSE (2): Close merchant / cancel
@@ -35,8 +32,6 @@ const MERCHANT_TRADE_CANCEL: u8 = 8;
 const MERCHANT_ITEM_PURCHASED: u8 = 9;
 
 /// Buying merchant sub-opcode constants.
-///
-/// C++ Reference: `MerchantHandler.cpp` — buying merchant opcodes
 const MERCHANT_BUY_OPEN: u8 = 0x21;
 const MERCHANT_BUY_INSERT: u8 = 0x22;
 const MERCHANT_BUY_LIST: u8 = 0x23;
@@ -46,8 +41,6 @@ const MERCHANT_BUY_BOUGHT: u8 = 0x26;
 const MERCHANT_BUY_CLOSE: u8 = 0x27;
 const MERCHANT_BUY_REGION_INSERT: u8 = 0x28;
 const MERCHANT_BUY_LIST_NEW: u8 = 0x51;
-/// Decompile: `case 0x30: CUser::MerchantOfficialList` -- Menisia/official merchant list.
-/// C++ Reference: `MERCHANT_MENISIA_LIST` in `MerchantHandler.cpp:87`
 const MERCHANT_OFFICIAL_LIST: u8 = 0x30;
 /// v2600: Merchant preview via WIZ_MERCHANT sub=0x31 (replaces WIZ_MERCHANTLIST 0xBD).
 const MERCHANT_LIST_PREVIEW: u8 = 0x31;
@@ -63,13 +56,9 @@ const MERCHANT_OPEN_TRADING: i16 = -3;
 const MERCHANT_OPEN_MERCHANTING: i16 = -4;
 
 /// Shopping (store open) error code — sent when player has Genie/NPC shop open.
-///
-/// C++ Reference: `MerchantHandler.cpp:109` — `MERCHANT_OPEN_SHOPPING = -6`
 const MERCHANT_OPEN_SHOPPING: i16 = -6;
 
 /// Under-leveled error code — sent when player level < server MerchantLevel setting.
-///
-/// C++ Reference: `MerchantHandler.cpp:13` — `MERCHANT_OPEN_UNDERLEVELED = 30`
 const MERCHANT_OPEN_UNDERLEVELED: i16 = 30;
 
 /// Handle WIZ_MERCHANT from the client.
@@ -106,7 +95,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         }
         MERCHANT_BUY_BUY => buying_merchant_buy(session, &mut reader).await,
         MERCHANT_BUY_CLOSE => buying_merchant_close_handler(session).await,
-        // Decompile: `case 0x30: CUser::MerchantOfficialList` -- Menisia official list
         MERCHANT_OFFICIAL_LIST => {
             merchant_official_list(session, &mut reader).await
         }
@@ -127,9 +115,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle WIZ_MERCHANTLIST (0xBD) — merchant search / quick preview.
-///
-/// C++ Reference: `CUser::MerchantList()` in `MerchantHandler.cpp:1822-1894`
-///
 /// Client sends a merchant socket ID, server responds with that merchant's
 /// visible items (first 4, or 8 if premium selling merchant).
 pub async fn handle_merchant_list(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
@@ -164,7 +149,6 @@ pub async fn handle_merchant_list(session: &mut ClientSession, pkt: Packet) -> a
     let is_selling = world.is_selling_merchant(merchant_sid);
     let is_buying = world.is_buying_merchant(merchant_sid);
 
-    // C++ Reference: MerchantHandler.cpp:1846-1874
     // Response: WIZ_MERCHANT + MERCHANT_LIST sub-opcode
     let mut result = Packet::new(Opcode::WizMerchant as u8);
 
@@ -204,14 +188,9 @@ pub async fn handle_merchant_list(session: &mut ClientSession, pkt: Packet) -> a
 }
 
 /// Handle MerchantOfficialList (sub=0x30) -- Menisia/official merchant system.
-///
-/// Decompile (GameServer.exe.c:335288): Checks if player has item 810166000
 /// (ITEM_MENICIAS_LIST) in inventory, validates map's m_bMenissiahList flag,
 /// then dispatches sub-sub-opcodes (2=MerchantListMoveProcess, 5=search).
-///
-/// C++ Reference: `MerchantHandler.cpp:1785-1818` (disabled in C++ source,
-/// but enabled in compiled server binary per decompile).
-///
+/// but enabled in compiled server binary).
 /// Stub implementation: validates player state, logs the request.
 async fn merchant_official_list(
     session: &mut ClientSession,
@@ -220,7 +199,6 @@ async fn merchant_official_list(
     let world = session.world().clone();
     let sid = session.session_id();
 
-    // Decompile validation: m_state == GAME_STATE_INGAME, not merchanting,
     // not fishing, not mining, not dead, m_sTradeStatue == 1 (not trading)
     if world.is_player_dead(sid)
         || world.is_merchanting(sid)
@@ -241,10 +219,8 @@ async fn merchant_official_list(
 }
 
 /// Handle merchant list preview via WIZ_MERCHANT sub=0x31/0x11.
-///
 /// v2600 client sends merchant browse as WIZ_MERCHANT sub=0x31 instead of
 /// the separate WIZ_MERCHANTLIST (0xBD) opcode.
-///
 /// C2S: `[sub:u8] [merchant_sid:u32]`
 /// S2C: `[sub:u8] [status:u8] [merchant_sid:u32] [state:u8] [premium:u8] [items:u32 × 4]`
 async fn merchant_list_preview(
@@ -309,8 +285,6 @@ async fn merchant_list_preview(
 }
 
 /// Handle WIZ_MERCHANT_INOUT from the client (broadcast merchant appearance/disappearance).
-///
-/// C++ Reference: Merchant INOUT is typically server-initiated.
 /// The client does not send this directly — it's triggered by merchant_insert/close.
 pub fn handle_inout(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
@@ -325,8 +299,6 @@ pub fn handle_inout(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// MERCHANT_OPEN (1): Request to open merchant setup UI.
-///
-/// C++ Reference: `CUser::MerchantOpen()` in `MerchantHandler.cpp:101-133`
 async fn merchant_open(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -336,7 +308,6 @@ async fn merchant_open(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // Get minimum merchant level from server settings (default 1)
-    // C++ Reference: MerchantHandler.cpp:115 — `GetLevel() < g_pMain->pServerSetting.MerchantLevel`
     let merchant_level = world
         .get_server_settings()
         .map(|s| s.merchant_level)
@@ -347,7 +318,6 @@ async fn merchant_open(session: &mut ClientSession) -> anyhow::Result<()> {
         .map(|ch| ch.level as i16)
         .unwrap_or(0);
 
-    // C++ Reference: MerchantHandler.cpp:107-118 — error code priority order
     let error_code: i16 = if world.is_player_dead(sid) {
         MERCHANT_OPEN_DEAD
     } else if world.is_store_open(sid) {
@@ -389,8 +359,6 @@ async fn merchant_open(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// MERCHANT_CLOSE (2): Close the merchant shop.
-///
-/// C++ Reference: `CUser::MerchantClose()` in `MerchantHandler.cpp:136-167`
 pub(crate) async fn merchant_close(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -427,8 +395,6 @@ pub(crate) async fn merchant_close(session: &mut ClientSession) -> anyhow::Resul
 }
 
 /// MERCHANT_ITEM_ADD (3): Add an item to the merchant shop setup.
-///
-/// C++ Reference: `CUser::MerchantItemAdd()` in `MerchantHandler.cpp:169-243`
 async fn merchant_item_add(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -509,7 +475,6 @@ async fn merchant_item_add(
     }
 
     // Check flags — use equality, NOT bitmask.
-    // C++ Reference: MerchantHandler.cpp:205-209 — isRented/isSealed/isBound/isDuplicate/isExpirationTime
     if slot.flag == ITEM_FLAG_RENTED
         || slot.flag == ITEM_FLAG_SEALED
         || slot.flag == ITEM_FLAG_BOUND
@@ -519,7 +484,6 @@ async fn merchant_item_add(
         return send_merch_add_fail(session, item_id, count, src_pos, dst_pos, gold, is_kc).await;
     }
 
-    // C++ Reference: XGuard.cpp:1116-1121 — MinKnightCash minimum price for KC items
     if is_kc != 0 {
         let min_kc = world
             .get_server_settings()
@@ -577,8 +541,6 @@ async fn merchant_item_add(
 }
 
 /// MERCHANT_ITEM_CANCEL (4): Remove an item from the merchant setup.
-///
-/// C++ Reference: `CUser::MerchantItemCancel()` in `MerchantHandler.cpp:246-286`
 async fn merchant_item_cancel(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -609,7 +571,6 @@ async fn merchant_item_cancel(
     };
 
     // Validate inventory slot still matches merchant data
-    // C++ Reference: MerchantHandler.cpp:269-275
     //   pItem = GetItem(pMerch->bSrcPos + SLOT_MAX);
     //   if (pItem == nullptr || pItem->nNum != pMerch->nItemID) goto fail_return;
     //   if (pItem->sCount != pMerch->bCount) goto fail_return;
@@ -637,8 +598,6 @@ async fn merchant_item_cancel(
 }
 
 /// MERCHANT_INSERT (7): Finalize and open the merchant shop.
-///
-/// C++ Reference: `CUser::MerchantUserInsert()` in `MerchantHandler.cpp:296-337`
 fn merchant_insert(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -695,8 +654,6 @@ fn merchant_insert(
 }
 
 /// MERCHANT_ITEM_LIST (5): Browse a merchant's items.
-///
-/// C++ Reference: `CUser::MerchantItemUserList()` in `MerchantHandler.cpp:505-593`
 async fn merchant_item_list(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -767,8 +724,6 @@ async fn merchant_item_list(
 }
 
 /// MERCHANT_ITEM_BUY (6): Buy an item from a player merchant.
-///
-/// C++ Reference: `CUser::MerchantItemUserBuy()` in `MerchantHandler.cpp:822-1096`
 async fn merchant_item_buy(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -782,13 +737,11 @@ async fn merchant_item_buy(
     };
 
     // Self-buy prevention — cannot buy from your own shop
-    // C++ Reference: MerchantHandler.cpp:837-838
     if merchant_sid == sid {
         return send_merch_buy_fail(session).await;
     }
 
     // Buyer state checks
-    // C++ Reference: MerchantHandler.cpp:842-843
     if world.is_player_dead(sid)
         || world.is_merchanting(sid)
         || world.is_selling_merchant_preparing(sid)
@@ -805,7 +758,6 @@ async fn merchant_item_buy(
     }
 
     // Range check — buyer must be within 35m of merchant, same zone
-    // C++ Reference: MerchantHandler.cpp:856 — `isInRange(pMerchUser, 35.0f)`
     let buyer_pos = world.get_position(sid).unwrap_or_default();
     let seller_pos = world.get_position(merchant_sid).unwrap_or_default();
     if buyer_pos.zone_id != seller_pos.zone_id {
@@ -854,7 +806,6 @@ async fn merchant_item_buy(
     }
 
     // ── Stack overflow prevention ─────────────────────────────────────────
-    // C++ Reference: MerchantHandler.cpp:944 — FindSlotForItem() validates
     // slot capacity BEFORE purchase. Without this check, buyer pays full
     // price but .min(ITEMCOUNT_MAX) silently discards excess items.
     if dest_item.item_id != 0 && countable == 1 && (dest_item.count + item_count) > ITEMCOUNT_MAX {
@@ -862,14 +813,12 @@ async fn merchant_item_buy(
     }
 
     // ── Verify seller's actual inventory still has the item (ghost-item prevention) ──
-    // C++ Reference: MerchantHandler.cpp:932-942 — pSellerItem validation
     let is_kc;
     {
         let merch_preview = match world.get_merchant_item(merchant_sid, item_slot as usize) {
             Some(m) if m.item_id == item_id && !m.sold_out && m.sell_count >= item_count => m,
             _ => return send_merch_buy_fail(session).await,
         };
-        // C++ Reference: MerchantHandler.cpp:643,879 — `!pMerch->nPrice` check
         // Reject purchase if the item has zero price set.
         if merch_preview.price == 0 {
             return send_merch_buy_fail(session).await;
@@ -896,7 +845,6 @@ async fn merchant_item_buy(
     };
 
     // Check payment (after atomic take — if check fails we must restore)
-    // C++ Reference: MerchantHandler.cpp:954-989 — isKC branch vs gold branch
     let req_price = merch.price.saturating_mul(item_count as u32);
     if is_kc {
         // KC (Knight Cash) payment path
@@ -904,7 +852,6 @@ async fn merchant_item_buy(
             world.restore_merchant_buy(merchant_sid, item_slot as usize, item_id, item_count);
             return send_merch_buy_fail(session).await;
         }
-        // C++ Reference: MerchantHandler.cpp:984 — pMerchUser->CashGain(req_gold)
         // Seller gains KC (skip for offline/bot — C++ only calls CashGain on real users)
         if !world.is_offline_status(merchant_sid) {
             crate::handler::knight_cash::cash_gain(&world, session.pool(), merchant_sid, req_price);
@@ -939,7 +886,6 @@ async fn merchant_item_buy(
     }
 
     // Daily rank stat: GMTotalSold += req_price (merchant seller earns gold)
-    // C++ Reference: MerchantHandler.cpp:1584 — `pUserDailyRank.GMTotalSold += nPrice`
     world.update_session(merchant_sid, |h| {
         h.dr_gm_total_sold += req_price as u64;
     });
@@ -995,7 +941,6 @@ async fn merchant_item_buy(
         });
     }
 
-    // C++ Reference: MerchantHandler.cpp:1046 — SendStackChange to seller
     // Notify seller's client of the inventory change so it stays in sync.
     let seller_slot_pos = merch.original_slot.saturating_sub(SLOT_MAX as u8);
     let seller_slot_data = world
@@ -1097,7 +1042,6 @@ async fn merchant_item_buy(
         );
 
         // If the merchant was an offline session, disconnect it now.
-        // C++ Reference: MerchantHandler.cpp — when nItemsRemaining == 0,
         // the merchant closes.  For offline sessions this means full cleanup.
         if world.is_offline_status(merchant_sid) {
             debug!(
@@ -1112,8 +1056,6 @@ async fn merchant_item_buy(
 }
 
 /// MERCHANT_TRADE_CANCEL (8): Close the browse window.
-///
-/// C++ Reference: `CUser::CancelMerchant()` in `MerchantHandler.cpp:1098-1106`
 pub(crate) async fn merchant_trade_cancel(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -1162,8 +1104,6 @@ async fn send_merch_buy_fail(session: &mut ClientSession) -> anyhow::Result<()> 
 // ============================================================================
 
 /// MERCHANT_BUY_OPEN (0x21): Request to open buying merchant setup UI.
-///
-/// C++ Reference: `CUser::BuyingMerchantOpen()` in `MerchantHandler.cpp`
 async fn buying_merchant_open(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -1217,8 +1157,6 @@ async fn buying_merchant_open(session: &mut ClientSession) -> anyhow::Result<()>
 }
 
 /// MERCHANT_BUY_INSERT (0x22): Submit wanted item list and start buying merchant.
-///
-/// C++ Reference: `CUser::BuyingMerchantUserInsert()` in `MerchantHandler.cpp`
 fn buying_merchant_insert(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -1336,8 +1274,6 @@ fn buying_merchant_insert(
 }
 
 /// MERCHANT_BUY_LIST (0x23): Buyer views buying merchant's wanted item list.
-///
-/// C++ Reference: `CUser::BuyingMerchantUserList()` in `MerchantHandler.cpp`
 async fn buying_merchant_list(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -1392,8 +1328,6 @@ async fn buying_merchant_list(
 }
 
 /// MERCHANT_BUY_BUY (0x24): Seller sells item to buying merchant.
-///
-/// C++ Reference: `CUser::BuyingMerchantUserBuy()` in `MerchantHandler.cpp`
 async fn buying_merchant_buy(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -1459,7 +1393,6 @@ async fn buying_merchant_buy(
         return Ok(());
     }
 
-    // C++ Reference: MerchantHandler.cpp:1541 — durability validation
     // Seller's item must have full durability (match the wanted item's stored durability)
     if wanted.durability >= 0 && seller_item.durability != wanted.durability {
         return Ok(());
@@ -1468,7 +1401,6 @@ async fn buying_merchant_buy(
     // Calculate price
     let total_price = wanted.price.saturating_mul(stack_size as u32);
 
-    // C++ Reference: MerchantHandler.cpp:1571-1577 — isKC branch
     if wanted.is_kc {
         // KC payment: merchant (buyer) loses KC, seller (session) gains KC
         if world.get_knight_cash(merchant_sid) < total_price {
@@ -1558,7 +1490,6 @@ async fn buying_merchant_buy(
         true
     });
 
-    // C++ Reference: MerchantHandler.cpp:1610-1612 — SendStackChange for both parties
     // Send WIZ_ITEM_COUNT_CHANGE to seller (inventory update)
     {
         let mut sc = Packet::new(Opcode::WizItemCountChange as u8);
@@ -1665,8 +1596,6 @@ async fn buying_merchant_buy(
 }
 
 /// MERCHANT_BUY_CLOSE (0x27): Close buying merchant (client-initiated).
-///
-/// C++ Reference: `CUser::BuyingMerchantClose()` in `MerchantHandler.cpp`
 async fn buying_merchant_close_handler(session: &mut ClientSession) -> anyhow::Result<()> {
     buying_merchant_close_internal(session).await
 }
@@ -1731,8 +1660,6 @@ fn buying_merchant_close_broadcast(world: &crate::world::WorldState, sid: crate:
 }
 
 /// Broadcast buying merchant region insert (first 4 items visible in region).
-///
-/// C++ Reference: `CUser::BuyingMerchantInsertRegion()` in `MerchantHandler.cpp`
 fn buying_merchant_region_insert(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -1780,7 +1707,7 @@ mod tests {
         assert_eq!(r.remaining(), 0);
     }
 
-    /// Test MERCHANT_OPEN error codes match C++ reference.
+    /// Test MERCHANT_OPEN error codes match protocol specification.
     #[test]
     fn test_merchant_open_error_codes() {
         // Dead = -2
@@ -2009,7 +1936,7 @@ mod tests {
         assert_eq!(r.read_u16().map(|v| v as i16), Some(30));
     }
 
-    /// Test merchant sub-opcode constants match C++ reference.
+    /// Test merchant sub-opcode constants match protocol specification.
     #[test]
     fn test_merchant_sub_opcode_constants() {
         assert_eq!(MERCHANT_OPEN, 1);
@@ -2484,7 +2411,6 @@ mod tests {
     // ── Sprint 275: Expiration & Ghost-Item Tests ────────────────────────
 
     /// Test that expired items (expire_time > 0) are blocked from merchant add.
-    /// C++ Reference: MerchantHandler.cpp:209 — isExpirationTime()
     #[test]
     fn test_merchant_add_blocks_expired_item() {
         // expire_time > 0 means the item has an expiration timestamp
@@ -2497,7 +2423,6 @@ mod tests {
     }
 
     /// Test seller ghost-item verification: seller inventory must match merchant data.
-    /// C++ Reference: MerchantHandler.cpp:932-942
     #[test]
     fn test_merchant_buy_seller_item_verification() {
         let world = WorldState::new();
@@ -2559,7 +2484,6 @@ mod tests {
 
     // ── Sprint 285: Zero price check ────────────────────────────────────
 
-    /// C++ Reference: MerchantHandler.cpp:643,879 — `!pMerch->nPrice` check.
     /// Purchases with zero price must be rejected to prevent free items.
     #[test]
     fn test_zero_price_rejection() {
@@ -2576,7 +2500,6 @@ mod tests {
 
     // ── Sprint 310: Merchant cancel count validation ──────────────────
 
-    /// C++ Reference: MerchantHandler.cpp:272-275
     /// `if (pItem->sCount != pMerch->bCount) goto fail_return;`
     /// The cancel operation must verify inventory count matches merchant data count.
     #[test]
@@ -2593,7 +2516,6 @@ mod tests {
     }
 
     /// Verify inventory item_id must match merchant item_id on cancel.
-    /// C++ Reference: MerchantHandler.cpp:270 — `pItem->nNum != pMerch->nItemID`
     #[test]
     fn test_merchant_cancel_validates_item_id() {
         let inv_item_id: u32 = 389001000;
@@ -2753,7 +2675,7 @@ mod tests {
         assert_eq!(r.remaining(), 0);
     }
 
-    /// Test buying merchant sub-opcode constants match C++ reference.
+    /// Test buying merchant sub-opcode constants match protocol specification.
     #[test]
     fn test_buying_merchant_opcodes() {
         assert_eq!(MERCHANT_BUY_OPEN, 0x21);

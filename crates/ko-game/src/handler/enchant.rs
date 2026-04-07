@@ -1,84 +1,61 @@
 //! WIZ_ENCHANT (0xCC) handler — weapon/armor + item enchantment system.
-//!
 //! Dual sub-opcode system: sub=1 for weapon/armor enchant, sub=2 for item enchant.
-//!
 //! ## Client RE
-//!
 //! Entry at `0x82FB4D` — reads `[u8 sub]`:
 //! - sub=1: Weapon/Armor Enchant panel `[esi+0x678]` → `0xA8D8F0`
 //! - sub=2: Item Enchant panel `[esi+0x67C]` → `0xA853D0`
-//!
 //! Panel-dependent (Group B) — both sub-opcodes null-check panel pointer.
-//!
 //! ## S2C Packet Formats
-//!
 //! ### Sub=1 (Weapon/Armor Enchant)
-//!
 //! ```text
 //! first_byte=1: FULL_INIT
 //!   [u8 sub=1][u8 first=1][u8 max_star][u8 enchant_count]
 //!   [u8 slot_level × 8][u8 slot_unlocked × 9][u8 item_count]
 //!   [{u8 type, u32 item_id} × item_count]
-//!
 //! first_byte=2: RESULT_WITH_INNER
 //!   [u8 sub=1][u8 first=2][u8 inner]
 //!   inner=1: str 43800, then 9 bools + items (no levels)
 //!   inner=2|3: str 12423, inner=4: str 43801, inner=5: str 7434
-//!
 //! first_byte=3: ENCHANT_RESULT
 //!   [u8 sub=1][u8 first=3][u8 result_slot][u8 result_code]
 //!   0xFF=cancelled(43802), >=8=max(43803), <8=success(43804)
-//!
 //! first_byte=4: UNBIND_RESULT
 //!   [u8 sub=1][u8 first=4][u8 result]
 //!   1=success(43805), 2|5=fail(43802), 3=err(1702), 4=err(16810)
-//!
 //! first_byte=5: LEVEL_UP_WITH_ANIMATION
 //!   [u8 sub=1][u8 first=5][u8 result]
 //!   result=1: [u8 new_count][u8 slot_index] → animate(43806)
 //!   result=2: fail(43807), result=3: fail(43808)
-//!
 //! first_byte=6: STAR_LEVEL_UPDATE
 //!   [u8 sub=1][u8 first=6][u8 new_star][u8 slot_level × 8]
 //!   If new>current: star-up animation (43809)
-//!
 //! first_byte=8: MAX_ENCHANT_RESULT
 //!   [u8 sub=1][u8 first=8][u8 result]
 //!   1=success+anim(43803), 2|4=fail(43802), 3=err(1702)
 //! ```
-//!
 //! ### Sub=2 (Item Enchant)
-//!
 //! ```text
 //! first_byte=1: FULL_ITEM_LIST_INIT
 //!   [u8 sub=2][u8 first=1][u8 category][u8 item_count]
 //!   [{u8 type, u32 item_id} × item_count]
 //!   [u8 slot_unlock_count][u8 marker × 4][u8 marker_4]
-//!
 //! first_byte=2: RESULT_STATUS
 //!   [u8 sub=2][u8 first=2][u8 inner]
 //!   inner=1: [u8 category], inner=2|3: str 12423, inner=4: str 43858, inner=5: str 7434
-//!
 //! first_byte=3: ENCHANT_ITEM_RESULT
 //!   [u8 sub=2][u8 first=3][u8 inner]
 //!   inner=1: [u8 lvl1][u8 lvl2], inner=2: fail(43865)+cooldown=60
 //!   inner=3: [i16 val][u8 lvl1][u8 lvl2]
-//!
 //! first_byte=4: STATUS_RESULT
 //!   [u8 sub=2][u8 first=4][u8 result]
 //!   2|5: str 43860, 3: str 1702, 4: str 1915
-//!
 //! first_byte=7: PANEL_CLOSE
 //!   [u8 sub=2][u8 first=7]
 //! ```
-//!
 //! ## C2S
-//!
 //! Single send site at `0x433D45` (script interpreter).
 //! Format: `[u8 sub][u8 action][...]` — server responds with S2C above.
-//!
 //! ## String Table IDs
-//!
 //! - Sub=1: 43800-43809 (weapon/armor enchant messages)
 //! - Sub=2: 43856-43870 (item enchant messages)
 //! - Shared: 12423 (generic error), 7434, 1702, 1915
@@ -135,13 +112,11 @@ const MAX_UNLOCK_BOOLS: usize = 9;
 // ── S2C Builders — Sub=1 (Weapon/Armor Enchant) ────────────────────
 
 /// Build a Sub=1 FULL_INIT packet — opens panel with all enchant data.
-///
 /// - `max_star_level`: Current star tier (panel+0x328)
 /// - `enchant_count`: Number of completed enchants (panel+0x324)
 /// - `slot_levels`: 8 slot levels (panel+0x318..0x31F)
 /// - `slot_unlocked`: 9 slot unlock bools
 /// - `items`: Vec of (type, item_id) enchant material items
-///
 /// Wire: `[u8 sub=1][u8 first=1][u8 max_star][u8 enchant_count]`
 ///       `[u8 × 8 levels][u8 × 9 unlocks][u8 count][{u8,u32} × N]`
 pub fn build_wa_full_init(
@@ -176,9 +151,7 @@ pub fn build_wa_full_init_empty() -> Packet {
 }
 
 /// Build a Sub=1 RESULT_WITH_INNER error packet.
-///
 /// - `inner`: Result code (1=success+items, 2|3=err 12423, 4=err 43801, 5=err 7434)
-///
 /// Wire: `[u8 sub=1][u8 first=2][u8 inner]`
 pub fn build_wa_result_error(inner: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -189,10 +162,8 @@ pub fn build_wa_result_error(inner: u8) -> Packet {
 }
 
 /// Build a Sub=1 ENCHANT_RESULT packet.
-///
 /// - `result_slot`: Slot index (0xFF = cancelled)
 /// - `result_code`: 0xFF=cancelled(43802), >=8=max(43803), <8=success(43804)
-///
 /// Wire: `[u8 sub=1][u8 first=3][u8 slot][u8 code]`
 pub fn build_wa_enchant_result(result_slot: u8, result_code: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -204,9 +175,7 @@ pub fn build_wa_enchant_result(result_slot: u8, result_code: u8) -> Packet {
 }
 
 /// Build a Sub=1 UNBIND_RESULT packet.
-///
 /// - `result`: 1=success(43805), 2|5=fail(43802), 3=err(1702), 4=err(16810)
-///
 /// Wire: `[u8 sub=1][u8 first=4][u8 result]`
 pub fn build_wa_unbind_result(result: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -217,10 +186,8 @@ pub fn build_wa_unbind_result(result: u8) -> Packet {
 }
 
 /// Build a Sub=1 LEVEL_UP success packet with animation.
-///
 /// - `new_enchant_count`: Updated enchant count after level-up
 /// - `slot_index`: Slot that leveled up (triggers animation)
-///
 /// Wire: `[u8 sub=1][u8 first=5][u8 result=1][u8 count][u8 slot]`
 pub fn build_wa_level_up_success(new_enchant_count: u8, slot_index: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -233,9 +200,7 @@ pub fn build_wa_level_up_success(new_enchant_count: u8, slot_index: u8) -> Packe
 }
 
 /// Build a Sub=1 LEVEL_UP failure packet.
-///
 /// - `result`: 2=fail(43807), 3=fail(43808)
-///
 /// Wire: `[u8 sub=1][u8 first=5][u8 result]`
 pub fn build_wa_level_up_fail(result: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -246,10 +211,8 @@ pub fn build_wa_level_up_fail(result: u8) -> Packet {
 }
 
 /// Build a Sub=1 STAR_LEVEL_UPDATE packet.
-///
 /// - `new_star_level`: New star tier (if > current → animation, str 43809)
 /// - `slot_levels`: Updated 8 slot levels
-///
 /// Wire: `[u8 sub=1][u8 first=6][u8 star][u8 × 8 levels]`
 pub fn build_wa_star_update(new_star_level: u8, slot_levels: &[u8; MAX_LEVEL_SLOTS]) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -263,9 +226,7 @@ pub fn build_wa_star_update(new_star_level: u8, slot_levels: &[u8; MAX_LEVEL_SLO
 }
 
 /// Build a Sub=1 MAX_ENCHANT_RESULT packet.
-///
 /// - `result`: 1=success+anim(43803), 2|4=fail(43802), 3=err(1702)
-///
 /// Wire: `[u8 sub=1][u8 first=8][u8 result]`
 pub fn build_wa_max_enchant_result(result: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -278,13 +239,11 @@ pub fn build_wa_max_enchant_result(result: u8) -> Packet {
 // ── S2C Builders — Sub=2 (Item Enchant) ─────────────────────────────
 
 /// Build a Sub=2 FULL_ITEM_LIST_INIT packet.
-///
 /// - `category`: Item enchant category (panel+0x44C)
 /// - `items`: Vec of (type, item_id) items
 /// - `slot_unlock_count`: Number of unlocked slots (≥4 triggers sub=1 panel close)
 /// - `markers`: 4 slot markers (0xFF=active)
 /// - `marker_4`: 5th marker (0xFF=additional active)
-///
 /// Wire: `[u8 sub=2][u8 first=1][u8 cat][u8 count][{u8,u32}×N]`
 ///       `[u8 unlock_count][u8×4 markers][u8 marker_4]`
 pub fn build_item_full_init(
@@ -317,9 +276,7 @@ pub fn build_item_full_init_empty() -> Packet {
 }
 
 /// Build a Sub=2 RESULT_STATUS packet.
-///
 /// - `inner`: 1=refresh(+category), 2|3=err 12423, 4=err 43858, 5=err 7434
-///
 /// Wire: `[u8 sub=2][u8 first=2][u8 inner]`
 pub fn build_item_result_error(inner: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -330,7 +287,6 @@ pub fn build_item_result_error(inner: u8) -> Packet {
 }
 
 /// Build a Sub=2 RESULT_STATUS with category refresh (inner=1).
-///
 /// Wire: `[u8 sub=2][u8 first=2][u8 inner=1][u8 category]`
 pub fn build_item_result_refresh(category: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -342,9 +298,7 @@ pub fn build_item_result_refresh(category: u8) -> Packet {
 }
 
 /// Build a Sub=2 ENCHANT_ITEM_RESULT — inner=1 success.
-///
 /// Client reads 2 level bytes and updates display.
-///
 /// Wire: `[u8 sub=2][u8 first=3][u8 inner=1][u8 level_1][u8 level_2]`
 pub fn build_item_enchant_success(level_1: u8, level_2: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -357,9 +311,7 @@ pub fn build_item_enchant_success(level_1: u8, level_2: u8) -> Packet {
 }
 
 /// Build a Sub=2 ENCHANT_ITEM_RESULT — inner=2 failure.
-///
 /// Client shows string 43865 and sets 60s cooldown.
-///
 /// Wire: `[u8 sub=2][u8 first=3][u8 inner=2]`
 pub fn build_item_enchant_fail() -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -370,9 +322,7 @@ pub fn build_item_enchant_fail() -> Packet {
 }
 
 /// Build a Sub=2 ENCHANT_ITEM_RESULT — inner=3 special result.
-///
 /// Client reads i16 value + 2 level bytes.
-///
 /// Wire: `[u8 sub=2][u8 first=3][u8 inner=3][i16 value][u8 level_1][u8 level_2]`
 pub fn build_item_enchant_special(value: i16, level_1: u8, level_2: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -386,9 +336,7 @@ pub fn build_item_enchant_special(value: i16, level_1: u8, level_2: u8) -> Packe
 }
 
 /// Build a Sub=2 STATUS_RESULT packet.
-///
 /// - `result`: 2|5=str 43860, 3=str 1702, 4=str 1915
-///
 /// Wire: `[u8 sub=2][u8 first=4][u8 result]`
 pub fn build_item_status_result(result: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -399,7 +347,6 @@ pub fn build_item_status_result(result: u8) -> Packet {
 }
 
 /// Build a Sub=2 PANEL_CLOSE packet.
-///
 /// Wire: `[u8 sub=2][u8 first=7]`
 pub fn build_item_panel_close() -> Packet {
     let mut pkt = Packet::new(Opcode::WizEnchant as u8);
@@ -411,7 +358,6 @@ pub fn build_item_panel_close() -> Packet {
 // ── C2S Handler ─────────────────────────────────────────────────────
 
 /// Handle WIZ_ENCHANT (0xCC) from the client.
-///
 /// C2S format: `[u8 sub][u8 action][...]`
 /// Single send site via script interpreter at `0x433D45`.
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
@@ -466,13 +412,11 @@ const ENCHANT_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(60)
 // ── C2S Sub-handlers ─────────────────────────────────────────────────
 
 /// Handle weapon/armor enchant (sub=1) C2S actions.
-///
 /// action=1: Open panel → send full_init with session state.
 /// action=2: Enchant slot → read `[u8 slot_index]`, upgrade level.
 /// action=3: Unbind slot → read `[u8 slot_index]`, reset level to 0.
 /// action=4: Level up → upgrade enchant count, unlock next slot.
 /// action=5: Max enchant → set all unlocked slots to max level.
-///
 /// C2S format is assumed (Binary/ has no reference). All actions
 /// log raw remaining bytes for in-game verification.
 async fn handle_weapon_armor(
@@ -523,11 +467,9 @@ async fn handle_weapon_armor(
 }
 
 /// Handle item enchant (sub=2) C2S actions.
-///
 /// action=1: Open panel → send full init with session state.
 /// action=2: Select category / enchant item.
 /// action=3: Perform item enchant.
-///
 /// C2S format is assumed (Binary/ has no reference).
 async fn handle_item_enchant(
     session: &mut ClientSession,
@@ -596,7 +538,6 @@ async fn send_wa_full_init(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Enchant a specific slot — increment its level.
-///
 /// Validates slot index (0-7), checks slot is unlocked, checks not already max.
 /// On success: increments level, updates star tier if needed, async DB save.
 async fn handle_wa_enchant_slot(session: &mut ClientSession, slot_index: u8) -> anyhow::Result<()> {
@@ -707,7 +648,6 @@ async fn handle_wa_unbind(session: &mut ClientSession, slot_index: u8) -> anyhow
 }
 
 /// Level up — consume enchant count to unlock next slot.
-///
 /// When `enchant_count >= ENCHANTS_PER_LEVEL_UP`, the next locked slot
 /// gets unlocked and enchant_count resets.
 async fn handle_wa_level_up(session: &mut ClientSession, _slot_index: u8) -> anyhow::Result<()> {
@@ -852,14 +792,10 @@ async fn handle_item_category_select(session: &mut ClientSession, category: u8) 
 }
 
 /// Execute item enchant using current markers.
-///
 /// Rolls for success/fail/special outcome.
-/// C++ Reference: enchant execution with probability-based result.
-///
 /// - Success (inner=1): markers remain, updated levels sent
 /// - Fail (inner=2): markers reset, 60s cooldown, client shows string 43865
 /// - Special (inner=3): bonus value + levels, rare outcome
-///
 /// Success rate: 70% base. Special rate: 5% of successes.
 async fn handle_item_execute_enchant(session: &mut ClientSession) -> anyhow::Result<()> {
     let sid = session.session_id();

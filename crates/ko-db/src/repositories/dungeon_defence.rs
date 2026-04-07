@@ -1,6 +1,4 @@
 //! Dungeon Defence (Full Moon Rift) stage and monster spawn repository.
-//!
-//! C++ Reference: Loading of `m_DungeonDefenceStageListArray` and
 //!                `m_DungeonDefenceMonsterListArray` at server startup.
 
 use crate::models::dungeon_defence::{DfMonsterRow, DfStageRow};
@@ -19,7 +17,6 @@ impl<'a> DungeonDefenceRepository<'a> {
 
     /// Load all DD stage definitions from the database.
     ///
-    /// C++ Reference: Loading `m_DungeonDefenceStageListArray`
     pub async fn load_all_stages(&self) -> Result<Vec<DfStageRow>, sqlx::Error> {
         sqlx::query_as::<_, DfStageRow>(
             "SELECT id, difficulty, difficulty_name, stage_id \
@@ -31,7 +28,6 @@ impl<'a> DungeonDefenceRepository<'a> {
 
     /// Load all DD monster spawn definitions from the database.
     ///
-    /// C++ Reference: Loading `m_DungeonDefenceMonsterListArray`
     pub async fn load_all_monsters(&self) -> Result<Vec<DfMonsterRow>, sqlx::Error> {
         sqlx::query_as::<_, DfMonsterRow>(
             "SELECT id, difficulty, monster_id, is_monster, pos_x, pos_z, \

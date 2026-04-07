@@ -1,6 +1,4 @@
 //! Item-related reference table models — maps to PostgreSQL tables.
-//!
-//! C++ Reference:
 //! - `shared/database/ItemTableSet.h` — _ITEM_OP, _SET_ITEM, _ITEM_EXCHANGE
 //! - `shared/database/MagicTableSet.h` — _K_MONSTER_ITEM
 //! - `shared/database/NpcItemSet.h` — _K_NPC_ITEM
@@ -11,14 +9,11 @@
 //! - `shared/database/MakeLareItemTableSet.h` — _MAKE_ITEM_LARE_CODE
 //! - `shared/database/MakeItemGroupSet.h` — _MAKE_ITEM_GROUP, _MAKE_ITEM_GROUP_RANDOM
 //! - `shared/database/RentalItemSet.h` — _RENTAL_ITEM
-//!
 //! These tables are bulk-loaded at startup and cached in-memory.
 
 /// Item special effect entry from the `item_op` table.
-///
 /// Maps triggered skill effects to items (e.g., weapon procs).
 /// MSSQL source: `ITEM_OP` (2,703 rows).
-/// C++ equivalent: `_ITEM_OP` (ItemTableSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemOpRow {
     /// Item ID that has the special effect.
@@ -32,10 +27,8 @@ pub struct ItemOpRow {
 }
 
 /// Set item bonus entry from the `set_item` table.
-///
 /// Defines bonuses granted when wearing a complete item set.
 /// MSSQL source: `SET_ITEM` (1,165 rows).
-/// C++ equivalent: `_SET_ITEM` (ItemTableSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SetItemRow {
     /// Set identifier (matches item's set_id field).
@@ -121,10 +114,8 @@ pub struct SetItemRow {
 }
 
 /// Monster drop table entry from the `monster_item` table.
-///
 /// Each monster has up to 12 item drop slots with associated drop rates.
 /// MSSQL source: `K_MONSTER_ITEM` (2,154 rows).
-/// C++ equivalent: `_K_MONSTER_ITEM` (MagicTableSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MonsterItemRow {
     /// Monster drop table index (referenced by npc_template.item_table).
@@ -180,10 +171,8 @@ pub struct MonsterItemRow {
 }
 
 /// Item exchange/crafting recipe from the `item_exchange` table.
-///
 /// Defines crafting recipes: up to 5 input items produce up to 5 output items.
 /// MSSQL source: `ITEM_EXCHANGE` (5,023 rows).
-/// C++ equivalent: `_ITEM_EXCHANGE` (ItemTableSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemExchangeRow {
     /// Exchange recipe index.
@@ -243,10 +232,8 @@ pub struct ItemExchangeRow {
 }
 
 /// Item upgrade settings entry from the `item_upgrade_settings` table.
-///
 /// Defines the required materials, success rates, and costs for item upgrades.
 /// MSSQL source: `ITEM_UPGRADE_SETTINGS` (257 rows).
-/// C++ equivalent: Used by `CGameServerDlg::LoadItemUpgradeTable()`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemUpgradeSettingsRow {
     /// Required material item 1 ID.
@@ -272,10 +259,8 @@ pub struct ItemUpgradeSettingsRow {
 }
 
 /// New upgrade recipe from the `new_upgrade` table.
-///
 /// Defines specific item-to-item upgrade transformations (e.g., +5 sword -> +6 sword).
 /// MSSQL source: `NEW_UPGRADE1` (18,148 rows).
-/// C++ equivalent: `_NEW_UPGRADE` (ItemTableSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct NewUpgradeRow {
     /// Upgrade recipe index.
@@ -295,10 +280,8 @@ pub struct NewUpgradeRow {
 }
 
 /// NPC drop table entry from the `npc_item` table.
-///
 /// Each NPC has up to 12 item drop slots with associated drop rates.
 /// MSSQL source: `K_NPC_ITEM`.
-/// C++ equivalent: `_K_NPC_ITEM` (NpcItemSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct NpcItemRow {
     /// NPC drop table index.
@@ -354,10 +337,8 @@ pub struct NpcItemRow {
 }
 
 /// Item upgrade recipe from the `item_upgrade` table.
-///
 /// Defines NPC-based upgrade recipes with required materials and success rates.
 /// MSSQL source: `ITEM_UPGRADE`.
-/// C++ equivalent: `_ITEM_UPGRADE` (ItemUpgradeSet.h).
 /// Constants: `MAX_ITEMS_REQ_FOR_UPGRADE = 8`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemUpgradeRow {
@@ -400,10 +381,8 @@ pub struct ItemUpgradeRow {
 }
 
 /// Weapon crafting template from the `make_weapon` table.
-///
 /// Maps crafting level to item IDs for 12 weapon classes.
 /// MSSQL source: `MAKE_WEAPON`.
-/// C++ equivalent: `_MAKE_WEAPON` (MakeWeaponTableSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MakeWeaponRow {
     /// Crafting level index.
@@ -435,10 +414,8 @@ pub struct MakeWeaponRow {
 }
 
 /// Defensive crafting template from the `make_defensive` table.
-///
 /// Maps crafting level to item IDs for 7 defensive classes.
 /// MSSQL source: `MAKE_DEFENSIVE`.
-/// C++ equivalent: `_MAKE_WEAPON` reused (MakeDefensiveTableSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MakeDefensiveRow {
     /// Crafting level index.
@@ -460,10 +437,8 @@ pub struct MakeDefensiveRow {
 }
 
 /// Crafting grade code from the `make_item_gradecode` table.
-///
 /// Maps item index to 9 grade probability values.
 /// MSSQL source: `MAKE_ITEM_GRADECODE`.
-/// C++ equivalent: `_MAKE_ITEM_GRADE_CODE` (MakeGradeItemTableSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MakeItemGradeCodeRow {
     /// Item crafting category index.
@@ -489,10 +464,8 @@ pub struct MakeItemGradeCodeRow {
 }
 
 /// Crafting rarity code from the `make_item_larecode` table.
-///
 /// Maps level grade to rarity type probabilities.
 /// MSSQL source: `MAKE_ITEM_LARECODE`.
-/// C++ equivalent: `_MAKE_ITEM_LARE_CODE` (MakeLareItemTableSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MakeItemLareCodeRow {
     /// Level grade index.
@@ -506,10 +479,8 @@ pub struct MakeItemLareCodeRow {
 }
 
 /// Crafting item group from the `make_item_group` table.
-///
 /// Groups up to 200 possible output items for crafting.
 /// MSSQL source: `MAKE_ITEM_GROUP`.
-/// C++ equivalent: `_MAKE_ITEM_GROUP` (MakeItemGroupSet.h).
 /// Note: Normalized from 200-column layout to a PostgreSQL integer array.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MakeItemGroupRow {
@@ -520,10 +491,8 @@ pub struct MakeItemGroupRow {
 }
 
 /// Random crafting item group mapping from the `make_item_group_random` table.
-///
 /// Maps indices to item IDs and group numbers for random crafting selection.
 /// MSSQL source: `MAKE_ITEM_GROUP_RANDOM`.
-/// C++ equivalent: `_MAKE_ITEM_GROUP_RANDOM` (MakeItemGroupSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MakeItemGroupRandomRow {
     /// Record index.
@@ -535,11 +504,9 @@ pub struct MakeItemGroupRandomRow {
 }
 
 /// Crafting item code lookup from the `make_item` table.
-///
 /// Maps a weighted sIndex (1..10000) to an (item_code, item_level) pair.
 /// Used by the loot system (ItemProdution) to generate random item drops.
 /// MSSQL source: `MAKE_ITEM` (10,000 rows).
-/// C++ Reference: `CNpc::ItemProdution()` in Npc.cpp.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MakeItemRow {
     /// Weighted recipe/lookup index (1..10000).
@@ -551,10 +518,8 @@ pub struct MakeItemRow {
 }
 
 /// Rental item entry from the `rental_item` table.
-///
 /// Defines items available for player-to-player rental.
 /// MSSQL source: `RENTAL_ITEM`.
-/// C++ equivalent: `_RENTAL_ITEM` (RentalItemSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct RentalItemRow {
     /// Rental record index.
@@ -582,13 +547,10 @@ pub struct RentalItemRow {
 }
 
 /// NPC sell table entry from the `item_sell_table` table.
-///
 /// Each row maps a selling group (NPC shop) to 24 item slots.
 /// Used at buy time to validate that the requested item is actually
 /// sold by the NPC the player is interacting with.
-///
 /// MSSQL source: `ITEM_SELLTABLE` (457 rows, 42 selling groups).
-/// C++ equivalent: `_ITEM_SELLTABLE` (ItemSellTableSet.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemSellTableRow {
     /// Row index (primary key in original DB).
@@ -681,11 +643,9 @@ impl ItemSellTableRow {
 }
 
 /// Crafting recipe entry from the `item_special_sewing` table.
-///
 /// Each recipe requires up to 10 material items and produces one output item.
 /// Used by the Shozin Exchange (Special Part Sewing) crafting system.
 /// MSSQL source: `ITEM_SPECIAL_SEWING` (2,468 rows).
-/// C++ equivalent: `SPECIAL_PART_SEWING_EXCHANGE` (GameDefine.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemSpecialSewingRow {
     /// Recipe index (primary key).
@@ -746,7 +706,7 @@ pub struct ItemSpecialSewingRow {
     pub is_shadow_success: bool,
 }
 
-/// Max number of material slots per crafting recipe (C++ `ITEMS_SPECIAL_EXCHANGE_GROUP`).
+/// Max number of material slots per crafting recipe
 pub const ITEMS_SPECIAL_EXCHANGE_GROUP: usize = 10;
 
 impl ItemSpecialSewingRow {
@@ -797,11 +757,9 @@ impl ItemSpecialSewingRow {
 }
 
 /// Item smash entry from the `item_smash` table.
-///
 /// Used by the Old Man Exchange (Item Disassemble) system.
 /// Each row defines a possible output item with a weighted rate.
 /// MSSQL source: `ITEM_SMASH` (205 rows).
-/// C++ equivalent: `_ITEM_EXCHANGE_CRASH` (GameDefine.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemSmashRow {
     /// Index (1000000-1999999=shields, 2000000-2999999=weapons, 3000000-3999999=armor,
@@ -816,10 +774,8 @@ pub struct ItemSmashRow {
 }
 
 /// Special stone definition from the `k_special_stone` table.
-///
 /// Defines chaos stone summon configurations per zone.
 /// MSSQL source: `K_SPECIAL_STONE` (18 rows).
-/// C++ equivalent: `_K_SPECIAL_STONE` (GameDefine.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SpecialStoneRow {
     /// Unique index.
@@ -839,10 +795,8 @@ pub struct SpecialStoneRow {
 }
 
 /// Random item entry from the `item_random` table.
-///
 /// Used by event systems to generate random reward items.
 /// MSSQL source: `ITEM_RANDOM` (58 rows).
-/// C++ equivalent: `_ITEM_RANDOM` (GameDefine.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemRandomRow {
     /// Unique index.
@@ -862,10 +816,8 @@ pub struct ItemRandomRow {
 }
 
 /// Item group entry from the `item_group` table.
-///
 /// Groups items for random selection (e.g., Gavolt rewards).
 /// MSSQL source: `ITEM_GROUP` (4 rows, 30 item columns normalized to array).
-/// C++ equivalent: `_ITEM_GROUP`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemGroupRow {
     /// Group identifier.
@@ -877,10 +829,8 @@ pub struct ItemGroupRow {
 }
 
 /// Item exchange experience entry from the `item_exchange_exp` table.
-///
 /// Defines exchange rewards with level-based output items.
 /// MSSQL source: `ITEM_EXCHANGE_EXP` (204 rows).
-/// C++ equivalent: `_ITEM_EXCHANGE_EXP`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemExchangeExpRow {
     /// Exchange index.
@@ -920,10 +870,8 @@ pub struct ItemExchangeExpRow {
 }
 
 /// Item give exchange entry from the `item_give_exchange` table.
-///
 /// Defines rob -> give item exchange rules.
 /// MSSQL source: `ITEM_GIVE_EXCHANGE` (661 rows, 126 columns normalized to arrays).
-/// C++ equivalent: `_ITEM_GIVE_EXCHANGE`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemGiveExchangeRow {
     /// Exchange index.
@@ -941,10 +889,8 @@ pub struct ItemGiveExchangeRow {
 }
 
 /// Right-click exchange mapping from the `item_right_click_exchange` table.
-///
 /// Maps an item ID to its right-click exchange opcode.
 /// MSSQL source: `ITEM_RIGHT_CLICK_EXCHANGE` (96 rows).
-/// C++ equivalent: `_ITEM_RIGHT_CLICK_EXCHANGE`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemRightClickExchangeRow {
     /// Item ID that supports right-click exchange.
@@ -954,10 +900,8 @@ pub struct ItemRightClickExchangeRow {
 }
 
 /// Right exchange entry from the `item_right_exchange` table.
-///
 /// Defines right-click exchange reward tables.
 /// MSSQL source: `ITEM_RIGHT_EXCHANGE` (66 rows, 80 columns normalized to arrays).
-/// C++ equivalent: `_ITEM_RIGHT_EXCHANGE`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemRightExchangeRow {
     /// Source item ID.
@@ -979,10 +923,8 @@ pub struct ItemRightExchangeRow {
 }
 
 /// Mining exchange entry from the `mining_exchange` table.
-///
 /// Defines ore-to-item crafting via mining NPC (Pitman 31511).
 /// MSSQL source: `MINING_EXCHANGE` (0 rows in 25xx backup — schema only).
-/// C++ equivalent: `_MINING_EXCHANGE` (GameDefine.h:2614-2625).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MiningExchangeRow {
     /// Record index (primary key).
@@ -1004,10 +946,8 @@ pub struct MiningExchangeRow {
 }
 
 /// Sealed item record from the `sealed_items` table.
-///
 /// Tracks which items a player has sealed/locked.
 /// MSSQL source: `SEALED_ITEMS` (249 rows, player data).
-/// C++ equivalent: `_SEALED_ITEM`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SealedItemRow {
     /// Auto-increment ID.

@@ -1,12 +1,7 @@
 //! Monument NPC death processes.
-//!
-//! C++ Reference: `Npc.cpp:837-874` (OnDeathProcess dispatch)
-//!
 //! When a non-monster NPC with a monument type is killed, the appropriate
 //! monument capture process is triggered based on the NPC's type.
-//!
 //! ## Monument Types
-//!
 //! | Type | Value | Handler |
 //! |------|-------|---------|
 //! | NPC_BIFROST_MONUMENT | 155 | Bifrost farming event |
@@ -31,44 +26,29 @@ use crate::world::{WorldState, ZONE_BATTLE4};
 // ── Monument Model Constants ───────────────────────────────────────────
 
 /// Karus monument model PID after capture.
-///
-/// C++ Reference: `Define.h:398`
 const MONUMENT_KARUS_SPID: u16 = 14003;
 
 /// Elmorad monument model PID after capture.
-///
-/// C++ Reference: `Define.h:399`
 const MONUMENT_ELMORAD_SPID: u16 = 14004;
 
 /// Battle monument Elmorad model PID (different from nation monument).
-///
-/// C++ Reference: `Npc.cpp:1235` — uses 14005 for battle monuments
 const BATTLE_MONUMENT_ELMORAD_SPID: u16 = 14005;
 
 // ── Chat Type for Monument Notice ──────────────────────────────────────
 
-/// C++ Reference: `packets.h:295` — MONUMENT_NOTICE = 11
 const CHAT_MONUMENT_NOTICE: u8 = 11;
-/// C++ Reference: FORCE_CHAT = 4
 const CHAT_FORCE: u8 = 4;
-/// C++ Reference: `ChatHandler.h` — PUBLIC_CHAT = 7
 const CHAT_PUBLIC: u8 = 7;
-/// C++ Reference: `ChatHandler.h` — WAR_SYSTEM_CHAT = 8
 pub(crate) const CHAT_WAR_SYSTEM: u8 = 8;
 
 /// Nation battle open constant.
-///
-/// C++ Reference: `Define.h:129`
 const NATION_BATTLE: u8 = 1;
 
 // ── Dispatch ───────────────────────────────────────────────────────────
 
 /// Dispatch monument death processing based on NPC type.
-///
 /// Called from `handle_npc_death()` when a non-monster NPC dies.
 /// Only processes monument-type NPCs — all other types are ignored.
-///
-/// C++ Reference: `CNpc::OnDeathProcess()` in `Npc.cpp:837-874`
 pub(super) async fn monument_death_dispatch(
     world: &WorldState,
     npc: &NpcInstance,
@@ -101,7 +81,6 @@ pub(super) async fn monument_death_dispatch(
             csw_monument_process(world, killer_clan_id).await;
         }
         NPC_CLAN_WAR_MONUMENT => {
-            // C++ Reference: Npc.cpp:868-869 — TournamentMonumentKillProcess
             // Score the monument kill: losing clan gets half the score gap bonus.
             super::tournament::register_monument_kill(world, npc.zone_id, killer_clan_id);
         }
@@ -112,9 +91,6 @@ pub(super) async fn monument_death_dispatch(
 // ── PVP Monument Process ───────────────────────────────────────────────
 
 /// Process PVP monument capture.
-///
-/// C++ Reference: `CNpc::PVPMonumentProcess()` in `Npc.cpp:1185-1196`
-///
 /// 1. Send MONUMENT_NOTICE chat to the zone
 /// 2. Update pvp_monument_nation for the zone
 /// 3. Update NPC template (nation + model swap)
@@ -157,11 +133,7 @@ fn pvp_monument_process(
 // ── Battle Monument Process ────────────────────────────────────────────
 
 /// Process battle (Nereids Island) monument capture.
-///
-/// C++ Reference: `CNpc::BattleMonumentProcess()` in `Npc.cpp:1203-1256`
-///
 /// Requires: `battle_open == NATION_BATTLE` and `zone == ZONE_BATTLE4`
-///
 /// 1. Add monument points (+2, +10 bonus at 7 total)
 /// 2. Decrement opposing side's monument count
 /// 3. Update NPC template model
@@ -223,7 +195,6 @@ fn battle_monument_process(
     world.npc_template_update(tmpl.s_sid, tmpl.is_monster, killer_nation, new_pid);
 
     // Broadcast monument capture announcement
-    // C++ Reference: Npc.cpp:1236 — Announcement(DECLARE_BATTLE_MONUMENT_STATUS, ...)
     // Uses SendNotice<PUBLIC_CHAT> for zone-scoped monument status
     let nation_name = if killer_nation == 1 {
         "Karus"
@@ -273,9 +244,6 @@ fn battle_monument_process(
 // ── Karus Nation Monument Process ──────────────────────────────────────
 
 /// Process Karus nation monument capture.
-///
-/// C++ Reference: `CNpc::KarusNationMonumentProcess()` in `Npc.cpp:1263-1272`
-///
 /// These monuments are in the Karus homeland. When killed:
 /// - If killed by Elmorad (infiltration): remove from defeated array
 /// - If killed by Karus (recapture): remove from winner array
@@ -289,7 +257,6 @@ fn karus_nation_monument_process(world: &WorldState, tmpl: &NpcTemplate, killer_
     world.npc_template_update(tmpl.s_sid, tmpl.is_monster, killer_nation, 0);
 
     // Broadcast nation monument announcement
-    // C++ Reference: Npc.cpp:1269 — Announcement(DECLARE_NATION_MONUMENT_STATUS, ...)
     // Uses SendAnnouncement → SendChat<WAR_SYSTEM_CHAT> for server-wide notice
     let msg = if killer_nation == 2 {
         format!("El Morad has conquered Karus monument {}!", tmpl.s_sid)
@@ -305,7 +272,6 @@ fn karus_nation_monument_process(world: &WorldState, tmpl: &NpcTemplate, killer_
     world.broadcast_to_all(Arc::new(announce_pkt), None);
 
     // Update nation monument tracking
-    // C++ Reference: Npc.cpp:1270-1271
     // If Elmorad killed a Karus monument -> remove from DefeatedNationArray
     // If Karus killed (recaptured) -> remove from WinnerNationArray
     let now_unix = std::time::SystemTime::now()
@@ -313,7 +279,6 @@ fn karus_nation_monument_process(world: &WorldState, tmpl: &NpcTemplate, killer_
         .unwrap_or_default()
         .as_secs() as i32;
 
-    // C++ Reference: Npc.cpp:1265-1271
     // When Elmorad infiltrates Karus territory: add to winners + remove from defeated
     // When Karus recaptures: add to defeated + remove from winners
     world.update_battle_state(|state| {
@@ -337,9 +302,6 @@ fn karus_nation_monument_process(world: &WorldState, tmpl: &NpcTemplate, killer_
 // ── Human Nation Monument Process ──────────────────────────────────────
 
 /// Process Human/Elmorad nation monument capture.
-///
-/// C++ Reference: `CNpc::HumanNationMonumentProcess()` in `Npc.cpp:1279-1288`
-///
 /// These monuments are in the Elmorad homeland. When killed:
 /// - If killed by Karus (infiltration): remove from defeated array
 /// - If killed by Elmorad (recapture): remove from winner array
@@ -353,7 +315,6 @@ fn human_nation_monument_process(world: &WorldState, tmpl: &NpcTemplate, killer_
     world.npc_template_update(tmpl.s_sid, tmpl.is_monster, killer_nation, 0);
 
     // Broadcast nation monument announcement
-    // C++ Reference: Npc.cpp:1285 — Announcement(DECLARE_NATION_MONUMENT_STATUS, ...)
     let msg = if killer_nation == 1 {
         format!("Karus has conquered El Morad monument {}!", tmpl.s_sid)
     } else {
@@ -372,7 +333,6 @@ fn human_nation_monument_process(world: &WorldState, tmpl: &NpcTemplate, killer_
         .unwrap_or_default()
         .as_secs() as i32;
 
-    // C++ Reference: Npc.cpp:1282-1287
     // When Karus infiltrates Elmorad territory: add to winners + remove from defeated
     // When Elmorad recaptures: add to defeated + remove from winners
     world.update_battle_state(|state| {
@@ -396,9 +356,6 @@ fn human_nation_monument_process(world: &WorldState, tmpl: &NpcTemplate, killer_
 // ── Bifrost Monument Process ───────────────────────────────────────────
 
 /// Process Bifrost monument destruction.
-///
-/// C++ Reference: `CNpc::BifrostMonumentProcess()` in `BeefEventNew.cpp:4-25`
-///
 /// Sets the beef event to farming phase with the killing nation as winner.
 /// Configures farming end time (120 min) and loser sign time (default 30 min).
 fn bifrost_monument_process(world: &WorldState, killer_nation: u8) {
@@ -447,9 +404,6 @@ fn bifrost_monument_process(world: &WorldState, killer_nation: u8) {
 // ── CSW Monument Process ───────────────────────────────────────────────
 
 /// Process Castle Siege Warfare monument destruction.
-///
-/// C++ Reference: `CNpc::CastleSiegeWarfareMonumentProcess()` in `thyke_csw.cpp:381-393`
-///
 /// Delegates to the existing `siege::monument_capture()` implementation.
 async fn csw_monument_process(world: &WorldState, killer_clan_id: u16) {
     // CSW monument is already fully handled by siege.rs::monument_capture.
@@ -1094,7 +1048,6 @@ mod tests {
 
     /// Clan war monument kill wires through to tournament scoring.
     /// When the losing clan kills the monument, they get half the score gap.
-    /// C++ Reference: TournamentSystem.cpp:443-539
     #[test]
     fn test_clan_war_monument_wires_tournament_scoring() {
         use crate::handler::tournament::TournamentState;

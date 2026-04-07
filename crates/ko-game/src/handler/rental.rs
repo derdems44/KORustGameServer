@@ -1,7 +1,4 @@
 //! WIZ_RENTAL (0x73) handler — item rental system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/RentalHandler.cpp`
-//!
 //! The rental system in the C++ reference only reads the sub-opcode byte and
 //! logs it (completely stubbed). However, the infrastructure exists:
 //! - `packets.h:983-998`: enums for rental opcodes (RENTAL_PREMIUM/PVP/NPC)
@@ -10,20 +7,15 @@
 //! - `DBAgent.cpp:308-355`: LoadRentalData (loads user_rental_item on login)
 //! - `RentalItemSet.h`: _RENTAL_ITEM catalog loaded at startup
 //! - `NPCHandler.cpp:698-704`: NPC_RENTAL sends WIZ_RENTAL(RENTAL_NPC) to client
-//!
 //! This implementation handles the RENTAL_PVP sub-opcodes based on the
 //! data structures and enums defined in the C++ source.
-//!
 //! ## Sub-opcodes
-//!
 //! | Value | Name              | Direction  |
 //! |-------|-------------------|------------|
 //! | 1     | RENTAL_PREMIUM    | C->S       |
 //! | 2     | RENTAL_PVP        | C->S       |
 //! | 3     | RENTAL_NPC        | S->C only  |
-//!
 //! ## RENTAL_PVP sub-sub-opcodes
-//!
 //! | Value | Name              | Description                    |
 //! |-------|-------------------|--------------------------------|
 //! | 0     | RENTAL_OPEN       | List available rental items    |
@@ -40,13 +32,13 @@ use crate::session::{ClientSession, SessionState};
 
 use super::{HAVE_MAX, SLOT_MAX};
 
-/// Rental main sub-opcodes (C++ packets.h:983-988).
+/// Rental main sub-opcodes
 const RENTAL_PREMIUM: u8 = 1;
 const RENTAL_PVP: u8 = 2;
 #[cfg(test)]
 const RENTAL_NPC: u8 = 3;
 
-/// RENTAL_PVP sub-sub-opcodes (C++ packets.h:990-998).
+/// RENTAL_PVP sub-sub-opcodes
 const RENTAL_OPEN: u8 = 0;
 const RENTAL_REGISTER: u8 = 1;
 const RENTAL_LEND: u8 = 2;
@@ -64,9 +56,6 @@ const RENTAL_TYPE_BORROWER: i16 = 3;
 const MAX_RENTAL_ITEMS_PER_USER: i64 = 10;
 
 /// Handle WIZ_RENTAL from the client.
-///
-/// C++ Reference: `CUser::RentalSystem()` in `RentalHandler.cpp:3-12`
-///
 /// The C++ server just logs the sub-opcode. This implementation extends it
 /// to handle RENTAL_PVP operations using the existing data structures.
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
@@ -74,7 +63,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         return Ok(());
     }
 
-    // C++: `if (isDead() || !isInGame()) return;`
     if session.world().is_player_dead(session.session_id()) {
         return Ok(());
     }
@@ -104,8 +92,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle RENTAL_PVP sub-opcode with its nested sub-sub-opcodes.
-///
-/// C++ Reference: `packets.h:990-998` — `RentalPvPOpcodes` enum.
 async fn handle_pvp(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -137,7 +123,6 @@ async fn handle_pvp(
 }
 
 /// RENTAL_OPEN — send the list of available rental items to the client.
-///
 /// Response format:
 /// ```text
 /// [WIZ_RENTAL] [RENTAL_PVP(2)] [RENTAL_OPEN(0)] [count:u16]
@@ -182,12 +167,10 @@ async fn rental_open(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// RENTAL_REGISTER — register an inventory item for rental.
-///
 /// Client sends:
 /// ```text
 /// [slot:u8] [rental_time:u16] [rental_money:u32]
 /// ```
-///
 /// Response:
 /// ```text
 /// [WIZ_RENTAL] [RENTAL_PVP(2)] [RENTAL_REGISTER(1)] [result:u8]
@@ -348,12 +331,10 @@ async fn rental_register(
 }
 
 /// RENTAL_LEND — borrow a rental item from the catalog.
-///
 /// Client sends:
 /// ```text
 /// [rental_index:u32]
 /// ```
-///
 /// Response:
 /// ```text
 /// [WIZ_RENTAL] [RENTAL_PVP(2)] [RENTAL_LEND(2)] [result:u8]
@@ -487,7 +468,6 @@ async fn rental_lend(
     }
 
     // Send gold change to borrower
-    // C++ Reference: UserGoldSystem.cpp:146 — `result << gold << GetCoins()`
     // Format: [u8 type] [u32 amount_lost] [u32 remaining_gold]
     let new_gold = world
         .with_session(sid, |h| h.character.as_ref().map(|ch| ch.gold))
@@ -510,9 +490,7 @@ async fn rental_lend(
 }
 
 /// RENTAL_ITEM_CHECK — check the status of the player's rental items.
-///
 /// Client sends: (no extra data)
-///
 /// Response:
 /// ```text
 /// [WIZ_RENTAL] [RENTAL_PVP(2)] [RENTAL_ITEM_CHECK(3)] [count:u16]
@@ -580,12 +558,10 @@ async fn rental_item_check(
 }
 
 /// RENTAL_ITEM_CANCEL — cancel a rental registration.
-///
 /// Client sends:
 /// ```text
 /// [rental_index:u32]
 /// ```
-///
 /// Response:
 /// ```text
 /// [WIZ_RENTAL] [RENTAL_PVP(2)] [RENTAL_ITEM_CANCEL(4)] [result:u8]

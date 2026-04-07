@@ -1,21 +1,12 @@
 //! WIZ_LOGOSSHOUT (0x7D) handler — logos shout / server-wide announcement.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:4586-4620`
-//!
 //! A player with a Logos Shout item (800075000) can send a server-wide
 //! colored announcement. The server validates the item, reads the message
 //! and RGBA colors, then broadcasts to all players.
-//!
 //! ## Client -> Server (SByte mode)
-//!
 //! `[u8 sub_opcode] [u8 R] [u8 G] [u8 B] [u8 C] [sbyte_string message]`
-//!
 //! ## Server -> All (success, SByte mode)
-//!
 //! `[u8 2] [u8 1(success)] [u8 R] [u8 G] [u8 B] [u8 C] [sbyte_string "Name: message"] [u8 rank]`
-//!
 //! ## Server -> Sender (failure)
-//!
 //! `[u8 1] [u8 2(fail)]`
 
 use std::sync::Arc;
@@ -29,8 +20,6 @@ use crate::session::{ClientSession, SessionState};
 const MAX_MESSAGE_LEN: usize = 128;
 
 /// Logos Shout item ID required to broadcast.
-///
-/// C++ Reference: `Define.h:349` — `#define LOGOSSHOUT1 800075000`
 const LOGOSSHOUT_ITEM: u32 = 800_075_000;
 
 /// Build a logos shout failure response.
@@ -56,8 +45,6 @@ fn build_success_broadcast(r: u8, g: u8, b: u8, c: u8, message: &str, rank: u8) 
 }
 
 /// Handle WIZ_LOGOSSHOUT from the client.
-///
-/// C++ Reference: `User.cpp:4586-4620` — `CUser::LogosShout()`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -81,7 +68,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let message = reader.read_sbyte_string().unwrap_or_default();
 
     // Check item + validate message
-    // C++ Reference: User.cpp:4597-4603 — item check first, then message validation
     if !world.check_exist_item(sid, LOGOSSHOUT_ITEM, 1)
         || message.is_empty()
         || message.len() > MAX_MESSAGE_LEN
@@ -103,7 +89,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let full_message = format!("{}: {}", char_info.name, message);
 
     // Broadcast first, then consume the item.
-    // C++ Reference: User.cpp:4609-4614 — Send_All first, then RobItem on success
     let broadcast = build_success_broadcast(r, g, b, c, &full_message, rank);
     world.broadcast_to_all(Arc::new(broadcast), None);
 
@@ -125,19 +110,15 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
 // ── Drop / Upgrade Notice Builders ─────────────────────────────────
 //
-// C++ Reference: BundleSystem.cpp:258-263 (drop), ItemUpgradeSystem.cpp:658-703 (upgrade)
 // These are server-wide broadcasts via WIZ_LOGOSSHOUT (0x7D) sub=0x02.
 
 /// Build a server-wide "rare item drop" notice.
-///
-/// C++ Reference: `BundleSystem.cpp:258-263`
 /// ```text
 /// Packet newpkt(WIZ_LOGOSSHOUT, uint8(0x02));
 /// newpkt.SByte();
 /// newpkt << uint8(0x04) << pReceiver->GetName() << pTable.m_iNum << GetLoyaltySymbolRank();
 /// g_pMain->Send_All(&newpkt);
 /// ```
-///
 /// Format: `[0x7D] [0x02 sub] [0x04 type] [sbyte name] [u32 item_num] [u8 rank]`
 pub fn build_drop_notice(receiver_name: &str, item_num: u32, rank: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizLogosshout as u8);
@@ -150,18 +131,14 @@ pub fn build_drop_notice(receiver_name: &str, item_num: u32, rank: u8) -> Packet
 }
 
 /// Build a server-wide "item upgrade" notice.
-///
-/// C++ Reference: `ItemUpgradeSystem.cpp:697-703`
 /// ```text
 /// Packet result(WIZ_LOGOSSHOUT, uint8(0x02));
 /// result.SByte();
 /// result << uint8(0x05) << uint8(UpgradeResult) << GetName() << pItem.m_iNum << GetLoyaltySymbolRank();
 /// g_pMain->Send_All(&result);
 /// ```
-///
 /// Format: `[0x7D] [0x02 sub] [0x05 type] [u8 result] [sbyte name] [u32 item_num] [u8 rank]`
-///
-/// `upgrade_result`: 0 = failed, 1 = succeeded (C++ `UpgradeFailed`/`UpgradeSucceeded`)
+/// `upgrade_result`: 0 = failed, 1 = succeeded (`UpgradeFailed`/`UpgradeSucceeded`)
 pub fn build_upgrade_notice(
     upgrade_result: u8,
     player_name: &str,

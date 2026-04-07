@@ -1,11 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 //! FerihaLog — audit logging system for all significant game events.
-//!
-//! C++ Reference: `FerihaLogHandler.cpp` — 25 log functions, 24 MSSQL tables,
 //! `AddLogRequest()` async queue via `AdiniFerihaKoydum` (separate DB connection).
-//!
 //! ## Rust Design
-//!
 //! - Single `game_audit_log` PostgreSQL table with `event_type` + TEXT `details`
 //! - All writes are fire-and-forget via `tokio::spawn` (non-blocking)
 //! - Format: `details` is a pipe-delimited string for compact storage
@@ -19,58 +15,56 @@ use tracing::warn;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Audit event types matching C++ FerihaLog functions (24 distinct tables + 1 variant).
-///
-/// C++ Reference: `FerihaLogHandler.cpp` — each function maps to a separate MSSQL table.
 #[repr(i16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuditEvent {
-    /// Player login. C++ `LoginInsertLog()` → `LOGIN` table.
+    /// Player login. `LoginInsertLog()` → `LOGIN` table.
     Login = 1,
-    /// Player logout. C++ `LogoutInsertLog()` → `LOGOUT` table.
+    /// Player logout. `LogoutInsertLog()` → `LOGOUT` table.
     Logout = 2,
-    /// Forced disconnect with reason. C++ `Disconnectprintfwriter()` → `DISCONNECT` table.
+    /// Forced disconnect with reason. `Disconnectprintfwriter()` → `DISCONNECT` table.
     Disconnect = 3,
-    /// Chat message. C++ `ChatInsertLog()` → `CHAT` table.
+    /// Chat message. `ChatInsertLog()` → `CHAT` table.
     Chat = 4,
-    /// NPC shop buy/sell. C++ `NpcShoppingLog()` → `NPC_SHOPPING` table.
+    /// NPC shop buy/sell. `NpcShoppingLog()` → `NPC_SHOPPING` table.
     NpcShopping = 5,
-    /// Item given to player. C++ `GiveItemInsertLog()` → `ITEMS_RECEIVED` table.
+    /// Item given to player. `GiveItemInsertLog()` → `ITEMS_RECEIVED` table.
     GiveItem = 6,
-    /// Item taken from player. C++ `RobItemInsertLog()` → `ITEMS_LOST` table.
+    /// Item taken from player. `RobItemInsertLog()` → `ITEMS_LOST` table.
     RobItem = 7,
-    /// Player merchant shop opened. C++ `MerchantCreationInsertLog()` → `MERCHANT_CREATION` table.
+    /// Player merchant shop opened. `MerchantCreationInsertLog()` → `MERCHANT_CREATION` table.
     MerchantCreation = 8,
-    /// Item permanently destroyed. C++ `ItemRemoveInsertLog()` → `ITEMREMOVE` table.
+    /// Item permanently destroyed. `ItemRemoveInsertLog()` → `ITEMREMOVE` table.
     ItemRemove = 9,
-    /// Merchant shop transaction. C++ `MerchantShoppingDetailInsertLog()` → `MERCHANT_SHOPPING` table.
+    /// Merchant shop transaction. `MerchantShoppingDetailInsertLog()` → `MERCHANT_SHOPPING` table.
     MerchantShopping = 10,
-    /// Player kills NPC/monster. C++ `KillingNpcInsertLog()` → `KILLING_NPCS` table.
+    /// Player kills NPC/monster. `KillingNpcInsertLog()` → `KILLING_NPCS` table.
     KillingNpc = 11,
-    /// Large XP change (>=500K). C++ `ExpChangeInsertLog()` → `EXP_CHANGE` table.
+    /// Large XP change (>=500K). `ExpChangeInsertLog()` → `EXP_CHANGE` table.
     ExpChange = 12,
-    /// Item upgrade attempt. C++ `UpgradeInsertLog()` → `UPGRADE` table.
+    /// Item upgrade attempt. `UpgradeInsertLog()` → `UPGRADE` table.
     Upgrade = 13,
-    /// PvP kill. C++ `KillingUserInsertLog()` → `KILLING_USERS` table.
+    /// PvP kill. `KillingUserInsertLog()` → `KILLING_USERS` table.
     KillingUser = 14,
-    /// Character name change. C++ `UserNameChangeInsertLog()` → `USER_NAME_CHANGE` table.
+    /// Character name change. `UserNameChangeInsertLog()` → `USER_NAME_CHANGE` table.
     NameChange = 15,
-    /// Clan name change. C++ `ClanNameChangeInsertLog()` → `CLAN_NAME_CHANGE` table.
+    /// Clan name change. `ClanNameChangeInsertLog()` → `CLAN_NAME_CHANGE` table.
     ClanNameChange = 16,
-    /// Nation transfer. C++ `NationTransferInsertLog()` → `NATION_TRANSFER` table.
+    /// Nation transfer. `NationTransferInsertLog()` → `NATION_TRANSFER` table.
     NationTransfer = 17,
-    /// Class/job change. C++ `JobChangeInsertLog()` → `JOB_CHANGE` table.
+    /// Class/job change. `JobChangeInsertLog()` → `JOB_CHANGE` table.
     JobChange = 18,
-    /// Cash shop purchase. C++ `PusShoppingInsertLog()` → `PUS_SHOPPING` table.
+    /// Cash shop purchase. `PusShoppingInsertLog()` → `PUS_SHOPPING` table.
     PusShopping = 19,
-    /// Monster loot pickup. C++ `NpcDropReceivedInsertLog()` → `NPC_DROP_RECEIVED` table.
+    /// Monster loot pickup. `NpcDropReceivedInsertLog()` → `NPC_DROP_RECEIVED` table.
     NpcDrop = 20,
-    /// Premium service activation. C++ `PremiumInsertLog()` → `PREMIUM` table.
+    /// Premium service activation. `PremiumInsertLog()` → `PREMIUM` table.
     Premium = 21,
-    /// Player-to-player trade. C++ `TradeInsertLog()` → `TRADE` table.
+    /// Player-to-player trade. `TradeInsertLog()` → `TRADE` table.
     Trade = 22,
-    /// NP/loyalty change. C++ `LoyaltyChangeInsertLog()` → `LOYALTY_CHANGE` table.
+    /// NP/loyalty change. `LoyaltyChangeInsertLog()` → `LOYALTY_CHANGE` table.
     LoyaltyChange = 23,
-    /// Clan bank deposit/withdraw. C++ `ClanBankInsertLog()` → `CLAN_BANK` table.
+    /// Clan bank deposit/withdraw. `ClanBankInsertLog()` → `CLAN_BANK` table.
     ClanBank = 24,
 }
 
@@ -86,7 +80,6 @@ impl AuditEvent {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Log a full audit event with position data (non-blocking).
-///
 /// This spawns a background task to write the log entry. Errors are logged
 /// via `tracing::warn` but do not propagate to the caller.
 pub fn log_event(
@@ -141,8 +134,6 @@ pub fn log_simple(pool: &DbPool, event: AuditEvent, account: &str, character: &s
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Log a player login event.
-///
-/// C++ Reference: `CUser::LoginInsertLog()` → `LOGIN` table
 pub fn log_login(pool: &DbPool, account: &str, character: &str, ip: &str, zone_id: i16) {
     log_event(
         pool,
@@ -158,8 +149,6 @@ pub fn log_login(pool: &DbPool, account: &str, character: &str, ip: &str, zone_i
 }
 
 /// Log a player logout event.
-///
-/// C++ Reference: `CUser::LogoutInsertLog()` → `LOGOUT` table
 pub fn log_logout(pool: &DbPool, account: &str, character: &str, ip: &str, zone_id: i16) {
     log_event(
         pool,
@@ -175,8 +164,6 @@ pub fn log_logout(pool: &DbPool, account: &str, character: &str, ip: &str, zone_
 }
 
 /// Log a forced disconnect event.
-///
-/// C++ Reference: `CUser::Disconnectprintfwriter()` → `DISCONNECT` table
 pub fn log_disconnect(
     pool: &DbPool,
     account: &str,
@@ -202,8 +189,6 @@ pub fn log_disconnect(
 }
 
 /// Log a chat message.
-///
-/// C++ Reference: `CUser::ChatInsertLog()` → `CHAT` table
 pub fn log_chat(
     pool: &DbPool,
     account: &str,
@@ -231,8 +216,6 @@ pub fn log_chat(
 }
 
 /// Log an item received by a player.
-///
-/// C++ Reference: `CUser::GiveItemInsertLog()` → `ITEMS_RECEIVED` table
 pub fn log_give_item(
     pool: &DbPool,
     account: &str,
@@ -259,8 +242,6 @@ pub fn log_give_item(
 }
 
 /// Log an item taken from a player.
-///
-/// C++ Reference: `CUser::RobItemInsertLog()` → `ITEMS_LOST` table
 pub fn log_rob_item(
     pool: &DbPool,
     account: &str,
@@ -287,8 +268,6 @@ pub fn log_rob_item(
 }
 
 /// Log a PvP kill.
-///
-/// C++ Reference: `CUser::KillingUserInsertLog()` → `KILLING_USERS` table
 pub fn log_killing_user(
     pool: &DbPool,
     killer_account: &str,
@@ -314,8 +293,6 @@ pub fn log_killing_user(
 }
 
 /// Log an NPC/monster kill.
-///
-/// C++ Reference: `CUser::KillingNpcInsertLog()` → `KILLING_NPCS` table
 pub fn log_killing_npc(
     pool: &DbPool,
     account: &str,
@@ -342,8 +319,6 @@ pub fn log_killing_npc(
 }
 
 /// Log an item upgrade attempt.
-///
-/// C++ Reference: `CUser::UpgradeInsertLog()` → `UPGRADE` table
 pub fn log_upgrade(
     pool: &DbPool,
     account: &str,
@@ -372,8 +347,6 @@ pub fn log_upgrade(
 }
 
 /// Log a player-to-player trade.
-///
-/// C++ Reference: `CUser::TradeInsertLog()` → `TRADE` table
 pub fn log_trade(
     pool: &DbPool,
     account: &str,
@@ -402,8 +375,6 @@ pub fn log_trade(
 }
 
 /// Log NP/loyalty change.
-///
-/// C++ Reference: `CUser::LoyaltyChangeInsertLog()` → `LOYALTY_CHANGE` table
 pub fn log_loyalty_change(
     pool: &DbPool,
     account: &str,
@@ -429,8 +400,6 @@ pub fn log_loyalty_change(
 }
 
 /// Log a cash shop purchase.
-///
-/// C++ Reference: `CUser::PusShoppingInsertLog()` → `PUS_SHOPPING` table
 pub fn log_pus_shopping(
     pool: &DbPool,
     account: &str,
@@ -456,8 +425,6 @@ pub fn log_pus_shopping(
 }
 
 /// Log a clan bank operation.
-///
-/// C++ Reference: `CUser::ClanBankInsertLog()` → `CLAN_BANK` table
 pub fn log_clan_bank(
     pool: &DbPool,
     account: &str,
@@ -488,8 +455,6 @@ pub fn log_clan_bank(
 }
 
 /// Log a name change (character or clan).
-///
-/// C++ Reference: `CUser::UserNameChangeInsertLog()` / `ClanNameChangeInsertLog()`
 pub fn log_name_change(
     pool: &DbPool,
     event: AuditEvent,
@@ -502,8 +467,6 @@ pub fn log_name_change(
 }
 
 /// Log a nation transfer.
-///
-/// C++ Reference: `CUser::NationTransferInsertLog()` → `NATION_TRANSFER` table
 pub fn log_nation_transfer(
     pool: &DbPool,
     account: &str,
@@ -526,8 +489,6 @@ pub fn log_nation_transfer(
 }
 
 /// Log a class/job change.
-///
-/// C++ Reference: `CUser::JobChangeInsertLog()` → `JOB_CHANGE` table
 pub fn log_job_change(
     pool: &DbPool,
     account: &str,
@@ -552,8 +513,6 @@ pub fn log_job_change(
 }
 
 /// Log a premium service activation.
-///
-/// C++ Reference: `CUser::PremiumInsertLog()` → `PREMIUM` table
 pub fn log_premium(pool: &DbPool, account: &str, character: &str, premium_type: u8, duration: u32) {
     let details = format!("{}|{}", premium_type, duration);
     log_event(
@@ -570,8 +529,6 @@ pub fn log_premium(pool: &DbPool, account: &str, character: &str, premium_type: 
 }
 
 /// Log an XP change event (only if amount >= 500,000).
-///
-/// C++ Reference: `CUser::ExpChangeInsertLog()` → `EXP_CHANGE` table
 /// C++ guard: `if (!amount || amount < 500000) return;`
 pub fn log_exp_change(
     pool: &DbPool,
@@ -599,8 +556,6 @@ pub fn log_exp_change(
 }
 
 /// Log an item permanently removed.
-///
-/// C++ Reference: `CUser::ItemRemoveInsertLog()` → `ITEMREMOVE` table
 pub fn log_item_remove(pool: &DbPool, account: &str, character: &str, ip: &str, item_id: u32) {
     let details = format!("{}", item_id);
     log_event(
@@ -617,8 +572,6 @@ pub fn log_item_remove(pool: &DbPool, account: &str, character: &str, ip: &str, 
 }
 
 /// Log a merchant creation.
-///
-/// C++ Reference: `CUser::MerchantCreationInsertLog()` → `MERCHANT_CREATION` table
 pub fn log_merchant_creation(
     pool: &DbPool,
     account: &str,
@@ -640,8 +593,6 @@ pub fn log_merchant_creation(
 }
 
 /// Log a merchant shopping transaction.
-///
-/// C++ Reference: `CUser::MerchantShoppingDetailInsertLog()` → `MERCHANT_SHOPPING` table
 pub fn log_merchant_shopping(
     pool: &DbPool,
     merchant_account: &str,
@@ -677,8 +628,6 @@ pub fn log_merchant_shopping(
 }
 
 /// Log an NPC drop received by a player.
-///
-/// C++ Reference: `CUser::NpcDropReceivedInsertLog()` → `NPC_DROP_RECEIVED` table
 pub fn log_npc_drop(
     pool: &DbPool,
     account: &str,
@@ -705,8 +654,6 @@ pub fn log_npc_drop(
 }
 
 /// Log an NPC shop transaction.
-///
-/// C++ Reference: `CUser::NpcShoppingLog()` → `NPC_SHOPPING` table
 pub fn log_npc_shopping(
     pool: &DbPool,
     account: &str,

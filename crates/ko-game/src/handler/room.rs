@@ -1,18 +1,12 @@
 //! WIZ_ROOM_PACKET (0x61) handler -- Room/instance system.
-//!
-//! C++ Reference: `KOOriginalGameServer/shared/packets.h:99`
 //!   `#define WIZ_ROOM_PACKETPROCESS 0x61`
-//!
 //! The room system manages instanced content like battle royale rooms,
 //! event instances, and party dungeon rooms. Players can create, join,
 //! leave, and list available rooms.
-//!
 //! IDA analysis (sub_634B90): The client-side dispatch for 0x61 triggers
 //! `sub_62FB10(a2, 3, 0)` which builds a C2S packet `[0xD0][6][2][3]`.
 //! The room packet process acts as a coordinator for the room UI.
-//!
 //! ## Sub-opcodes
-//!
 //! | Code | Name       | Direction | Description              |
 //! |------|------------|-----------|--------------------------|
 //! | 0x01 | CREATE     | C2S       | Create a new room        |
@@ -22,9 +16,7 @@
 //! | 0x05 | INFO       | S2C       | Room info update         |
 //! | 0x06 | READY      | C2S       | Toggle ready state       |
 //! | 0x07 | START      | S2C       | Room start notification  |
-//!
 //! ## Server -> Client (LIST response)
-//!
 //! ```text
 //! [u8 sub=4] [u8 room_count] [per_room: [u16 room_id] [sbyte_string name]
 //!  [u8 player_count] [u8 max_players] [u8 status]]
@@ -62,7 +54,6 @@ const ROOM_STATUS_PLAYING: u8 = 1;
 const ROOM_STATUS_CLOSED: u8 = 2;
 
 /// Handle WIZ_ROOM_PACKET (0x61) -- room/instance operations.
-///
 /// Routes to sub-handlers based on the sub-opcode byte.
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
@@ -93,7 +84,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle ROOM_CREATE (0x01) -- create a new room.
-///
 /// C2S: `[u8 sub=1] [sbyte_string name] [u8 max_players] [u8 room_type]`
 /// S2C: `[u8 sub=1] [u8 result] [u16 room_id]`
 async fn handle_create(
@@ -119,7 +109,6 @@ async fn handle_create(
 }
 
 /// Handle ROOM_JOIN (0x02) -- join an existing room.
-///
 /// C2S: `[u8 sub=2] [u16 room_id]`
 /// S2C: `[u8 sub=2] [u8 result]`
 async fn handle_join(
@@ -140,7 +129,6 @@ async fn handle_join(
 }
 
 /// Handle ROOM_LEAVE (0x03) -- leave current room.
-///
 /// C2S: `[u8 sub=3]`
 /// S2C: `[u8 sub=3] [u8 result]`
 async fn handle_leave(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -152,7 +140,6 @@ async fn handle_leave(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle ROOM_LIST (0x04) -- list available rooms.
-///
 /// C2S: `[u8 sub=4] [u8 room_type]`
 /// S2C: `[u8 sub=4] [u8 count=0]` (empty list for now)
 async fn handle_list(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -164,7 +151,6 @@ async fn handle_list(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle ROOM_READY (0x06) -- toggle ready state.
-///
 /// C2S: `[u8 sub=6]`
 /// S2C: `[u8 sub=6] [u8 result]`
 async fn handle_ready(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -176,7 +162,6 @@ async fn handle_ready(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Build a simple result packet for room operations.
-///
 /// Format: `[u8 sub_opcode] [u8 result]`
 fn build_result_packet(sub_opcode: u8, result: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizRoomPacketProcess as u8);
@@ -186,7 +171,6 @@ fn build_result_packet(sub_opcode: u8, result: u8) -> Packet {
 }
 
 /// Build create room result with room ID.
-///
 /// Format: `[u8 sub=1] [u8 result] [u16 room_id]`
 fn build_create_result(result: u8, room_id: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizRoomPacketProcess as u8);
@@ -197,7 +181,6 @@ fn build_create_result(result: u8, room_id: u16) -> Packet {
 }
 
 /// Build empty room list response.
-///
 /// Format: `[u8 sub=4] [u8 count=0]`
 fn build_empty_list_packet() -> Packet {
     let mut pkt = Packet::new(Opcode::WizRoomPacketProcess as u8);
@@ -207,7 +190,6 @@ fn build_empty_list_packet() -> Packet {
 }
 
 /// Build room info S2C packet.
-///
 /// Format: `[u8 sub=5] [u16 room_id] [sbyte_string name] [u8 player_count]
 ///          [u8 max_players] [u8 status]`
 pub fn build_room_info_packet(
@@ -228,7 +210,6 @@ pub fn build_room_info_packet(
 }
 
 /// Build room start notification S2C packet.
-///
 /// Format: `[u8 sub=7] [u16 room_id]`
 pub fn build_room_start_packet(room_id: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizRoomPacketProcess as u8);

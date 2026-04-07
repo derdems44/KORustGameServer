@@ -1,6 +1,4 @@
 //! Achievement system models — maps to PostgreSQL achievement tables.
-//!
-//! C++ Reference:
 //! - `GameDefine.h:2357` — `_ACHIEVE_MAIN`
 //! - `GameDefine.h:2407` — `_ACHIEVE_WAR`
 //! - `GameDefine.h:2414` — `_ACHIEVE_NORMAL`
@@ -8,12 +6,9 @@
 //! - `GameDefine.h:2421` — `_ACHIEVE_COM`
 //! - `GameDefine.h:2291` — `_ACHIEVE_TITLE`
 //! - `shared/database/AchieveMain.h`, `AchieveWar.h`, etc.
-//!
 //! These tables are bulk-loaded at startup and cached in WorldState.
 
 /// Master achievement definition from the `achieve_main` table.
-///
-/// C++ equivalent: `_ACHIEVE_MAIN` (GameDefine.h:2357).
 /// MSSQL source: `ACHIEVE_MAIN` (456 rows).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct AchieveMainRow {
@@ -21,7 +16,6 @@ pub struct AchieveMainRow {
     pub s_index: i32,
     /// Sub-table type: 1=War, 2=Monster, 3=Com, 4=Normal.
     ///
-    /// C++ Reference: `_ACHIEVE_MAIN::Type` → `UserAchieveMainTypes`
     pub r#type: i16,
     /// Title ID for display.
     pub title_id: i16,
@@ -46,8 +40,6 @@ pub struct AchieveMainRow {
 }
 
 /// War-type achievement from the `achieve_war` table.
-///
-/// C++ equivalent: `_ACHIEVE_WAR` (GameDefine.h:2407).
 /// MSSQL source: `ACHIEVE_WAR` (92 rows).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct AchieveWarRow {
@@ -60,8 +52,6 @@ pub struct AchieveWarRow {
 }
 
 /// Normal-type achievement from the `achieve_normal` table.
-///
-/// C++ equivalent: `_ACHIEVE_NORMAL` (GameDefine.h:2414).
 /// MSSQL source: `ACHIEVE_NORMAL` (46 rows).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct AchieveNormalRow {
@@ -74,8 +64,6 @@ pub struct AchieveNormalRow {
 }
 
 /// Monster-kill achievement from the `achieve_monster` table.
-///
-/// C++ equivalent: `_ACHIEVE_MONSTER` (GameDefine.h:2398).
 /// MSSQL source: `ACHIEVE_MON` (248 rows).
 /// Structure: 2 groups (ACHIEVE_MOB_GROUPS) x 4 monsters (ACHIEVE_MOBS_PER_GROUP) each.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -101,8 +89,6 @@ pub struct AchieveMonsterRow {
 }
 
 /// Composite (requirement-based) achievement from the `achieve_com` table.
-///
-/// C++ equivalent: `_ACHIEVE_COM` (GameDefine.h:2421).
 /// MSSQL source: `ACHIEVE_COM` (71 rows).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct AchieveComRow {
@@ -117,8 +103,6 @@ pub struct AchieveComRow {
 }
 
 /// Title stat bonuses from the `achieve_title` table.
-///
-/// C++ equivalent: `_ACHIEVE_TITLE` (GameDefine.h:2291).
 /// MSSQL source: `ACHIEVE_TITLE` (136 rows).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct AchieveTitleRow {
@@ -152,8 +136,6 @@ pub struct AchieveTitleRow {
 }
 
 /// Per-player achievement progress from the `user_achieve` table.
-///
-/// C++ equivalent: `_USER_ACHIEVE_INFO` (GameDefine.h:1838).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserAchieveRow {
     /// Character name.
@@ -169,8 +151,6 @@ pub struct UserAchieveRow {
 }
 
 /// Per-player achievement summary from the `user_achieve_summary` table.
-///
-/// C++ equivalent: `_ACHIEVE_INFO` fields in `User.h`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserAchieveSummaryRow {
     /// Character name.

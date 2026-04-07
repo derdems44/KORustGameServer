@@ -1,10 +1,5 @@
 //! WIZ_SIEGE (0x6D) handler -- Castle Siege Warfare.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CastleSiegeWar.cpp`
-//!                `KOOriginalGameServer/GameServer/thyke_csw.cpp`
-//!
 //! ## Main Sub-opcodes
-//!
 //! | Opcode | Name              | Description                              |
 //! |--------|-------------------|------------------------------------------|
 //! | 1      | Base Create       | Siege NPC base creation (stub)           |
@@ -12,9 +7,7 @@
 //! | 3      | Moradon NPC       | War schedule, master info, war status    |
 //! | 4      | Delos NPC         | Collect funds, view charges, set tariffs |
 //! | 5      | Rank              | Register/view siege rank info            |
-//!
 //! ## Standalone Functions
-//!
 //! - [`is_csw_winner_clan`] -- Check if a clan is in the winning group (owner or alliance).
 //! - [`delos_castellan_zone_out`] -- Kick non-winners from the castellan zone.
 //! - [`csw_winner_members_check`] -- Check if player can enter castellan zone and teleport.
@@ -29,16 +22,12 @@ use crate::session::{ClientSession, SessionState};
 use crate::world::{WorldState, COIN_MAX, ZONE_DELOS, ZONE_DELOS_CASTELLAN, ZONE_MORADON};
 
 /// Castellan zone default spawn X coordinate.
-///
-/// C++ Reference: `ZoneChange(ZONE_DELOS_CASTELLAN, 458.0f, 113.0f)` in `CastleSiegeWar.cpp`
 const CASTELLAN_SPAWN_X: f32 = 458.0;
 
 /// Castellan zone default spawn Z coordinate.
 const CASTELLAN_SPAWN_Z: f32 = 113.0;
 
 /// Handle incoming WIZ_SIEGE (0x6D) packet.
-///
-/// C++ Reference: `CUser::SiegeWarFareProcess()` in `CastleSiegeWar.cpp:97-313`
 pub async fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -74,9 +63,6 @@ pub async fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Resu
 }
 
 /// Opcode 1: Base create.
-///
-/// C++ Reference: `CastleSiegeWar.cpp:108-121` -- "CastleSiegeWarBaseCreate"
-///
 /// The C++ implementation echoes `opcode + type` back to the client and only handles
 /// `type == 1` (which itself is a commented-out stub). We match this behavior: echo
 /// the opcode and type, and log the request. Actual base NPC creation is not
@@ -110,9 +96,6 @@ async fn handle_base_create(session: &mut ClientSession, sub_type: u8) -> anyhow
 }
 
 /// Opcode 2: Castle flag -- sends owner clan mark/flag info.
-///
-/// C++ Reference: `CUser::CastleSiegeWarfareFlag()` in `thyke_csw.cpp:190-241`
-///
 /// Sends the owning clan's ID, mark version, flag, and grade to the player.
 /// This is sent when a player enters Delos or when CSW state changes.
 async fn handle_castle_flag(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -147,8 +130,6 @@ async fn handle_castle_flag(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Opcode 3: Moradon NPC interactions.
-///
-/// C++ Reference: `CastleSiegeWar.cpp:139-187`
 async fn handle_moradon_npc(session: &mut ClientSession, sub_type: u8) -> anyhow::Result<()> {
     let world = session.world().clone();
 
@@ -256,8 +237,6 @@ fn get_clan_id(session: &ClientSession) -> u16 {
 }
 
 /// Opcode 4: Delos NPC interactions.
-///
-/// C++ Reference: `CastleSiegeWar.cpp:189-306`
 async fn handle_delos_npc(
     session: &mut ClientSession,
     sub_type: u8,
@@ -267,7 +246,6 @@ async fn handle_delos_npc(
 
     match sub_type {
         // Type 2: Collect all funds (tax + dungeon charge)
-        // C++ Reference: CastleSiegeWar.cpp:194-229
         2 => {
             let (nation, name, current_gold) = match get_player_info(session) {
                 Some(info) => info,
@@ -326,7 +304,6 @@ async fn handle_delos_npc(
         }
 
         // Type 3: View charges (non-king only, shows tariffs + dungeon charge)
-        // C++ Reference: CastleSiegeWar.cpp:231-239
         3 => {
             let (nation, name, _gold) = match get_player_info(session) {
                 Some(info) => info,
@@ -350,7 +327,6 @@ async fn handle_delos_npc(
         }
 
         // Type 4: Set Moradon tariff
-        // C++ Reference: CastleSiegeWar.cpp:241-273
         4 => {
             let (nation, name, _gold) = match get_player_info(session) {
                 Some(info) => info,
@@ -388,7 +364,6 @@ async fn handle_delos_npc(
         }
 
         // Type 5: Set Delos tariff
-        // C++ Reference: CastleSiegeWar.cpp:275-299
         5 => {
             let (nation, name, _gold) = match get_player_info(session) {
                 Some(info) => info,
@@ -435,15 +410,12 @@ async fn handle_delos_npc(
 }
 
 /// Opcode 5: Rank info.
-///
-/// C++ Reference: `thyke_csw.cpp:307-365` -- `CastleSiegeWarfareRank()` and
 /// `CastleSiegeWarfareRankRegister()`
 async fn handle_rank(session: &mut ClientSession, sub_type: u8) -> anyhow::Result<()> {
     let world = session.world().clone();
 
     match sub_type {
         // Type 1: Register clan in siege warfare ranking
-        // C++ Reference: thyke_csw.cpp:352-364 -- CastleSiegeWarfareRankRegister()
         // Adds the player's clan to the kill tracking list if CSW is active.
         1 => {
             let clan_id = get_clan_id(session);
@@ -467,7 +439,6 @@ async fn handle_rank(session: &mut ClientSession, sub_type: u8) -> anyhow::Resul
         }
 
         // Type 2: Show siege warfare ranking (clan kill counts)
-        // C++ Reference: thyke_csw.cpp:307-349 -- CastleSiegeWarfareRank()
         // During active CSW, shows sorted clan kill counts (max 50).
         2 => {
             let clan_id = get_clan_id(session);
@@ -551,10 +522,7 @@ async fn handle_rank(session: &mut ClientSession, sub_type: u8) -> anyhow::Resul
 // ── Public CSW helper functions ────────────────────────────────────────
 
 /// Check if a clan belongs to the CSW-winning group (direct owner or alliance member).
-///
-/// C++ Reference: `CastleSiegeWar.cpp:19-26` — alliance check in `DelosCasttellanZoneOut()`
 /// and `isCswWinnerNembers()`.
-///
 /// Returns `true` if:
 /// - `clan_id` matches `master_knights` directly, OR
 /// - the clan's `alliance` field equals `master_knights`.
@@ -573,9 +541,6 @@ pub fn is_csw_winner_clan(world: &WorldState, clan_id: u16, master_knights: u16)
 }
 
 /// Kick non-winning-clan members from the castellan zone to Moradon.
-///
-/// C++ Reference: `CUser::DelosCasttellanZoneOut()` in `CastleSiegeWar.cpp:3-31`
-///
 /// Iterates all players in `ZONE_DELOS_CASTELLAN`. Any player whose clan is NOT
 /// the castle owner and whose clan's alliance is NOT the castle owner gets
 /// teleported to `ZONE_MORADON` with default spawn coordinates.
@@ -614,12 +579,8 @@ pub async fn delos_castellan_zone_out(world: &Arc<WorldState>) {
 }
 
 /// Check if the player is a CSW winner member and teleport them to the castellan zone.
-///
-/// C++ Reference: `CUser::isCswWinnerNembers()` in `CastleSiegeWar.cpp:35-93`
-///
 /// If the player's clan is the castle owner or in alliance with the owner,
 /// they are teleported to `ZONE_DELOS_CASTELLAN` at the fixed spawn point (458, 113).
-///
 /// Returns `false` always (matching C++ behavior where the function always returns false).
 pub async fn csw_winner_members_check(session: &mut ClientSession) -> anyhow::Result<bool> {
     let world = session.world().clone();
@@ -674,14 +635,10 @@ pub async fn csw_winner_members_check(session: &mut ClientSession) -> anyhow::Re
 }
 
 /// Process monument capture (NPC monument destroyed by a player).
-///
-/// C++ Reference: `CNpc::CastleSiegeWarfareMonumentProcess()` in `thyke_csw.cpp:381-393`
-///
 /// When the monument NPC is killed:
 /// 1. The killer's clan becomes the new castle owner.
 /// 2. The DB siege record is updated.
 /// 3. All players in Delos are notified (monument killed notice + flag update).
-///
 /// `killer_clan_id` must be non-zero and belong to a valid clan with grade <= 3.
 /// `pool` is the database connection pool for persisting the change.
 pub async fn monument_capture(world: &Arc<WorldState>, killer_clan_id: u16, pool: &ko_db::DbPool) {
@@ -746,8 +703,6 @@ pub async fn monument_capture(world: &Arc<WorldState>, killer_clan_id: u16, pool
 }
 
 /// Build a WIZ_ZONE_CHANGE teleport packet.
-///
-/// C++ Reference: `CUser::ZoneChange()` — type 3 = server-initiated teleport.
 fn build_zone_change_packet(zone_id: u16, x: f32, z: f32, nation: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizZoneChange as u8);
     pkt.write_u8(3); // ZONE_CHANGE_TELEPORT
@@ -762,8 +717,6 @@ fn build_zone_change_packet(zone_id: u16, x: f32, z: f32, nation: u8) -> Packet 
 }
 
 /// Build a castle flag packet (opcode 2) for a specific owner clan.
-///
-/// C++ Reference: `CUser::CastleSiegeWarfareFlag()` in `thyke_csw.cpp:190-241`
 pub(crate) fn build_castle_flag_packet(world: &WorldState, owner_clan_id: u16) -> Packet {
     let mut resp = Packet::new(Opcode::WizSiege as u8);
     resp.write_u8(2);
@@ -797,8 +750,6 @@ use crate::world::types::{CswEventState, CswNotice, CswOpStatus};
 const MINUTE: u64 = 60;
 
 /// Result of a CSW timer tick.
-///
-/// C++ Reference: `CGameServerDlg::SiegeWarfareMainTimer()` in `thyke_csw.cpp:4-41`
 #[derive(Debug, PartialEq, Eq)]
 pub enum CswTickAction {
     /// No action needed this tick.
@@ -815,11 +766,8 @@ pub enum CswTickAction {
 }
 
 /// Pure function: check CSW timer state and return the appropriate action.
-///
 /// Called every 1 second from the war tick loop. Compares `now` against
 /// `state.csw_time` to determine countdown notices and phase transitions.
-///
-/// C++ Reference: `CGameServerDlg::SiegeWarfareMainTimer()` in `thyke_csw.cpp:4-41`
 pub fn csw_timer_tick(state: &CswEventState, now: u64) -> CswTickAction {
     if !state.is_active() {
         return CswTickAction::None;
@@ -899,8 +847,6 @@ pub fn csw_timer_tick(state: &CswEventState, now: u64) -> CswTickAction {
 }
 
 /// Initialize the preparation phase.
-///
-/// C++ Reference: `CGameServerDlg::CastleSiegeWarfarePrepaOpen()` in `thyke_csw.cpp:99-112`
 pub fn csw_prepare_open(state: &mut CswEventState, preparing_minutes: u32, now: u64) {
     if state.started {
         return;
@@ -915,8 +861,6 @@ pub fn csw_prepare_open(state: &mut CswEventState, preparing_minutes: u32, now: 
 }
 
 /// Transition from preparation to war phase.
-///
-/// C++ Reference: `CGameServerDlg::CastleSiegeWarfareWarOpen()` in `thyke_csw.cpp:116-125`
 pub fn csw_war_open(state: &mut CswEventState, wartime_minutes: u32, now: u64) {
     if !state.started {
         return;
@@ -927,17 +871,12 @@ pub fn csw_war_open(state: &mut CswEventState, wartime_minutes: u32, now: u64) {
 }
 
 /// Close the CSW event and reset state.
-///
-/// C++ Reference: `CGameServerDlg::CastleSiegeWarfareClose()` in `thyke_csw.cpp:45-55`
 pub fn csw_close(state: &mut CswEventState) {
     state.war_check = true;
     state.reset();
 }
 
 /// Build a CSW countdown notice packet (WAR_SYSTEM_CHAT).
-///
-/// C++ Reference: `CGameServerDlg::CastleSiegeWarfareRawNotice()` in `thyke_csw.cpp:67-96`
-///
 /// Returns a chat packet that announces the remaining time for the current phase.
 pub fn build_csw_raw_notice(notice_type: CswNotice, minutes: u32) -> Packet {
     let phase = match notice_type {
@@ -962,8 +901,6 @@ pub fn build_csw_raw_notice(notice_type: CswNotice, minutes: u32) -> Packet {
 }
 
 /// Build a CSW phase-change notice packet.
-///
-/// C++ Reference: `CGameServerDlg::CastleSiegeWarfareNotice()` in `thyke_csw.cpp:245-278`
 pub fn build_csw_notice(notice_type: CswNotice) -> Packet {
     build_csw_raw_notice(notice_type, 0)
 }

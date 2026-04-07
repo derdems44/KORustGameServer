@@ -1,21 +1,15 @@
 //! Region helpers — INOUT packet building and region change notifications.
-//!
-//! C++ Reference:
-//! - `KOOriginalGameServer/GameServer/RegionHandler.cpp` (UserInOut)
-//! - `KOOriginalGameServer/GameServer/FundamentalMethods.cpp` (RegionUserInOutForMe)
-//! - `KOOriginalGameServer/GameServer/UserInfoSystem.cpp:264-324` (GetUserInfo)
-//!
+//! -  (UserInOut)
+//! -  (RegionUserInOutForMe)
+//! -  (GetUserInfo)
 //! ## WIZ_USER_INOUT (0x07)
-//!
 //! | Offset | Type   | Description |
 //! |--------|--------|-------------|
 //! | 0      | u8     | InOutType (1=in, 2=out, 3=respawn, 4=warp, 5=summon) |
 //! | 1      | u8     | Reserved (0) |
 //! | 2      | u32le  | Session (socket) ID |
 //! | 6+     | ...    | GetUserInfo (if type != OUT) |
-//!
 //! ## WIZ_REGIONCHANGE (0x15) — 3-phase protocol
-//!
 //! - Phase 0 (start): `[0x15] [u8 0]`
 //! - Phase 1 (data):  `[0x15] [u8 1] [u16 count] [u32 ids...]` (compressed)
 //! - Phase 2 (end):   `[0x15] [u8 2]`
@@ -35,7 +29,6 @@ use crate::zone::SessionId;
 pub const EMPTY_EQUIP_VISUAL: [(u32, i16, u8); 17] = [(0, 0, 0); 17];
 
 /// Snapshot of all broadcast-relevant data for a player, fetched in a single DashMap read.
-///
 /// Replaces ~22 separate DashMap reads per nearby player in the broadcast loop
 /// (get_character_info + get_position + 3 flag reads + 17 inventory reads).
 struct BroadcastSnapshot {
@@ -105,9 +98,6 @@ fn snapshot_broadcast_info(world: &WorldState, sid: SessionId) -> Option<Broadca
 }
 
 /// Visual broadcast slot order — inventory slot indices for the 17 equipment visual slots.
-///
-/// C++ Reference: `UserInfoSystem.cpp:403-407` — equippedItems[] array
-///
 /// Order: BREAST(4), LEG(10), HEAD(1), GLOVE(12), FOOT(13), SHOULDER(5),
 ///   RIGHTHAND(6), LEFTHAND(8), CWING(42), CHELMET(43), CLEFT(44), CRIGHT(45),
 ///   CTOP(46), CTATTOO(49), CFAIRY(48), CEMBLEM(47), CTALISMAN(50)
@@ -117,16 +107,11 @@ const VISUAL_SLOT_ORDER: [usize; 17] = [
 ];
 
 /// Extract (item_id, durability, flag) for all 17 visual slots from inventory.
-///
 /// Returns data in VISUAL_SLOT_ORDER broadcast order. Includes both equipped (0-13)
 /// and cosplay (42-50) inventory slots.
-///
 /// During nation battle (except ZONE_BATTLE3), the first 5 visual slots (BREAST,
 /// LEG, HEAD, GLOVE, FOOT) are replaced with class-specific dragon armor item IDs.
 /// Durability and flag are preserved from the original equipped items.
-///
-/// C++ Reference: `UserInfoSystem.cpp:403-502` — `GetItem(equippedItems[i])->nNum/sDuration/bFlag`
-/// C++ Reference: `UserInfoSystem.cpp:409-504` — dragon armor replacement during NATION_BATTLE
 pub fn get_equipped_visual(world: &WorldState, sid: SessionId) -> [(u32, i16, u8); 17] {
     let mut result = [(0u32, 0i16, 0u8); 17];
     for (i, &inv_slot) in VISUAL_SLOT_ORDER.iter().enumerate() {
@@ -138,7 +123,6 @@ pub fn get_equipped_visual(world: &WorldState, sid: SessionId) -> [(u32, i16, u8
     }
 
     // Dragon armor transformation during nation battle
-    // C++ Reference: UserInfoSystem.cpp:409-504
     // Condition: battle_open == NATION_BATTLE && battle_zone != ZONE_BATTLE3
     let bs = world.get_battle_state();
     if bs.is_nation_battle() && bs.battle_zone_id() != ZONE_BATTLE3 {
@@ -158,8 +142,6 @@ pub fn get_equipped_visual(world: &WorldState, sid: SessionId) -> [(u32, i16, u8
 }
 
 /// Get dragon armor item IDs for a given class.
-///
-/// C++ Reference: `UserInfoSystem.cpp:409-504`
 /// - Warrior (1,5,6) & Kurian (13,14,15): 507001010–507005010
 /// - Rogue (2,7,8): 547001010–547005010
 /// - Mage (3,9,10): 567001010–567005010
@@ -186,24 +168,18 @@ fn dragon_armor_for_class(class: u16) -> Option<[u32; 5]> {
     }
 }
 
-/// INOUT type constants matching the C++ `InOutType` enum.
-///
-/// C++ Reference: `Define.h:63-70`
+/// INOUT type constants matching the `InOutType` enum.
 pub const INOUT_IN: u8 = 1;
 pub const INOUT_OUT: u8 = 2;
 pub const INOUT_RESPAWN: u8 = 3;
 pub const INOUT_WARP: u8 = 4;
 
 /// Zone IDs for PK zone classification.
-///
-/// C++ Reference: `User.h:1002-1006` — `isInPKZone()`
 const ZONE_ARDREAM_PK: u16 = 72;
 const ZONE_RONARK_LAND_PK: u16 = 71;
 const ZONE_RONARK_LAND_BASE_PK: u16 = 73;
 
 /// Check if a zone is a PK zone.
-///
-/// C++ Reference: `User.h:1002-1006` — `isInPKZone()`
 /// PK zones: Ardream (72), Ronark Land (71), Ronark Land Base (73),
 /// and Special Event zones (SPBATTLE 105-115).
 fn is_pk_zone(zone_id: u16) -> bool {
@@ -214,7 +190,6 @@ fn is_pk_zone(zone_id: u16) -> bool {
 }
 
 /// Build a WIZ_USER_INOUT packet for a player.
-///
 /// For INOUT_OUT: only sends type + ID (no user info).
 /// For other types: appends full GetUserInfo data.
 /// Uses ABNORMAL_NORMAL (1) as the default abnormal type.
@@ -239,7 +214,6 @@ pub fn build_user_inout(
 }
 
 /// Build a WIZ_USER_INOUT packet with invisibility type and abnormal type.
-///
 /// Same as `build_user_inout` but allows specifying the player's current
 /// invisibility type and abnormal type so they're correctly included in
 /// the GetUserInfo block.
@@ -305,11 +279,8 @@ pub fn build_user_inout_with_clan(
 }
 
 /// Resolve alliance cape data for a clan member.
-///
 /// If the player's clan is in an alliance, returns `(cape_id, R, G, B)` from the
 /// main alliance clan (with sub/mercenary color overrides per C++).
-///
-/// C++ Reference: `UserInfoSystem.cpp:286-336` (GetUserInfo alliance cape logic)
 pub(crate) fn resolve_alliance_cape(
     ki: &KnightsInfo,
     world: &WorldState,
@@ -357,18 +328,13 @@ pub(crate) fn resolve_alliance_cape(
 }
 
 /// Write GetUserInfo data to a packet.
-///
-/// C++ Reference: `UserInfoSystem.cpp:264-383` (GetUserInfo)
-///
 /// Writes full player info including clan data when available.
-///
 /// The `invisibility_type` parameter carries the player's current stealth state
-/// (C++ `m_bInvisibilityType`). Per C++ UserInfoSystem.cpp:362-367, the client
+/// (`m_bInvisibilityType`). Per C++ UserInfoSystem.cpp:362-367, the client
 /// only understands value 1 (`INVIS_DISPEL_ON_MOVE`), so any non-zero invisibility
 /// type is converted to 1 before being written to the packet.
-///
 /// The `abnormal_type` parameter carries the player's current abnormal state
-/// (C++ `m_bAbnormalType`). This reflects GM invisibility, transformations,
+/// (`m_bAbnormalType`). This reflects GM invisibility, transformations,
 /// and other visual state changes. Default is 1 (ABNORMAL_NORMAL).
 #[allow(clippy::too_many_arguments)]
 pub fn write_user_info(
@@ -399,7 +365,7 @@ pub fn write_user_info(
     let fame = if is_pk_zone(pos.zone_id) { 0 } else { ch.fame };
     pkt.write_u8(fame);
 
-    // Clan info block — C++ Reference: UserInfoSystem.cpp:271-358
+    // Clan info block
     match clan {
         Some(ki) => {
             // Has clan: write real data
@@ -418,7 +384,6 @@ pub fn write_user_info(
                 pkt.write_u32(0);
             } else if let Some((ac_cape, ac_r, ac_g, ac_b)) = alliance_cape {
                 // Alliance cape — resolved by resolve_alliance_cape()
-                // C++ Reference: UserInfoSystem.cpp:286-336
                 pkt.write_u16(ac_cape);
                 pkt.write_u8(ac_r);
                 pkt.write_u8(ac_g);
@@ -431,14 +396,14 @@ pub fn write_user_info(
                         .unwrap_or_default()
                         .as_secs() as u32)
             {
-                // Own castellan cape (non-alliance) — C++ line 345-346
+                // Own castellan cape (non-alliance)
                 pkt.write_u16(ki.cast_cape_id as u16);
                 pkt.write_u8(ki.cast_cape_r);
                 pkt.write_u8(ki.cast_cape_g);
                 pkt.write_u8(ki.cast_cape_b);
                 pkt.write_u8(0);
             } else {
-                // Own regular cape (non-alliance) — C++ line 342
+                // Own regular cape (non-alliance)
                 pkt.write_u16(ki.cape);
                 pkt.write_u8(ki.cape_r);
                 pkt.write_u8(ki.cape_g);
@@ -446,7 +411,7 @@ pub fn write_user_info(
                 pkt.write_u8(0);
             }
 
-            // Clan symbol flag — C++ line 357
+            // Clan symbol flag
             // (flag > 1 && grade < 3) ? 2 : 0
             let symbol_flag = if ki.flag > 1 && ki.grade < 3 {
                 2u8
@@ -485,7 +450,6 @@ pub fn write_user_info(
     pkt.write_u16(ch.class);
 
     // Position — C++ GetSPosX() = uint16(GetX() * 10)
-    // C++ Reference: UserInfoSystem.cpp:373-375
     pkt.write_u16((pos.x * 10.0) as u16);
     pkt.write_u16((pos.z * 10.0) as u16);
     pkt.write_u16((pos.y * 10.0) as u16);
@@ -495,7 +459,6 @@ pub fn write_user_info(
     pkt.write_u32(ch.hair_rgb);
 
     // Status flags
-    // C++ Reference: User.h — USER_STANDING=1, ABNORMAL_NORMAL=1
     pkt.write_u8(ch.res_hp_type); // m_bResHpType — C++ USER_STANDING=1, USER_DEAD=3
     pkt.write_u32(abnormal_type); // m_bAbnormalType from session
     pkt.write_u8(0); // v2600: unknown byte after abnormal_type (always 0 in sniff)
@@ -503,7 +466,6 @@ pub fn write_user_info(
     pkt.write_u8(ch.authority); // m_bAuthority (0=GM, 1=Player)
     pkt.write_u8(bs.party_leader); // m_bPartyLeader
 
-    // C++ Reference: UserInfoSystem.cpp:362-367
     // The client only understands INVIS_DISPEL_ON_MOVE (1). Any non-zero
     // invisibility type (including INVIS_DISPEL_ON_ATTACK=2) is converted to 1.
     let client_invis = if invisibility_type != 0 { 1u8 } else { 0u8 };
@@ -528,7 +490,6 @@ pub fn write_user_info(
     pkt.write_i8(if pr <= kr { pr } else { -1 });
 
     // Equipment — 17 visual slots: item_id(u32) + duration(u16) + flag(u8)
-    // C++ Reference: UserInfoSystem.cpp:403-502 — equippedItems[]
     // equip_visual is in VISUAL_SLOT_ORDER: 8 equipped + 9 cosplay
     for &(item_id, dur, flag) in equip_visual {
         pkt.write_u32(item_id); // nNum
@@ -553,12 +514,9 @@ pub fn write_user_info(
 }
 
 /// Send region change data to a player — the 3-phase WIZ_REGIONCHANGE protocol.
-///
 /// Phase 0: start marker
 /// Phase 1: compressed list of nearby user/NPC socket IDs
 /// Phase 2: end marker
-///
-/// C++ Reference: `FundamentalMethods.cpp:20-51` (RegionUserInOutForMe)
 pub async fn send_region_user_in_out_for_me(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -605,13 +563,9 @@ pub async fn send_region_user_in_out_for_me(session: &mut ClientSession) -> anyh
 }
 
 /// Send merchant INOUT info for nearby player/bot merchants.
-///
-/// C++ Reference: `CUser::MerchantUserInOutForMe()` in `FundamentalMethods.cpp:124-145`
-///
 /// Builds a `WIZ_MERCHANT_INOUT` packet containing all actively merchanting
 /// players and bots in the 3×3 region grid around the caller. Sent on region
 /// change, zone change, and game entry.
-///
 /// Packet: `[0x69][u8(1)][u16(count)][for each: u32(id) + u8(state) + u8(premium)]`
 pub async fn send_merchant_user_in_out_for_me(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -706,7 +660,6 @@ pub async fn send_merchant_user_in_out_for_me(session: &mut ClientSession) -> an
 }
 
 /// Broadcast INOUT_IN to nearby players when a user enters a region.
-///
 /// Also sends INOUT_IN of each nearby player TO the entering user.
 /// Uses INOUT_RESPAWN as the broadcast type (default for cross-zone and respawn).
 pub async fn broadcast_user_in(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -714,9 +667,6 @@ pub async fn broadcast_user_in(session: &mut ClientSession) -> anyhow::Result<()
 }
 
 /// Broadcast user appearance to nearby players with a specific INOUT type.
-///
-/// C++ Reference: `RegionHandler.cpp` — UserInOut(InOutType)
-///
 /// `inout_type` determines what the client shows for the entering user:
 /// - INOUT_RESPAWN (3): normal respawn/cross-zone appearance
 /// - INOUT_WARP (4): same-zone warp appearance
@@ -813,7 +763,6 @@ pub async fn broadcast_user_in_with_type(
     }
 
     // Send tag list for nearby players who have custom name tags.
-    // C++ Reference: CUser::UserInOutTag() — called after UserInOut loop.
     let tag_entries = super::tag_change::collect_region_tags(
         &world,
         pos.zone_id,
@@ -830,11 +779,8 @@ pub async fn broadcast_user_in_with_type(
 }
 
 /// Send the NPC region list to a player — WIZ_NPC_REGION (0x1C) compressed.
-///
 /// Sends a compressed list of nearby NPC IDs so the client knows which NPCs
 /// exist in the player's visibility range.
-///
-/// C++ Reference: `FundamentalMethods.cpp` — RegionNpcInfoForMe
 pub async fn send_region_npc_info_for_me(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -863,10 +809,7 @@ pub async fn send_region_npc_info_for_me(session: &mut ClientSession) -> anyhow:
 }
 
 /// Send WIZ_NPC_INOUT(IN) for all nearby NPCs to a player.
-///
 /// Called during game entry so the player sees all NPCs in their vicinity.
-///
-/// C++ Reference: `Npc.cpp:155-164` — GetInOut for each NPC in 3×3 grid
 pub async fn send_nearby_npc_inouts(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();

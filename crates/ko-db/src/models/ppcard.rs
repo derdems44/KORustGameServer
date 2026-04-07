@@ -1,6 +1,4 @@
 //! PPCard model — maps to the `ppcard_list` PostgreSQL table.
-//!
-//! C++ Reference: `DBAgent.cpp:5225-5277` — `CDBAgent::LoadPPCard()`
 
 use chrono::{DateTime, Utc};
 

@@ -1,7 +1,4 @@
 //! Nation battle (war) system — state management and victory logic.
-//!
-//! C++ Reference: `BattleSystem.cpp` (661 LOC), `GameServerDlg.h` (war fields)
-//!
 //! The war system tracks nation-vs-nation battles across 6 battle zones.
 //! It manages kill/death counters, monument capture points, flag victory,
 //! commander selection, and war timers.
@@ -17,104 +14,66 @@ use crate::world::{
 // ── Battle Open State ────────────────────────────────────────────────────────
 
 /// No active battle.
-///
-/// C++ Reference: `Define.h:128` — `#define NO_BATTLE 0`
 pub const NO_BATTLE: u8 = 0;
 
 /// Nation battle (standard war) is active.
-///
-/// C++ Reference: `Define.h:129` — `#define NATION_BATTLE 1`
 pub const NATION_BATTLE: u8 = 1;
 
 /// Snow battle (snowball war) is active.
-///
-/// C++ Reference: `Define.h:130` — `#define SNOW_BATTLE 2`
 pub const SNOW_BATTLE: u8 = 2;
 
 /// Siege battle (castle siege) is active.
-///
-/// C++ Reference: `Define.h:131` — `#define SIEGE_BATTLE 3`
 pub const SIEGE_BATTLE: u8 = 3;
 
 // ── Battle Zone Command Types ────────────────────────────────────────────────
 
 /// Battle zone open command.
-///
-/// C++ Reference: `Define.h:105` — `#define BATTLEZONE_OPEN 0x00`
 pub const BATTLEZONE_OPEN: u8 = 0x00;
 
 /// Battle zone close command.
-///
-/// C++ Reference: `Define.h:106` — `#define BATTLEZONE_CLOSE 0x01`
 pub const BATTLEZONE_CLOSE: u8 = 0x01;
 
 /// Battle zone none (reset sentinel).
-///
-/// C++ Reference: `Define.h:104` — `#define BATTLEZONE_NONE 0xFF`
 pub const BATTLEZONE_NONE: u8 = 0xFF;
 
 /// Snow battle zone open announcement type.
-///
-/// C++ Reference: `Define.h:114` — `#define SNOW_BATTLEZONE_OPEN 0x09`
 pub const SNOW_BATTLEZONE_OPEN: u8 = 0x09;
 
 /// Snow battle zone close announcement type.
-///
-/// C++ Reference: `Define.h:120` — `#define SNOW_BATTLEZONE_CLOSE 0x15`
 pub const SNOW_BATTLEZONE_CLOSE: u8 = 0x15;
 
 // ── Announcement Types ───────────────────────────────────────────────────────
 
 /// Announce the winning nation.
-///
-/// C++ Reference: `Define.h:107` — `#define DECLARE_WINNER 0x02`
 pub const DECLARE_WINNER: u8 = 0x02;
 
 /// Announce the losing nation.
-///
-/// C++ Reference: `Define.h:108` — `#define DECLARE_LOSER 0x03`
 pub const DECLARE_LOSER: u8 = 0x03;
 
 /// Monument status announcement.
-///
-/// C++ Reference: `Define.h:118` — `#define DECLARE_NATION_MONUMENT_STATUS 0x13`
 pub const DECLARE_NATION_MONUMENT_STATUS: u8 = 0x13;
 
 /// Monument reward announcement.
-///
-/// C++ Reference: `Define.h:119` — `#define DECLARE_NATION_REWARD_STATUS 0x14`
 pub const DECLARE_NATION_REWARD_STATUS: u8 = 0x14;
 
 /// Banish announcement (losers will be kicked from the zone).
-///
-/// C++ Reference: `Define.h:109` — `#define DECLARE_BAN 0x04`
 pub const DECLARE_BAN: u8 = 0x04;
 
 /// Battle zone status announcement (kill/death/monument status).
-///
-/// C++ Reference: `Define.h:116` — `#define DECLARE_BATTLE_ZONE_STATUS 0x11`
 pub const DECLARE_BATTLE_ZONE_STATUS: u8 = 0x11;
 
 /// Under-attack notification (post-victory phase).
-///
-/// C++ Reference: `Define.h:115` — `#define UNDER_ATTACK_NOTIFY 0x10`
 pub const UNDER_ATTACK_NOTIFY: u8 = 0x10;
 
 // ── War Rewards ──────────────────────────────────────────────────────────────
 
 /// Number of flag captures needed for instant victory.
-///
-/// C++ Reference: `globals.h:46` — `#define NUM_FLAG_VICTORY 4`
 pub const NUM_FLAG_VICTORY: u8 = 4;
 
 /// Gold awarded to winners in flag-victory scenario.
-///
-/// C++ Reference: `globals.h:47` — `#define AWARD_GOLD 100000`
 pub const AWARD_GOLD: u32 = 100_000;
 
 /// Experience awarded to winners in flag-victory scenario.
-///
-/// C++ Reference: `globals.h:48` — `#define AWARD_EXP 5000`
 pub const AWARD_EXP: i64 = 5000;
 
 // ── Fame Constants ───────────────────────────────────────────────────────────
@@ -125,27 +84,19 @@ pub use crate::clan_constants::COMMAND_CAPTAIN;
 // ── Monument SIDs ────────────────────────────────────────────────────────────
 
 /// El Morad main monument NPC SID.
-///
-/// C++ Reference: `Define.h:405` — `#define ELMORAD_MONUMENT_SID 10301`
 pub const ELMORAD_MONUMENT_SID: u16 = 10301;
 
 /// Luferson (Karus) main monument NPC SID.
-///
-/// C++ Reference: `Define.h:410` — `#define LUFERSON_MONUMENT_SID 20301`
 pub const LUFERSON_MONUMENT_SID: u16 = 20301;
 
 // ── Ardream zone type (used for mini-war) ────────────────────────────────────
 
 /// Ardream-type battle zone (mini-war with no banish phase).
-///
-/// C++ Reference: `Define.h:173` — `#define ZONE_ARDREAM 72`
 pub const ZONE_ARDREAM_TYPE: u8 = 72;
 
 // ── Winner Determination Types ───────────────────────────────────────────────
 
 /// How the winner is determined when time runs out.
-///
-/// C++ Reference: `packets.h:1042-1046` — `enum class BattleWinnerTypes`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum BattleWinnerType {
@@ -160,204 +111,165 @@ pub enum BattleWinnerType {
 // ── Battle State ─────────────────────────────────────────────────────────────
 
 /// Full mutable battle/war state, stored behind `RwLock` on `WorldState`.
-///
-/// C++ Reference: Various fields on `CGameServerDlg` in `GameServerDlg.h:1098-1121`.
 #[derive(Debug, Clone)]
 pub struct BattleState {
     // ── Core State ───────────────────────────────────────────────────────
     /// Current battle open state (NO_BATTLE=0, NATION_BATTLE=1, SNOW_BATTLE=2).
     ///
-    /// C++ Reference: `m_byBattleOpen`
     pub battle_open: u8,
 
     /// Previous battle open state (for close announcements).
     ///
-    /// C++ Reference: `m_byOldBattleOpen`
     pub old_battle_open: u8,
 
     /// Which battle zone offset (0-5, actual zone = ZONE_BATTLE_BASE + battle_zone).
     ///
-    /// C++ Reference: `m_byBattleZone`
     pub battle_zone: u8,
 
     /// Battle zone type (0 = standard, ZONE_ARDREAM = mini-war).
     ///
-    /// C++ Reference: `m_byBattleZoneType`
     pub battle_zone_type: u8,
 
     /// Winning nation (0=none, 1=Karus, 2=ElMorad).
     ///
-    /// C++ Reference: `m_bVictory`
     pub victory: u8,
 
     /// Previous victory nation (for delayed result processing).
     ///
-    /// C++ Reference: `m_byOldVictory`
     pub old_victory: u8,
 
     /// Victory nation for result delay phase.
     ///
-    /// C++ Reference: `m_bResultDelayVictory`
     pub result_delay_victory: u8,
 
     /// Middle statue nation ownership (for ZONE_BATTLE4).
     ///
-    /// C++ Reference: `m_bMiddleStatueNation`
     pub middle_statue_nation: u8,
 
     // ── Timing ───────────────────────────────────────────────────────────
     /// Unix timestamp when war was opened.
     ///
-    /// C++ Reference: `m_byBattleOpenedTime`
     pub battle_opened_time: i32,
 
     /// Total configured war duration in seconds.
     ///
-    /// C++ Reference: `m_byBattleTime`
     pub battle_time: i32,
 
     /// Remaining war time in seconds.
     ///
-    /// C++ Reference: `m_byBattleRemainingTime`
     pub battle_remaining_time: i32,
 
     /// Timer delay counter (ticks).
     ///
-    /// C++ Reference: `m_sBattleTimeDelay`
     pub battle_time_delay: i32,
 
     /// Battle notice timer (announcement interval counter).
     ///
-    /// C++ Reference: `m_byBattleNoticeTime`
     pub battle_notice_time: u8,
 
     /// Nereids Island remaining time (ZONE_BATTLE4/5 specific).
     ///
-    /// C++ Reference: `m_byNereidsIslandRemainingTime`
     pub nereids_remaining_time: i32,
 
     // ── Kill / Death Counters ────────────────────────────────────────────
     /// Karus player deaths in war zone.
     ///
-    /// C++ Reference: `m_sKarusDead`
     pub karus_dead: i16,
 
     /// El Morad player deaths in war zone.
     ///
-    /// C++ Reference: `m_sElmoradDead`
     pub elmorad_dead: i16,
 
     /// Current Karus player count in war zone.
     ///
-    /// C++ Reference: `m_sKarusCount`
     pub karus_count: i16,
 
     /// Current El Morad player count in war zone.
     ///
-    /// C++ Reference: `m_sElmoradCount`
     pub elmorad_count: i16,
 
     // ── NPC Kill Counters ────────────────────────────────────────────────
     /// Karus NPCs killed by El Morad (favor El Morad in NPC winner check).
     ///
-    /// C++ Reference: `m_sKilledKarusNpc`
     pub killed_karus_npc: u8,
 
     /// El Morad NPCs killed by Karus (favor Karus in NPC winner check).
     ///
-    /// C++ Reference: `m_sKilledElmoNpc`
     pub killed_elmorad_npc: u8,
 
     // ── Monument Points ──────────────────────────────────────────────────
     /// Number of monuments captured by Karus.
     ///
-    /// C++ Reference: `m_sKarusMonuments`
     pub karus_monuments: u8,
 
     /// Number of monuments captured by El Morad.
     ///
-    /// C++ Reference: `m_sElmoMonuments`
     pub elmorad_monuments: u8,
 
     /// Accumulated monument capture points for Karus.
     ///
-    /// C++ Reference: `m_sKarusMonumentPoint`
     pub karus_monument_point: u16,
 
     /// Accumulated monument capture points for El Morad.
     ///
-    /// C++ Reference: `m_sElmoMonumentPoint`
     pub elmorad_monument_point: u16,
 
     // ── Flag Captures ────────────────────────────────────────────────────
     /// Karus flag capture count (victory at NUM_FLAG_VICTORY).
     ///
-    /// C++ Reference: `m_bKarusFlag`
     pub karus_flag: u8,
 
     /// El Morad flag capture count (victory at NUM_FLAG_VICTORY).
     ///
-    /// C++ Reference: `m_bElmoradFlag`
     pub elmorad_flag: u8,
 
     // ── Open / Banish Flags ──────────────────────────────────────────────
     /// Whether Karus zone gate is open (after one side wins, let losers be kicked).
     ///
-    /// C++ Reference: `m_byKarusOpenFlag`
     pub karus_open_flag: bool,
 
     /// Whether El Morad zone gate is open.
     ///
-    /// C++ Reference: `m_byElmoradOpenFlag`
     pub elmorad_open_flag: bool,
 
     /// Whether banish phase is active (kicking losers from war zone).
     ///
-    /// C++ Reference: `m_byBanishFlag`
     pub banish_flag: bool,
 
     /// Banish delay counter (ticks).
     ///
-    /// C++ Reference: `m_sBanishDelay`
     pub banish_delay: i16,
 
     /// Whether battle save (result persistence) is needed.
     ///
-    /// C++ Reference: `m_byBattleSave`
     pub battle_save: bool,
 
     /// Whether result delay is active.
     ///
-    /// C++ Reference: `m_bResultDelay`
     pub result_delay: bool,
 
     /// Result delay counter (ticks).
     ///
-    /// C++ Reference: `m_sBattleResultDelay`
     pub battle_result_delay: i32,
 
     // ── Commander State ──────────────────────────────────────────────────
     /// Whether war commanders have been selected.
     ///
-    /// C++ Reference: `m_bCommanderSelected`
     pub commander_selected: bool,
 
     // ── Nereids Island Monuments ─────────────────────────────────────────
     /// Monument ownership array for Nereids Island (ZONE_BATTLE4).
     ///
-    /// C++ Reference: `m_sNereidsIslandMonuArray`
     pub nereids_monument_array: [u8; 7],
 
     // ── Nation Monument Tracking ─────────────────────────────────────────
     /// Nation monuments captured by the winning side: proto_id → next_reward_time (UNIX).
     ///
-    /// C++ Reference: `m_NationMonumentWinnerNationArray` — `_MONUMENT_INFORMATION`
     /// with `RepawnedTime` field. Timer interval: 300 seconds.
     pub nation_monument_winners: HashMap<u16, i32>,
 
     /// Nation monuments captured by the defeated side: proto_id → next_reward_time (UNIX).
     ///
-    /// C++ Reference: `m_NationMonumentDefeatedNationArray` — `_MONUMENT_INFORMATION`
     /// with `RepawnedTime` field. Timer interval: 10,000 seconds. Entry deleted after fire.
     pub nation_monument_defeated: HashMap<u16, i32>,
 }
@@ -408,7 +320,6 @@ impl BattleState {
 
     /// Whether any battle (nation or snow) is currently active.
     ///
-    /// C++ Reference: `CGameServerDlg::isWarOpen()` — `m_byBattleOpen != NO_BATTLE`
     #[inline]
     pub fn is_war_open(&self) -> bool {
         self.battle_open != NO_BATTLE
@@ -444,9 +355,6 @@ impl Default for BattleState {
 // ── War System Functions ─────────────────────────────────────────────────────
 
 /// Reset all battle zone state fields to defaults.
-///
-/// C++ Reference: `CGameServerDlg::ResetBattleZone(uint8 bType)` (lines 238-315)
-///
 /// The `reset_type` parameter indicates whether NPC abilities should be
 /// toggled (BATTLEZONE_OPEN or BATTLEZONE_CLOSE). The NPC ability change
 /// is deferred to the caller since it requires iterating NPC threads.
@@ -501,9 +409,6 @@ pub fn reset_battle_zone(state: &mut BattleState) {
 }
 
 /// Open a battle zone (start a war).
-///
-/// C++ Reference: `CGameServerDlg::BattleZoneOpen(int nType, uint8 bZone)` (lines 532-580)
-///
 /// Returns `true` if the war was successfully opened, `false` if already open
 /// or invalid type. The caller is responsible for sending announcements and
 /// kicking users from conflicting zones.
@@ -535,9 +440,6 @@ pub fn battle_zone_open(state: &mut BattleState, n_type: u8, zone: u8, now_unix:
 }
 
 /// Close the active battle zone (end war).
-///
-/// C++ Reference: `CGameServerDlg::BattleZoneClose()` (lines 583-603)
-///
 /// Returns the previous battle_open type so the caller can decide what
 /// announcements and cleanup to perform.
 pub fn battle_zone_close(state: &mut BattleState) -> u8 {
@@ -562,14 +464,10 @@ pub fn battle_zone_close(state: &mut BattleState) -> u8 {
 }
 
 /// Determine the winner using cascading tiebreak logic.
-///
-/// C++ Reference: `CGameServerDlg::BattleWinnerResult(BattleWinnerTypes)` (lines 470-529)
-///
 /// Cascade order depends on the starting type:
 /// - NPC → Kill → Monument → Draw (for ZONE_BATTLE/2/3)
 /// - Kill → NPC → Monument → Draw (for ZONE_BATTLE4/5/6)
 /// - Monument → Kill → Draw
-///
 /// Returns winning nation (1=Karus, 2=ElMorad) or 0 for a draw.
 pub fn battle_winner_result(state: &BattleState, winner_type: BattleWinnerType) -> u8 {
     let battle_zone_id = state.battle_zone as u16 + ZONE_BATTLE_BASE;
@@ -624,9 +522,6 @@ pub fn battle_winner_result(state: &BattleState, winner_type: BattleWinnerType) 
 }
 
 /// Set the winner and configure banish/open flags.
-///
-/// C++ Reference: `CGameServerDlg::BattleZoneResult(uint8 nation)` (lines 344-380)
-///
 /// The caller is responsible for:
 /// - Announcing DECLARE_WINNER / DECLARE_LOSER
 /// - Awarding NP to captains
@@ -646,9 +541,6 @@ pub fn battle_zone_result(state: &mut BattleState, nation: u8) {
 }
 
 /// Check if either nation has achieved flag victory.
-///
-/// C++ Reference: `CGameServerDlg::BattleZoneVictoryCheck()` (lines 606-658)
-///
 /// Returns the winning nation (1=Karus, 2=ElMorad) if flag threshold met,
 /// or 0 if no flag victory yet.
 pub fn battle_zone_victory_check(state: &BattleState) -> u8 {
@@ -662,8 +554,6 @@ pub fn battle_zone_victory_check(state: &BattleState) -> u8 {
 }
 
 /// Get the monument name for a battle or nation monument.
-///
-/// C++ Reference: `CGameServerDlg::GetBattleAndNationMonumentName(int16, uint8)` (lines 7-46)
 pub fn get_monument_name(trap_number: i16, zone_id: u8) -> String {
     if zone_id == 0 {
         // Battle zone monuments (Ardream/Ronark)
@@ -728,22 +618,16 @@ pub fn get_monument_name(trap_number: i16, zone_id: u8) -> String {
 // ── War Zone Helpers ─────────────────────────────────────────────────────────
 
 /// Check if a zone ID is a war battle zone (ZONE_BATTLE through ZONE_BATTLE6).
-///
-/// C++ Reference: `C3DMap::isWarZone()` — checks ZF_WAR_ZONE flag
 pub fn is_battle_zone(zone_id: u16) -> bool {
     (ZONE_BATTLE..=ZONE_BATTLE6).contains(&zone_id)
 }
 
 /// Check if a zone ID matches the currently active battle zone.
-///
-/// C++ Reference: `CUser::isWarZone()` — `GetZoneID() == ZONE_BATTLE_BASE + m_byBattleZone`
 pub fn is_active_battle_zone(state: &BattleState, zone_id: u16) -> bool {
     state.is_war_open() && zone_id == state.battle_zone_id()
 }
 
 /// Return the winner determination type for a given battle zone.
-///
-/// C++ Reference: `EventMainTimer.cpp:887-893` — only BATTLE/2/3 (NPC), BATTLE4
 /// (Monument), and BATTLE6 (Kill) have half-time checks. BATTLE5 is NOT listed
 /// in C++, so we return `None` to skip half-time determination.
 pub fn winner_type_for_zone(battle_zone_id: u16) -> Option<BattleWinnerType> {
@@ -759,7 +643,6 @@ pub fn winner_type_for_zone(battle_zone_id: u16) -> Option<BattleWinnerType> {
 
 /// Outcome of a single `war_tick` call, used by the caller to decide
 /// what further network I/O to perform (broadcasts, teleports, etc.).
-///
 /// Returning an enum keeps `war_tick` free of async and WorldState
 /// broadcast calls, making it easy to unit-test.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -796,23 +679,17 @@ pub enum WarTickAction {
     },
     /// Auto-select war commanders at 1/24 of war time.
     ///
-    /// C++ Reference: `EventMainTimer.cpp:879` — `BattleZoneSelectCommanders()`
     SelectCommanders,
 }
 
 /// Advance the war state by one second.
-///
-/// C++ Reference: `CGameServerDlg::SingleLunarEventTimer()` in `EventMainTimer.cpp:870-931`
-///
 /// This is a pure state-mutation function that returns a [`WarTickAction`]
 /// telling the caller what broadcast/IO to perform. This keeps the war tick
 /// testable without needing async or a full WorldState.
-///
 /// The caller should invoke this once per second when any battle is active
 /// or the banish flag is set.
 pub fn war_tick(state: &mut BattleState) -> WarTickAction {
     // ── Banish phase (runs even after war is closed) ──────────────────
-    // C++ Reference: EventMainTimer.cpp:921-930
     if state.banish_flag {
         state.banish_delay = state.banish_delay.saturating_add(1);
 
@@ -844,7 +721,6 @@ pub fn war_tick(state: &mut BattleState) -> WarTickAction {
     }
 
     // ── Calculate elapsed and remaining time ─────────────────────────
-    // C++ Reference: EventMainTimer.cpp:872-873
     // In C++: WarElapsedTime = int32(UNIXTIME) - m_byBattleOpenedTime
     // We track battle_time_delay as a running elapsed counter instead.
     // Remaining time is decremented every tick.
@@ -855,13 +731,11 @@ pub fn war_tick(state: &mut BattleState) -> WarTickAction {
     let battle_zone_id = state.battle_zone as u16 + ZONE_BATTLE_BASE;
 
     // ── Nereids Island timer ──────────────────────────────────────────
-    // C++ Reference: EventMainTimer.cpp:876
     if state.nereids_remaining_time > 0 && battle_zone_id == ZONE_BATTLE4 {
         state.nereids_remaining_time = state.nereids_remaining_time.saturating_sub(1);
     }
 
     // ── Result delay processing ──────────────────────────────────────
-    // C++ Reference: EventMainTimer.cpp:910-916
     if state.result_delay {
         state.battle_result_delay += 1;
         // C++ uses: m_byBattleTime / (m_byBattleTime / 10) which simplifies to 10
@@ -880,7 +754,6 @@ pub fn war_tick(state: &mut BattleState) -> WarTickAction {
     }
 
     // ── Time expired: close the war ──────────────────────────────────
-    // C++ Reference: EventMainTimer.cpp:917
     if state.battle_remaining_time <= 0 {
         return WarTickAction::TimeExpired;
     }
@@ -888,14 +761,12 @@ pub fn war_tick(state: &mut BattleState) -> WarTickAction {
     // ── Victory not yet declared ─────────────────────────────────────
     if state.victory == 0 {
         // ── Commander selection at 1/24 of war time ──────────────────
-        // C++ Reference: EventMainTimer.cpp:879
         if !state.commander_selected && elapsed >= (battle_time / 24).max(1) {
             state.commander_selected = true;
             return WarTickAction::SelectCommanders;
         }
 
         // ── Nereids quarter-time monument check ──────────────────────
-        // C++ Reference: EventMainTimer.cpp:881-885
         if elapsed == (battle_time / 4) && battle_zone_id == ZONE_BATTLE4 {
             if state.karus_monuments >= 7 && state.elmorad_monuments == 0 {
                 return WarTickAction::NereidsQuarterCheck { winner_nation: 1 };
@@ -905,7 +776,6 @@ pub fn war_tick(state: &mut BattleState) -> WarTickAction {
         }
 
         // ── Half-time winner determination ───────────────────────────
-        // C++ Reference: EventMainTimer.cpp:887-893
         // Only zones with a defined winner type get half-time checks (BATTLE5 is skipped)
         if elapsed == (battle_time / 2) {
             if let Some(winner_type) = winner_type_for_zone(battle_zone_id) {
@@ -917,7 +787,6 @@ pub fn war_tick(state: &mut BattleState) -> WarTickAction {
         }
 
         // ── Periodic status announcement ─────────────────────────────
-        // C++ Reference: EventMainTimer.cpp:895-898
         state.battle_time_delay += 1;
         let status_interval = if battle_zone_id == ZONE_BATTLE4 {
             (battle_time / 48).max(1)
@@ -932,7 +801,6 @@ pub fn war_tick(state: &mut BattleState) -> WarTickAction {
         }
     } else {
         // ── Victory already declared, under-attack phase ─────────────
-        // C++ Reference: EventMainTimer.cpp:902-908
         state.battle_time_delay += 1;
         let notify_interval = (battle_time / 24).max(1);
         if state.battle_time_delay >= notify_interval {
@@ -945,10 +813,6 @@ pub fn war_tick(state: &mut BattleState) -> WarTickAction {
 }
 
 /// Build a war status announcement string.
-///
-/// C++ Reference: `CGameServerDlg::Announcement(DECLARE_BATTLE_ZONE_STATUS)`
-/// in `GameServerDlg.cpp:1776-1828`
-///
 /// For ZONE_BATTLE4 (Nereids): includes monument points and death counts.
 /// For other zones: includes NPC kills, death counts, and flag counts.
 pub fn build_status_string(state: &BattleState) -> String {
@@ -976,8 +840,6 @@ pub fn build_status_string(state: &BattleState) -> String {
 }
 
 /// Build a winner/loser announcement string.
-///
-/// C++ Reference: `CGameServerDlg::Announcement(DECLARE_WINNER/DECLARE_LOSER)`
 pub fn build_winner_string(winner_nation: u8) -> String {
     let winner = if winner_nation == 1 {
         "Karus"
@@ -988,8 +850,6 @@ pub fn build_winner_string(winner_nation: u8) -> String {
 }
 
 /// Build a banish announcement string.
-///
-/// C++ Reference: `CGameServerDlg::Announcement(DECLARE_BAN)`
 pub fn build_banish_string(victory: u8) -> String {
     if victory == 1 || victory == 2 {
         "Losers will be banished from the war zone!".to_string()
@@ -999,9 +859,6 @@ pub fn build_banish_string(victory: u8) -> String {
 }
 
 /// Calculate reward NP for a war captain.
-///
-/// C++ Reference: `BattleSystem.cpp:364-365` — captains get 500 NP on result
-/// C++ Reference: `BattleSystem.cpp:634-636` — on flag victory, kings get 500, others 300
 pub fn captain_reward_np(is_king: bool, is_flag_victory: bool) -> i32 {
     if is_flag_victory {
         if is_king {
@@ -1015,8 +872,6 @@ pub fn captain_reward_np(is_king: bool, is_flag_victory: bool) -> i32 {
 }
 
 /// Calculate reward NP for non-captain players in flag victory.
-///
-/// C++ Reference: `BattleSystem.cpp:640-653`
 /// - Non-captain, non-king: 100 NP
 /// - Non-captain, king: 200 NP
 pub fn flag_victory_np(is_king: bool) -> i32 {
@@ -1028,8 +883,6 @@ pub fn flag_victory_np(is_king: bool) -> i32 {
 }
 
 /// Get the home zone for a nation (used for banish teleport).
-///
-/// C++ Reference: `CUser::KickOutZoneUser` teleports to nation capital.
 pub fn nation_home_zone(nation: u8) -> u16 {
     match nation {
         1 => ZONE_KARUS,
@@ -1041,18 +894,12 @@ pub fn nation_home_zone(nation: u8) -> u16 {
 // ── Async WorldState integration ─────────────────────────────────────────────
 
 /// War tick interval in seconds.
-///
-/// C++ Reference: `SingleLunarEventTimer` runs every 1 second.
 const WAR_TICK_INTERVAL_SECS: u64 = 1;
 
 /// Start the war system background task.
-///
 /// Spawns a tokio task that calls [`war_tick_world`] every second,
 /// processing nation battle timers, banish phases, and status broadcasts.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
-///
-/// C++ Reference: `CGameServerDlg::SingleLunarEventTimer()` in `EventMainTimer.cpp`
 pub fn start_war_task(world: std::sync::Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut interval =
@@ -1065,15 +912,11 @@ pub fn start_war_task(world: std::sync::Arc<WorldState>) -> tokio::task::JoinHan
 }
 
 /// Execute a war tick against the WorldState and handle the resulting action.
-///
 /// This is the main entry point called by the game server's 1-second timer.
 /// It acquires a write lock on the battle state, runs `war_tick()`, then
 /// performs any necessary broadcasts.
-///
-/// C++ Reference: `CGameServerDlg::SingleLunarEventTimer()` in `EventMainTimer.cpp:870-931`
 pub async fn war_tick_world(world: &WorldState) {
     // Update battle zone user counts every tick (C++ BattleZoneCurrentUsers)
-    // C++ Reference: EventMainTimer.cpp:871 — called first thing in NATION_BATTLE branch
     {
         let state = world.get_battle_state();
         if state.battle_open == NATION_BATTLE {
@@ -1125,7 +968,6 @@ pub async fn war_tick_world(world: &WorldState) {
         }
         WarTickAction::TimeExpired => {
             // C++ BattleZoneClose: ResetCommanders + GoldshellDisable + ResetBattleZone + banish
-            // C++ ref: BattleSystem.cpp:583-603
             let prev = world.update_battle_state(battle_zone_close);
             if prev != NO_BATTLE {
                 world.change_ability_all_npcs(false);
@@ -1162,21 +1004,16 @@ pub async fn war_tick_world(world: &WorldState) {
     }
 
     // ── Nation Monument NP Rewards ────────────────────────────────────────
-    // C++ Reference: BattleSystem.cpp:49-142 — CheckNationMonumentRewards()
     check_nation_monument_rewards(world);
 
     // ── CSW Timer ────────────────────────────────────────────────────────
-    // C++ Reference: SiegeWarfareMainTimer() runs every tick alongside war timer.
     csw_tick_world(world).await;
 }
 
 /// Execute a CSW timer tick against the WorldState.
-///
 /// Called every 1 second from `war_tick_world()`. Acquires write lock on
 /// `csw_event`, calls `csw_timer_tick()`, then handles the resulting action:
 /// notice broadcasts, phase transitions, and rewards.
-///
-/// C++ Reference: `CGameServerDlg::SiegeWarfareMainTimer()` in `thyke_csw.cpp`
 async fn csw_tick_world(world: &WorldState) {
     use crate::handler::siege::{
         build_csw_notice, build_csw_raw_notice, csw_close, csw_timer_tick, csw_war_open,
@@ -1247,7 +1084,6 @@ async fn csw_tick_world(world: &WorldState) {
 }
 
 /// Broadcast a WAR_SYSTEM_CHAT announcement.
-///
 /// If `zone_id` is Some, only players in that zone receive it.
 /// If `zone_id` is None, all players receive it.
 pub(crate) fn broadcast_war_announcement(world: &WorldState, message: &str, zone_id: Option<u16>) {
@@ -1267,8 +1103,6 @@ pub(crate) fn broadcast_war_announcement(world: &WorldState, message: &str, zone
 }
 
 /// Broadcast a war system chat message to all players of a specific nation.
-///
-/// C++ Reference: `LoadServerData.cpp:813-843` — captain name announcement uses
 /// `Send_All(&result, nullptr, Nation::KARUS/ELMORAD)`.
 pub(crate) fn broadcast_war_chat_to_nation(world: &WorldState, nation: u8, message: &str) {
     let pkt = crate::handler::chat::build_chat_packet(
@@ -1289,9 +1123,6 @@ pub(crate) fn broadcast_war_chat_to_nation(world: &WorldState, nation: u8, messa
 }
 
 /// Distribute NP rewards to war captains in the war zone after BattleZoneResult.
-///
-/// C++ Reference: `CGameServerDlg::BattleZoneResult()` in `BattleSystem.cpp:351-367`
-///
 /// Unlike flag victory (which rewards players in their home zone with gold+exp+NP),
 /// BattleZoneResult only awards 500 NP to captains of the winning nation who are
 /// currently in a war zone (`isWarZone()`).
@@ -1319,7 +1150,6 @@ fn distribute_war_result_rewards(world: &WorldState, winner_nation: u8) {
             continue;
         }
 
-        // C++: if (pUser->GetFame() == COMMAND_CAPTAIN) pUser->SendLoyaltyChange(500)
         if info.fame == COMMAND_CAPTAIN {
             super::loyalty::send_loyalty_change(world, sid, 500, false, false, true);
             rewarded += 1;
@@ -1335,9 +1165,6 @@ fn distribute_war_result_rewards(world: &WorldState, winner_nation: u8) {
 }
 
 /// Execute the banish phase: kick losers and reset captains.
-///
-/// C++ Reference: `CGameServerDlg::BanishLosers()` in `BattleSystem.cpp:176-213`
-///
 /// Two modes depending on current battle state:
 /// - `NATION_BATTLE`: Kick losers from war zone (first banish after result)
 /// - `NO_BATTLE`: Reset captains to CHIEF + kick invaders from enemy home zones + war zones
@@ -1359,13 +1186,11 @@ fn execute_banish(world: &WorldState) {
             None => continue,
         };
 
-        // C++: Reset captains when war is over (NO_BATTLE)
         // BattleSystem.cpp:188-193 — if (battle_open == NO_BATTLE && fame == COMMAND_CAPTAIN)
         if battle_open == NO_BATTLE && info.fame == COMMAND_CAPTAIN {
             world.update_character_stats(sid, |ci| ci.fame = CHIEF);
 
             // C++ ChangeFame broadcasts WIZ_AUTHORITY_CHANGE to region
-            // C++ ref: TowerTransformationProcess.cpp:112-118
             let mut auth_pkt =
                 ko_protocol::Packet::new(ko_protocol::Opcode::WizAuthorityChange as u8);
             auth_pkt.write_u8(0x01); // COMMAND_AUTHORITY
@@ -1381,7 +1206,6 @@ fn execute_banish(world: &WorldState) {
         }
 
         if battle_open == NATION_BATTLE {
-            // C++: BattleSystem.cpp:195-199 — kick losers from war zone
             let pos = match world.get_position(sid) {
                 Some(p) => p,
                 None => continue,
@@ -1391,14 +1215,12 @@ fn execute_banish(world: &WorldState) {
                 kicked += 1;
             }
         } else if battle_open == NO_BATTLE {
-            // C++: BattleSystem.cpp:201-206 — kick invaders from enemy home zones + war zones
             let pos = match world.get_position(sid) {
                 Some(p) => p,
                 None => continue,
             };
             let zone_id = pos.zone_id;
 
-            // C++: (zone_id <= ELMORAD && zone_id != nation) || isWarZone()
             let in_enemy_home = zone_id <= 2 && zone_id != info.nation as u16;
             let in_war_zone = is_battle_zone(zone_id);
 
@@ -1420,14 +1242,11 @@ fn execute_banish(world: &WorldState) {
 }
 
 /// Kick a player to Moradon (zone 21) using free_zone coordinates.
-///
-/// C++ Reference: `CUser::KickOutZoneUser(true, ZONE_MORADON=21)` in `User.cpp:4105-4130`
 /// Uses random regene event in zone 21; we use the per-nation free_zone position as fallback.
 pub(crate) fn kick_out_zone_user(world: &WorldState, sid: u16, player_nation: u8) {
     use crate::world::ZONE_MORADON;
     use ko_protocol::{Opcode, Packet};
 
-    // C++: KickOutZoneUser(true) defaults to nZoneID=21 (Moradon)
     // Uses free_zone coordinates from HOME table as spawn position
     let (dest_x, dest_z) = world
         .get_home_position(player_nation)
@@ -1453,8 +1272,6 @@ pub(crate) fn kick_out_zone_user(world: &WorldState, sid: u16, player_nation: u8
 // direct field access). See WorldState::is_war_open(), update_battle_state(), etc.
 
 /// Spawn post-victory remnant monsters (only for ZONE_BATTLE2 = Alseids Prairie).
-///
-/// C++ Reference: `BattleSystem.cpp:216-234` — `BattleZoneRemnantSpawn()`
 /// Called after `BanishLosers()` when `m_byBattleZone + ZONE_BATTLE_BASE == ZONE_BATTLE2`.
 /// Iterates the `banish_of_winner` table, filtering by winning nation, and spawns
 /// event NPCs at each configured location.
@@ -1520,9 +1337,6 @@ const MONUMENT_REWARD_EFFECT: u32 = 20100;
 const MONUMENT_REWARD_RANGE: f32 = 100.0;
 
 /// Check nation monument rewards — distribute NP to nearby players.
-///
-/// C++ Reference: `BattleSystem.cpp:49-142` — `CheckNationMonumentRewards()`
-///
 /// Winner monuments: reward every 300s, keep entry.
 /// Defeated monuments: reward every 10,000s, then delete entry.
 fn check_nation_monument_rewards(world: &WorldState) {
@@ -1541,7 +1355,6 @@ fn check_nation_monument_rewards(world: &WorldState) {
     }
 
     // Determine which zone to look for NPC based on victory nation
-    // C++ Reference: BattleSystem.cpp:74 — GetNpcPtr(sNid, bVictory==Karus ? ZONE_ELMORAD : ZONE_KARUS)
     // Winner monuments are in the opposing nation's zone
     let winner_zone = if state.victory == 1 {
         ZONE_ELMORAD
@@ -1596,8 +1409,6 @@ fn check_nation_monument_rewards(world: &WorldState) {
 }
 
 /// Distribute NP rewards to players near a nation monument NPC.
-///
-/// C++ Reference: `BattleSystem.cpp:74-94` — scans surrounding regions, checks
 /// range and nation, rewards 200 NP for main monuments, 50 for others.
 fn distribute_monument_np(world: &WorldState, npc_sid: u16, zone_id: u16, _now: i32) {
     // Find the NPC instance in the zone
@@ -1649,7 +1460,6 @@ fn distribute_monument_np(world: &WorldState, npc_sid: u16, zone_id: u16, _now: 
     }
 
     // Show NPC effect
-    // C++ Reference: ShowNpcEffect(sNid, 20100, zoneId)
     let mut effect_pkt = ko_protocol::Packet::new(ko_protocol::Opcode::WizObjectEvent as u8);
     effect_pkt.write_u16(npc.nid as u16);
     effect_pkt.write_u32(MONUMENT_REWARD_EFFECT);
@@ -2593,7 +2403,6 @@ mod tests {
 
     /// Integration: Battle zone MAP_EVENT lifecycle: open -> active -> close.
     ///
-    /// C++ Reference: `BattleSystem.cpp` — BattleZoneOpen, war_tick, BattleZoneClose.
     /// Verifies the full lifecycle of a war zone: opening, running ticks,
     /// detecting time expiry, and closing correctly.
     #[test]
@@ -2639,7 +2448,6 @@ mod tests {
 
     /// Integration: Snow battle lifecycle — open and close.
     ///
-    /// C++ Reference: `BattleSystem.cpp` — SNOW_BATTLE type.
     /// Snow battle does not use war_tick for time management (only NATION_BATTLE does).
     /// The timer for snow battle is handled externally. war_tick returns None for snow.
     #[test]
@@ -2674,7 +2482,6 @@ mod tests {
 
     /// Integration: War zone PK ranking — kill/death tracking and winner determination.
     ///
-    /// C++ Reference: `BattleSystem.cpp:470-529` — BattleWinnerResult.
     /// Verifies that death counts correctly determine the war winner.
     /// More deaths = losing side. Fewer deaths = winner.
     #[test]
@@ -2706,7 +2513,6 @@ mod tests {
 
     /// Integration: War PK ranking — NPC kill metric determines winner.
     ///
-    /// C++ Reference: `BattleSystem.cpp:470-480` — NPC kill comparison.
     #[test]
     fn test_integration_war_pk_ranking_npc_kill_winner() {
         let mut state = make_open_war(1, 3600);
@@ -2727,7 +2533,6 @@ mod tests {
 
     /// Integration: War zone flag victory triggers at NUM_FLAG_VICTORY captures.
     ///
-    /// C++ Reference: `BattleSystem.cpp:606-658` — BattleZoneVictoryCheck.
     #[test]
     fn test_integration_war_flag_victory() {
         let state = make_open_war(1, 3600);
@@ -2762,7 +2567,6 @@ mod tests {
 
     /// Integration: Monument-based winner determination.
     ///
-    /// C++ Reference: `BattleSystem.cpp:589-598` — Monument comparison.
     #[test]
     fn test_integration_war_monument_winner() {
         let mut state = make_open_war(1, 3600);
@@ -2780,7 +2584,6 @@ mod tests {
 
     /// Integration: Kill-based tiebreak cascades correctly for ZONE_BATTLE4.
     ///
-    /// C++ Reference: `BattleSystem.cpp:600-616` — Kill cascade to NPC for zone 4/5/6.
     #[test]
     fn test_integration_war_kill_cascade_zone4() {
         let mut state = make_open_war(4, 3600); // ZONE_BATTLE4
@@ -2801,7 +2604,6 @@ mod tests {
 
     /// Integration: Draw when all metrics are tied.
     ///
-    /// C++ Reference: `BattleSystem.cpp` — draw when no tiebreak available.
     #[test]
     fn test_integration_war_draw_all_tied() {
         let mut state = make_open_war(1, 3600); // ZONE_BATTLE (1-3: NPC -> Kill -> 0)
@@ -2916,7 +2718,6 @@ mod tests {
     }
 
     /// BattleZoneResult captain NP: only captains (fame == COMMAND_CAPTAIN) get 500 NP.
-    /// C++ Reference: BattleSystem.cpp:364-365
     #[test]
     fn test_war_result_captain_np_constant() {
         // Captain reward in non-flag-victory is always 500
@@ -2943,7 +2744,6 @@ mod tests {
     }
 
     /// Banish captain reset: COMMAND_CAPTAIN → CHIEF when NO_BATTLE.
-    /// C++ Reference: BattleSystem.cpp:188-193
     #[test]
     fn test_banish_captain_fame_values() {
         use crate::clan_constants::CHIEF;
@@ -2957,7 +2757,6 @@ mod tests {
     }
 
     /// Banish home zone sweep: zone_id <= 2 && zone_id != nation.
-    /// C++ Reference: BattleSystem.cpp:204
     #[test]
     fn test_banish_home_zone_invader_check() {
         // Karus player (nation=1) in El Morad zone (2) → invader
@@ -2995,7 +2794,6 @@ mod tests {
 
     /// Test auto commander selection triggers at 1/24 of war time.
     ///
-    /// C++ Reference: EventMainTimer.cpp:879
     #[test]
     fn auto_commander_select_at_one_24th() {
         let mut state = BattleState::new();

@@ -1,19 +1,13 @@
 //! NPC AI State Machine tick system.
-//!
-//! C++ Reference:
 //! - `GameServer/NpcThread.cpp:48-224` — `CNpcThread::_Engine()` (main loop)
 //! - `GameServer/Npc.cpp` — State handler functions (NpcStanding, NpcMoving, etc.)
 //! - `GameServer/NpcDefines.h` — Constants (NPC_MAX_MOVE_RANGE, VIEW_DIST, etc.)
 //! - `shared/globals.h:80-95` — NpcState enum
-//!
 //! ## Architecture
-//!
-//! One tokio task dispatches AI processing every 250ms (matching C++ `Sleep(250)`).
+//! One tokio task dispatches AI processing every 250ms (matching `Sleep(250)`).
 //! NPCs are grouped by zone and processed in parallel across tokio worker threads.
 //! Only NPCs in zones with active players are ticked (optimization).
-//!
 //! ## State Machine
-//!
 //! ```text
 //! DEAD ──(regen_time)──> LIVE ──> STANDING
 //!                                    │
@@ -32,7 +26,6 @@
 //!                              TargetDead    │         │
 //!                                     │  FIGHTING  STANDING
 //!                              STANDING
-//!
 //!   SLEEPING ──(duration expires)──> FIGHTING
 //!   FAINTING ──(2 seconds)──> STANDING
 //!   HEALING  ──(find injured NPC)──> cast heal ──> HEALING/STANDING
@@ -58,8 +51,6 @@ use crate::world::{
 use crate::zone::{calc_region, SessionId};
 
 /// AI tick interval in milliseconds.
-///
-/// C++ Reference: `NpcThread.cpp:216` — `Sleep(250)`
 const AI_TICK_INTERVAL_MS: u64 = 250;
 
 use crate::attack_constants::{ATTACK_FAIL, ATTACK_SUCCESS, ATTACK_TARGET_DEAD, LONG_ATTACK};
@@ -68,134 +59,89 @@ use crate::handler::durability::WORE_TYPE_DEFENCE;
 use crate::attack_constants::MAX_DAMAGE;
 
 /// Fainting duration in milliseconds.
-///
-/// C++ Reference: `NpcDefines.h:16` — `#define FAINTING_TIME 2`
 const FAINTING_TIME_MS: u64 = 2000;
 
 /// HP threshold for healer NPCs to consider an ally as needing healing (90%).
-///
-/// C++ Reference: `Npc.cpp:1637` — `int iHP = (int)(pNpc->m_MaxHP * 0.9)`
 const HEALER_HP_THRESHOLD: f32 = 0.9;
 
 /// Skill cooldown for NPC magic attacks (in ms).
-///
-/// C++ Reference: `BotMagic.cpp` — `m_sSkillCoolDown[0] = UNIXTIME + 2`
 /// Most classes use 2s, mages/priests use 3s. We use 2s as the shared default.
 const NPC_SKILL_COOLDOWN_MS: u64 = 2000;
 
 /// Magic attack percentage threshold — out of 5000 random roll.
-///
-/// C++ Reference: `Npc.cpp:2878` — `int nPercent = 1000;`
-/// C++ Reference: `Npc.cpp:2939-2940` — `nRandom = myrand(1, 5000); if (nRandom < nPercent)`
 /// Default is 1000/5000 = ~20% chance to attempt a magic attack.
 const NPC_MAGIC_PERCENT_DEFAULT: i32 = 1000;
 
 /// HP regen interval in milliseconds — every 15 seconds.
-///
-/// C++ Reference: `NpcThread.cpp:187` — `if (15 * SECOND < dwTickTime)`
 const HP_REGEN_INTERVAL_MS: u64 = 15_000;
 
 /// HP regen percentage per tick — 3% of max HP.
-///
-/// C++ Reference: `Npc.cpp:7118` — `HpChange((int)ceil((double(m_MaxHP * 3) / 100)))`
 const HP_REGEN_PERCENT: f64 = 3.0;
 
-/// C++ Reference: `NpcTable.h:3` — `#define MONSTER_SPEED 1500`
 /// This is the tick interval between NPC movement steps (in ms).
 const MONSTER_SPEED: u64 = 1500;
 
 /// Distance threshold for direct movement (skip A* pathfinding).
-///
-/// C++ Reference: `Npc.cpp:2299-2306` — if `fDis <= m_fSecForMetor` (within one step),
 /// NPC moves directly. We also skip pathfinding for short ranges where line-of-sight
-/// is clear, matching C++ `GetTargetPath()` returning 0 for non-dungeon monsters.
+/// is clear, matching `GetTargetPath()` returning 0 for non-dungeon monsters.
 const DIRECT_MOVE_THRESHOLD: f32 = 15.0;
 
 /// Distance threshold for path recalculation — when target moves more than this
 /// from the position where the path was last computed.
-///
-/// C++ Reference: `Npc.cpp:4069` — `GetTargetPath()` is called every NpcTracing tick,
 /// but we optimize by caching the path and only recalculating when the target moves significantly.
 const PATH_RECALC_DISTANCE: f32 = 5.0;
 
 /// NPC_MAX_MOVE_RANGE — maximum distance for NPC movement per path computation.
-///
-/// C++ Reference: `NpcDefines.h:64` — `#define NPC_MAX_MOVE_RANGE 100`
 const NPC_MAX_MOVE_RANGE: f32 = 100.0;
 
 /// Minimum NPC search range for guard NPCs — guards always need a reasonable
 /// detection range even if their template value is low.
-///
-/// C++ Reference: `Npc.cpp:5563` — guards/guard towers bypass CheckFindEnemy
 /// and always search.  We give them a minimum range of 30 (melee engagement).
-///
 /// Regular monsters use their template search_range directly (C++ parity).
 const MIN_GUARD_SEARCH_RANGE: f32 = 30.0;
 
 /// TENDER_ATTACK_TYPE — passive NPC, only attacks when damaged.
-///
-/// C++ Reference: `NpcDefines.h:137`
 const TENDER_ATTACK_TYPE: u8 = 0;
 
 /// ATROCITY_ATTACK_TYPE — aggressive NPC, attacks on sight.
-///
-/// C++ Reference: `NpcDefines.h:138`
 #[cfg(test)]
 const ATROCITY_ATTACK_TYPE: u8 = 1;
 
 /// Barracks NPC proto ID — excluded from HP regen.
-///
-/// C++ Reference: `Npc.cpp:7113` — `if (!isMonster() && GetProtoID() == 511) return;`
 const BARRACKS_PROTO_ID: u16 = 511;
 
 // ── Gate NPC Type Constants ──────────────────────────────────────────────
-// C++ Reference: `globals.h:140-202`
 
 use crate::npc_type_constants::{NPC_OBJECT_WOOD, NPC_ROLLINGSTONE, NPC_SPECIAL_GATE};
 
 /// NPC_KROWAZ_GATE — auto-closes in Krowaz Dominion zone.
-///
-/// C++ Reference: `globals.h:202` — `NPC_KROWAZ_GATE = 180`
 const NPC_KROWAZ_GATE: u8 = 180;
 
 use crate::object_event_constants::OBJECT_FLAG_LEVER;
 
 /// Wood object cooldown threshold — gate auto-closes after this many ticks.
-///
-/// C++ Reference: `Npc.cpp:4441` — `WoodCooldownClose++ >= 30`
 const WOOD_COOLDOWN_THRESHOLD: u32 = 30;
 
-/// C++ Reference: `globals.h:107` — `NPC_BOSS = 3`
 const NPC_BOSS: u8 = 3;
 
 // ── Guard NPC Type Constants ─────────────────────────────────────────────
-// C++ Reference: `globals.h:110-112` and `Npc.h:397-399`
 
 /// NPC_GUARD — town/field guard that attacks enemy-nation monsters.
-///
-/// C++ Reference: `globals.h:110` — `NPC_GUARD = 11`
 const NPC_GUARD: u8 = 11;
 
 /// NPC_PATROL_GUARD — patrolling guard variant.
-///
-/// C++ Reference: `globals.h:111` — `NPC_PATROL_GUARD = 12`
 const NPC_PATROL_GUARD: u8 = 12;
 
 /// NPC_STORE_GUARD — shop-area guard variant.
-///
-/// C++ Reference: `globals.h:112` — `NPC_STORE_GUARD = 13`
 const NPC_STORE_GUARD: u8 = 13;
 
 /// Check if an NPC type is a guard type.
-///
-/// C++ Reference: `Npc.h:397-400` — `isGuard()` returns true for
 /// NPC_GUARD, NPC_PATROL_GUARD, NPC_STORE_GUARD.
 fn is_guard_type(npc_type: u8) -> bool {
     npc_type == NPC_GUARD || npc_type == NPC_PATROL_GUARD || npc_type == NPC_STORE_GUARD
 }
 
 // ── Boss Monster Proto IDs (magic_attack == 3) ─────────────────────────
-// C++ Reference: `Define.h:434-469`
 
 /// UTC Room 1: Emperor Mammoth (timed skill sequence).
 const BOSS_EMPEROR_MAMMOTH: std::ops::RangeInclusive<u16> = 9501..=9503;
@@ -223,12 +169,9 @@ const BOSS_FLUWITON_ROOM_3: std::ops::RangeInclusive<u16> = 9512..=9514;
 const BOSS_FLUWITON_ROOM_4: [u16; 4] = [9515, 9516, 9517, 9518];
 
 /// C++ MAGIC_FLYING opcode value — used by Elite Timarli boss pattern.
-///
-/// C++ Reference: `packets.h:560` — `MAGIC_FLYING = 4`
 const MAGIC_OPCODE_FLYING: u8 = 4;
 
 /// Start the NPC AI background tick task.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
 pub fn start_npc_ai_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -243,13 +186,9 @@ pub fn start_npc_ai_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> 
 }
 
 /// Process one AI tick for all active NPCs.
-///
-/// C++ Reference: `CNpcThread::_Engine()` in `NpcThread.cpp:48-224`
-///
 /// NPCs are grouped by zone and processed in parallel across tokio worker threads.
 async fn process_ai_tick(world: Arc<WorldState>, now_ms: u64) {
     // ── Process scheduled respawns (monster respawn loop chain) ──────
-    // C++ Reference: Npc.cpp:909-915 — delayed SpawnEventNpc after boss death.
     {
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -317,7 +256,6 @@ async fn process_single_npc(world: &WorldState, npc_id: NpcId, ai: &NpcAiState, 
     let elapsed = now_ms.saturating_sub(ai.last_tick_ms);
     if elapsed < ai.delay_ms && ai.last_tick_ms > 0 {
         // C++ interrupt: standing NPCs can detect enemies between ticks.
-        // C++ Reference: `NpcThread.cpp:96-101` — CheckFindEnemy() + FindEnemy()
         //
         // CheckFindEnemy pre-filter: only run the expensive find_enemy() if
         // there are actual players in the NPC's region.  C++ checks
@@ -445,10 +383,8 @@ async fn process_single_npc(world: &WorldState, npc_id: NpcId, ai: &NpcAiState, 
     };
 
     // ── NPC HP Regen (15-second tick) ─────────────────────────────
-    // C++ Reference: `NpcThread.cpp:186-188`
     //   dwTickTime = fTime2 - pNpc->m_fHPChangeTime;
     //   if (15 * SECOND < dwTickTime) pNpc->HpChange();
-    // C++ Reference: `Npc.cpp:7106-7118` — heals 3% max HP when not at full
     if !is_dead {
         let hp_regen_elapsed = now_ms.saturating_sub(ai.last_hp_regen_ms);
         if hp_regen_elapsed > HP_REGEN_INTERVAL_MS {
@@ -471,7 +407,6 @@ async fn process_single_npc(world: &WorldState, npc_id: NpcId, ai: &NpcAiState, 
     }
 
     // ── NPC Duration Death (summon timeout) ──────────────────────
-    // C++ Reference: `NpcThread.cpp:190-194`
     //   if (pNpc->isAlive() && pNpc->m_sDuration > 0
     //       && pNpc->m_iSpawnedTime
     //       && (int32(UNIXTIME) - pNpc->m_iSpawnedTime > pNpc->m_sDuration))
@@ -507,8 +442,6 @@ async fn process_single_npc(world: &WorldState, npc_id: NpcId, ai: &NpcAiState, 
 // ── State handlers ──────────────────────────────────────────────────────
 
 /// NPC_DEAD state: Wait for regen timer, then transition to LIVE.
-///
-/// C++ Reference: `Npc.cpp:4469-4473` — `CNpc::NpcDead()`
 fn npc_dead(
     world: &WorldState,
     npc_id: NpcId,
@@ -523,8 +456,6 @@ fn npc_dead(
 }
 
 /// NPC_LIVE state: Restore HP to max, reposition to spawn, transition to Standing.
-///
-/// C++ Reference: `Npc.cpp:3920-3931` — `CNpc::NpcLive()` + `SetLive()`
 fn npc_live(world: &WorldState, npc_id: NpcId, ai: &NpcAiState, tmpl: &NpcTemplate) -> Option<u64> {
     // Restore HP to max (war-adjusted if active)
     world.update_npc_hp(npc_id, world.get_npc_war_max_hp(tmpl));
@@ -560,8 +491,6 @@ fn npc_live(world: &WorldState, npc_id: NpcId, ai: &NpcAiState, tmpl: &NpcTempla
 }
 
 /// NPC_STANDING state: Try to find enemies, or do random patrol movement.
-///
-/// C++ Reference: `Npc.cpp:4388-4466` — `CNpc::NpcStanding()`
 fn npc_standing(
     world: &WorldState,
     npc_id: NpcId,
@@ -569,7 +498,6 @@ fn npc_standing(
     tmpl: &NpcTemplate,
 ) -> Option<u64> {
     // Healer NPC: check for injured friends before looking for enemies
-    // C++ Reference: `Npc.cpp:6118-6123` — isHealer() check in FindEnemy()
     // NPC_HEALER = 40
     if tmpl.npc_type == 40 && tmpl.magic_3 > 0 {
         if let Some(injured) = find_injured_friend(world, npc_id, ai, tmpl) {
@@ -590,7 +518,6 @@ fn npc_standing(
                 s.target_id = Some(target);
                 s.npc_target_id = None;
                 s.state = NpcState::Attacking;
-                // C++ Reference: Npc.cpp:6311-6312 — reset skill cooldown on target acquisition
                 s.skill_cooldown_ms = s.last_tick_ms + NPC_SKILL_COOLDOWN_MS;
                 s.last_combat_time_ms = s.last_tick_ms;
             });
@@ -598,7 +525,6 @@ fn npc_standing(
         }
 
         // NPC-vs-NPC: guards/monsters can target hostile NPCs
-        // C++ Reference: `Npc.cpp:6197-6220` — only if guard/monster/guardSummon
         if let Some(npc_target) = find_npc_enemy(world, ai, npc_id, tmpl) {
             world.update_npc_ai(npc_id, |s| {
                 s.target_id = None;
@@ -614,11 +540,9 @@ fn npc_standing(
     // and search_range > 0 and move_type = 1 (random)
     if tmpl.search_range > 0 && tmpl.speed_1 > 0 {
         let mut rng = rand::rngs::StdRng::from_entropy();
-        // C++ Reference: m_fSecForMetor = m_bySpeed_1 * (m_sSpeed / 1000.0)
         // MONSTER_SPEED = 1500, so factor = 1.5
         let step_distance = tmpl.speed_1 as f32 * (MONSTER_SPEED as f32 / 1000.0);
 
-        // C++ m_iPatternFrame: 0=random, 1=random, 2=return to spawn
         let pattern = ai.pattern_frame;
         let (dest_x, dest_z) = if pattern >= 2 {
             // Return to spawn point
@@ -630,7 +554,6 @@ fn npc_standing(
         };
 
         // Check if destination is walkable before moving there
-        // C++ Reference: `Npc.cpp:4196-4207` -- random walk respects collision
         let zone = world.get_zone(ai.zone_id);
         let is_blocked = zone
             .as_ref()
@@ -642,7 +565,6 @@ fn npc_standing(
             return Some(tmpl.stand_time as u64);
         }
 
-        // C++ Reference: Npc.cpp:4769-4780 — send first move packet, then NpcMoving does steps
         // Packet speed = actual_distance / (MONSTER_SPEED/1000)
         let dx = dest_x - ai.cur_x;
         let dz = dest_z - ai.cur_z;
@@ -668,12 +590,10 @@ fn npc_standing(
             s.pattern_frame = (pattern + 1) % 3;
         });
 
-        // C++: returns m_sStandTime before entering MOVING, then MOVING returns m_sSpeed per step
         return Some(tmpl.stand_time.max(1000) as u64);
     }
 
     // ── Gate NPC Logic ──────────────────────────────────────────────────
-    // C++ Reference: `Npc.cpp:4413-4466` — gate behavior at the end of NpcStanding
     if let Some(gate_delay) = handle_gate_standing(world, npc_id, ai, tmpl) {
         return Some(gate_delay);
     }
@@ -682,8 +602,6 @@ fn npc_standing(
 }
 
 /// NPC_MOVING state: Incremental step movement toward destination.
-///
-/// C++ Reference: `Npc.cpp:4168-4229` — `CNpc::NpcMoving()`
 /// Each tick moves `m_fSecForMetor` distance toward dest, broadcasts position,
 /// and returns `MONSTER_SPEED` (1500ms) as next delay.
 fn npc_moving(
@@ -705,7 +623,6 @@ fn npc_moving(
         }
     }
 
-    // C++ m_fSecForMetor = m_bySpeed_1 * (m_sSpeed / 1000.0)
     let step_dist = tmpl.speed_1 as f32 * (MONSTER_SPEED as f32 / 1000.0);
     let dx = ai.dest_x - ai.cur_x;
     let dz = ai.dest_z - ai.cur_z;
@@ -774,8 +691,6 @@ fn npc_moving(
 }
 
 /// NPC_ATTACKING state: Determine if target is in range, transition to Fighting or Tracing.
-///
-/// C++ Reference: `Npc.cpp:4113-4160` — `CNpc::NpcAttacking()`
 fn npc_attacking(
     world: &WorldState,
     npc_id: NpcId,
@@ -841,8 +756,6 @@ fn npc_attacking(
 }
 
 /// NPC_ATTACKING state for NPC-vs-NPC combat: check range, transition to Fighting.
-///
-/// C++ Reference: `Npc.cpp:4113-4160` — adapted for NPC targets.
 fn npc_attacking_npc(
     world: &WorldState,
     npc_id: NpcId,
@@ -936,9 +849,6 @@ fn npc_attacking_npc(
 }
 
 /// NPC_TRACING state: Chase target using A* pathfinding or direct movement.
-///
-/// C++ Reference: `Npc.cpp:3940-4106` — `CNpc::NpcTracing()`
-///
 /// ## Pathfinding Logic (matching C++ GetTargetPath + IsNoPathFind):
 /// 1. If target is in attack range -> transition to Fighting
 /// 2. If target is close (< DIRECT_MOVE_THRESHOLD) and line-of-sight is clear -> direct move
@@ -968,7 +878,6 @@ fn npc_tracing(
     };
 
     // Tracer timeout — 12 seconds without combat → disengage.
-    // C++ Reference: Npc.cpp:4047-4051 — `m_Target.m_tLastDamageTime + 12000 < UNIXTIME`
     const TRACER_TIMEOUT_MS: u64 = 12_000;
     let now_ms = ai.last_tick_ms;
     if ai.last_combat_time_ms > 0
@@ -996,7 +905,6 @@ fn npc_tracing(
             spawn_dist
         );
 
-        // C++ Reference: Npc.cpp:3982-4001 — NpcTracing() leash ≥ 200
         // INOUT_OUT → position snap to spawn → SendMoveResult → INOUT_IN → Standing
         // C++ deliberately teleports (NOT gradual walk) when distance ≥ 200.
         send_npc_despawn(world, npc_id, ai);
@@ -1086,7 +994,6 @@ fn npc_tracing(
     }
 
     // Distance too far -- give up tracing
-    // C++ Reference: `Npc.cpp:2310` -- `if ((int)fDis > iTempRange + 75.0f) return -1`
     if dist > NPC_MAX_MOVE_RANGE {
         world.update_npc_ai(npc_id, |s| {
             s.state = NpcState::Standing;
@@ -1097,7 +1004,6 @@ fn npc_tracing(
         return Some(tmpl.stand_time as u64);
     }
 
-    // C++ m_fSpeed_2 = m_bySpeed_2 * (m_sSpeed / 1000.0)
     let speed = tmpl.speed_2 as f32 * (MONSTER_SPEED as f32 / 1000.0);
 
     // Check if target has moved enough to warrant path recalculation
@@ -1169,10 +1075,8 @@ fn npc_tracing(
 }
 
 /// Compute the next movement step for a tracing NPC.
-///
 /// Decides whether to use direct movement or A* pathfinding based on distance
 /// and line-of-sight, matching C++ GetTargetPath() + IsNoPathFind() logic.
-///
 /// Returns `(new_x, new_z, waypoints, waypoint_index, target_x, target_z, is_direct)`.
 #[allow(clippy::type_complexity)]
 fn compute_tracing_step(
@@ -1188,7 +1092,6 @@ fn compute_tracing_step(
     let map_data = zone.as_ref().and_then(|z| z.map_data.as_ref());
 
     // Short-range or no map data -- use direct movement (IsNoPathFind equivalent)
-    // C++ Reference: `Npc.cpp:2299-2306`
     if dist <= speed {
         let (nx, nz) = pathfind::step_no_path_move(ai.cur_x, ai.cur_z, target_x, target_z, speed);
         return (nx, nz, Vec::new(), 0, target_x, target_z, true);
@@ -1200,7 +1103,6 @@ fn compute_tracing_step(
     };
 
     // Close range with clear line-of-sight -- direct movement
-    // C++ equivalent: GetTargetPath returns 0 for non-dungeon monsters -> IsNoPathFind
     if dist <= DIRECT_MOVE_THRESHOLD
         && pathfind::line_of_sight(map, ai.cur_x, ai.cur_z, target_x, target_z, speed)
     {
@@ -1209,7 +1111,6 @@ fn compute_tracing_step(
     }
 
     // A* pathfinding
-    // C++ Reference: `Npc.cpp:6399-6474` -- `CNpc::PathFind()`
     let result = pathfind::find_path(map, ai.cur_x, ai.cur_z, target_x, target_z);
 
     if result.found && !result.waypoints.is_empty() {
@@ -1223,8 +1124,6 @@ fn compute_tracing_step(
 }
 
 /// NPC_FIGHTING state: Execute attack on target, handle damage.
-///
-/// C++ Reference: `Npc.cpp:2873-3918` — `CNpc::Attack()`
 /// + `Npc.cpp:2820-2863` — `CNpc::SendAttackRequest()`
 /// + `Unit.cpp:950-998` — `CNpc::GetDamage(CUser*)`
 async fn npc_fighting(
@@ -1303,7 +1202,6 @@ async fn npc_fighting(
     };
 
     // Group AI: call nearby same-family NPCs to help
-    // C++ Reference: `Npc.cpp:1806-1807` — FindFriend on attack
     //   if (m_bHasFriends || GetType() == NPC_BOSS)
     //     FindFriend(GetType() == NPC_BOSS ? MonSearchAny : MonSearchSameFamily);
     let is_boss = tmpl.npc_type == NPC_BOSS;
@@ -1312,13 +1210,11 @@ async fn npc_fighting(
     }
 
     // Ranged/magic attack — NPCs with direct_attack > 0 use skills
-    // C++ Reference: `Npc.cpp:2890-2897` — directAttack check
     if tmpl.direct_attack > 0 && tmpl.magic_1 > 0 {
         return long_and_magic_attack(world, npc_id, ai, tmpl, target_id).await;
     }
 
     // ── Monster magic attack dispatch ────────────────────────────────
-    // C++ Reference: `Npc.cpp:2936-2985` — m_byMagicAttack type checks
     //
     // Monsters with magic_attack > 0 can cast magic_1/2/3 during melee
     // combat. This is different from direct_attack NPCs — these monsters
@@ -1353,7 +1249,6 @@ async fn npc_fighting(
     }
 
     // ── Calculate damage ──────────────────────────────────────────────
-    // C++ Reference: `CNpc::GetDamage(CUser*)` in Unit.cpp:950-998
     // C++ line 960: Ac = (m_sTotalAc + m_sACAmount) - m_sACSourAmount
     // NOTE: C++ does NOT apply m_sACPercent in NPC GetDamage (no percent multiplication).
     let target_coeff = world.get_coefficient(target.class);
@@ -1362,7 +1257,6 @@ async fn npc_fighting(
     let ac_sour = world.get_buff_ac_sour_amount(target_id);
     let target_ac = (equip_stats.total_ac as i32 + buff_ac - ac_sour).max(0);
 
-    // C++ Reference: `Npc.cpp:1387` — `m_sTotalHit = proto->m_sDamage;`
     // NOTE: m_sAttack (tmpl.attack) is for GetInOut packet only, NOT damage calculation.
     // War buff: nation NPCs deal 50% damage during war (ChangeAbility).
     let npc_total_hit = world.get_npc_war_damage(tmpl);
@@ -1432,7 +1326,6 @@ async fn npc_fighting(
     }
 
     // Apply damage to player through HpChange pipeline
-    // C++ Reference: UserHealtMagicSpSystem.cpp:43-135
     // Mirror: SKIP for NPC attackers (C++ line 75: pAttacker->isPlayer() required)
     let mut final_damage = damage as i16;
 
@@ -1440,7 +1333,6 @@ async fn npc_fighting(
     let original_damage = final_damage;
 
     // ── Mastery passive damage reduction ────────────────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:114-123
     {
         let victim_zone = world
             .get_position(target_id)
@@ -1458,7 +1350,6 @@ async fn npc_fighting(
     }
 
     // ── Mana Absorb (Outrage/Frenzy/Mana Shield) ─────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:125-135
     // Uses original_damage for calculation (pre-mastery), subtracts from current.
     {
         let victim_zone = world
@@ -1496,7 +1387,6 @@ async fn npc_fighting(
     let new_hp = (target.hp - final_damage).max(0);
     world.update_character_hp(target_id, new_hp);
 
-    // C++ Reference: Npc.cpp:2856-2857 — defender armour durability loss
     // `if (!TO_USER(pTarget)->isInGenie()) TO_USER(pTarget)->ItemWoreOut(DEFENCE, sDamage);`
     if !world
         .with_session(target_id, |h| h.genie_active)
@@ -1508,7 +1398,6 @@ async fn npc_fighting(
     let b_result = if new_hp <= 0 {
         // Player died
         crate::handler::dead::broadcast_death(world, target_id);
-        // C++ Reference: UserHealtMagicSpSystem.cpp:878-891 — OnDeathKilledNpc
         // XP loss only on NPC kills (with type exclusions)
         crate::handler::dead::apply_npc_death_xp_loss(world, target_id, tmpl.npc_type, tmpl.s_sid)
             .await;
@@ -1521,13 +1410,11 @@ async fn npc_fighting(
     broadcast_npc_attack(world, npc_id, ai, target_id, b_result);
 
     // Send HP change to the target player with NPC ID as attacker
-    // C++ Reference: Npc.cpp:519 — TO_USER(pAttacker)->SendTargetHP(0, GetID(), amount, false)
     let hp_pkt =
         crate::systems::regen::build_hp_change_packet_with_attacker(target.max_hp, new_hp, npc_id);
     world.send_to_session_owned(target_id, hp_pkt);
 
     // Update last combat time for tracer timeout.
-    // C++ Reference: Npc.cpp:4047 — `m_Target.m_tLastDamageTime`
     world.update_npc_ai(npc_id, |s| {
         s.last_combat_time_ms = s.last_tick_ms;
     });
@@ -1546,10 +1433,6 @@ async fn npc_fighting(
 }
 
 /// NPC-vs-NPC fighting: deal damage from this NPC to a target NPC.
-///
-/// C++ Reference: Adapted from `CNpc::GetDamage(CNpc*)` and
-/// `Npc.cpp:5993-6019` — NPC-vs-NPC combat loop.
-///
 /// Simplified damage formula: attacker_total_hit vs target_defense,
 /// similar to NPC-vs-player but both are NPCs.
 fn npc_fighting_npc(
@@ -1613,8 +1496,6 @@ fn npc_fighting_npc(
     }
 
     // Calculate damage: attacker_hit vs target_defense (simplified C++ formula)
-    // C++ Reference: `Unit.cpp:1061` — `HitB = (TotalHit * AttackAmount * 200 / 100) / (Ac + 240)`
-    // C++ Reference: `Npc.cpp:1387` — `m_sTotalHit = proto->m_sDamage;` (NOT m_sAttack)
     // War buff: nation NPCs deal 50% damage during war (ChangeAbility).
     let npc_total_hit = world.get_npc_war_damage(tmpl);
     let target_ac = world.get_npc_war_ac(&target_tmpl);
@@ -1679,7 +1560,6 @@ fn npc_fighting_npc(
     broadcast_npc_vs_npc_attack(world, npc_id, ai, npc_target, b_result);
 
     // If target NPC is a pet, notify the pet owner of HP change and damage display.
-    // C++ Reference: CUser::SendPetHpChange / SendPetHP — called when pet takes damage.
     if let Some(owner_sid) = world.find_pet_owner_by_nid(npc_target as u16) {
         let max_hp = target_tmpl.max_hp as u16;
         let cur_hp = new_hp.max(0) as u16;
@@ -1712,9 +1592,7 @@ fn npc_fighting_npc(
 }
 
 /// Broadcast NPC-vs-NPC attack result to the 3x3 region.
-///
 /// Same wire format as NPC-vs-player attack broadcast.
-/// C++ Reference: `Npc.cpp:2860-2862` — `SendAttackRequest()`
 fn broadcast_npc_vs_npc_attack(
     world: &WorldState,
     npc_id: NpcId,
@@ -1743,8 +1621,6 @@ fn broadcast_npc_vs_npc_attack(
 }
 
 /// NPC_BACK state: Return to spawn position.
-///
-/// C++ Reference: `Npc.cpp:4481-4531` — `CNpc::NpcBack()`
 fn npc_back(world: &WorldState, npc_id: NpcId, ai: &NpcAiState, tmpl: &NpcTemplate) -> Option<u64> {
     let dx = ai.spawn_x - ai.cur_x;
     let dz = ai.spawn_z - ai.cur_z;
@@ -1773,7 +1649,6 @@ fn npc_back(world: &WorldState, npc_id: NpcId, ai: &NpcAiState, tmpl: &NpcTempla
         return Some(tmpl.stand_time as u64);
     }
 
-    // C++ m_fSecForMetor = m_bySpeed_1 * (m_sSpeed / 1000.0)
     let step_dist = tmpl.speed_1 as f32 * (MONSTER_SPEED as f32 / 1000.0);
 
     // Use pathfinding to return to spawn (avoids walking through walls)
@@ -1861,9 +1736,6 @@ fn npc_back(world: &WorldState, npc_id: NpcId, ai: &NpcAiState, tmpl: &NpcTempla
 // ── New state handlers ──────────────────────────────────────────────────
 
 /// NPC_SLEEPING state: Stun debuff — frozen until `fainting_until_ms`, then wake to Fighting.
-///
-/// C++ Reference: `Npc.cpp:4239-4247` — `CNpc::NpcSleeping()`
-///
 /// When a sleep skill hits an NPC, its state is set to Sleeping and
 /// `fainting_until_ms` is set to `now + duration`. On tick, we just wait.
 /// When the duration expires, we broadcast a WIZ_STATE_CHANGE wake-up
@@ -1881,7 +1753,6 @@ fn npc_sleeping(
     }
 
     // Wake up — broadcast state change to region
-    // C++ Reference: `Npc.cpp:8014-8017` — sends WIZ_STATE_CHANGE on wake
     broadcast_state_change(world, npc_id, ai, 1, 5);
 
     // Transition to Fighting (C++ calls StateChangeServerDirect(1, 5))
@@ -1894,13 +1765,9 @@ fn npc_sleeping(
 }
 
 /// NPC_FAINTING state: Lightning stun — frozen for FAINTING_TIME (2s), then Standing.
-///
-/// C++ Reference: `Npc.cpp:4258-4269` — `CNpc::NpcFainting()`
-///
 /// Fix for Sprint 39 L1: if `fainting_until_ms` is stale (e.g., set from a stale
 /// `last_tick_ms` when the zone was inactive), recalibrate it to the current tick
 /// so the faint lasts the correct duration from the first AI tick that processes it.
-///
 /// Fix for Sprint 39 L3: C++ does NOT clear `target_id` on fainting wake. The NPC
 /// should resume attacking its previous target after recovering from the stun.
 fn npc_fainting(
@@ -1943,9 +1810,6 @@ fn npc_fainting(
 }
 
 /// NPC_HEALING state: Healer NPC searches for injured same-family NPCs and heals them.
-///
-/// C++ Reference: `Npc.cpp:4278-4348` — `CNpc::NpcHealing()`
-///
 /// Healer NPCs (direct_attack == 2 with magic_3 set) scan nearby NPCs in
 /// the 3x3 region grid. If any same-family NPC has HP below 90%, they cast
 /// their heal skill (magic_3) on the most injured one.
@@ -2023,9 +1887,6 @@ async fn npc_healing(
 }
 
 /// NPC_CASTING state: Wait for cast time, then apply the skill effect.
-///
-/// C++ Reference: `Npc.cpp:4357-4379` — `CNpc::NpcCasting()`
-///
 /// When an NPC begins casting, it saves old_state, skill_id, target, and
 /// cast_time. This handler waits for the cast time to elapse, then sends
 /// MAGIC_EFFECTING and returns to the old state.
@@ -2036,7 +1897,6 @@ async fn npc_casting(
     tmpl: &NpcTemplate,
 ) -> Option<u64> {
     // Broadcast MAGIC_EFFECTING for the active skill and apply effect
-    // C++ Reference: `Npc.cpp:4368`
     if ai.active_skill_id > 0 {
         broadcast_npc_magic(world, npc_id, ai, ai.active_skill_id, ai.active_target_id);
         npc_apply_magic_effect(
@@ -2051,7 +1911,6 @@ async fn npc_casting(
     }
 
     // Calculate remaining attack delay after cast
-    // C++ Reference: `Npc.cpp:4366` — `tAttackDelay = m_sAttackDelay - m_sActiveCastTime`
     let remaining_delay = (tmpl.attack_delay as u64).saturating_sub(ai.active_cast_time_ms);
 
     // Return to previous state and clear casting fields
@@ -2067,9 +1926,6 @@ async fn npc_casting(
 }
 
 /// Handle long-range and magic NPC attacks.
-///
-/// C++ Reference: `Npc.cpp:3686-3920` — `CNpc::LongAndMagicAttack()`
-///
 /// NPCs with `direct_attack == 1` (ranged) or `direct_attack == 2` (magic)
 /// use their magic_1/magic_2 skills instead of melee attacks.
 async fn long_and_magic_attack(
@@ -2106,7 +1962,6 @@ async fn long_and_magic_attack(
     }
 
     // ── Boss-specific proto overrides ──────────────────────────────────
-    // C++ Reference: `Npc.cpp:3736-3803` — LongAndMagicAttack boss cases
     let proto = tmpl.s_sid;
 
     // Fluwiton Room 4: random CASTING from 3 skills
@@ -2197,7 +2052,6 @@ async fn long_and_magic_attack(
 
     if cast_time_ms > 0 {
         // Send MAGIC_CASTING packet and transition to CASTING state
-        // C++ Reference: `Npc.cpp:8048-8061` — sets casting state
         broadcast_npc_magic_casting(world, npc_id, ai, skill_id, target_id);
 
         world.update_npc_ai(npc_id, |s| {
@@ -2217,11 +2071,7 @@ async fn long_and_magic_attack(
 }
 
 /// Try to cast a monster magic attack during melee combat.
-///
-/// C++ Reference: `Npc.cpp:2936-2985` — m_byMagicAttack dispatch
-///
 /// Returns `Some(delay_ms)` if magic was cast, `None` if physical attack should proceed.
-///
 /// Magic attack types:
 /// - 2: Random chance (~50%) to use magic_1, with 7.5% magic_2, 7.5% magic_3
 /// - 4, 5: Same distribution as type 2
@@ -2306,10 +2156,7 @@ async fn try_monster_magic(
 }
 
 /// Boss magic dispatch for magic_attack == 3 — per-proto timed skill patterns.
-///
-/// C++ Reference: `Npc.cpp:2986-3283` — `Attack()` boss switch cases
 /// + `Npc.cpp:3686-3880` — `LongAndMagicAttack()` boss cases
-///
 /// Each boss type has a unique timing pattern driven by `utc_second`:
 /// - Counter increments once per call (1-second effective tick)
 /// - At specific thresholds, magic_1/2/3 are cast via EFFECTING
@@ -2369,7 +2216,6 @@ async fn try_boss_magic(
             npc_apply_magic_effect(world, npc_id, ai, tmpl, skill, target_id as i32).await;
             world.update_npc_ai(npc_id, |s| s.utc_second = 0);
         }
-        // C++ m_sUtcSecond++ is unconditional (runs after if/else block)
         world.update_npc_ai(npc_id, |s| s.utc_second += 1);
         // Also do a melee attack (C++ SendAttackRequest)
         broadcast_npc_attack(world, npc_id, ai, target_id, ATTACK_SUCCESS);
@@ -2395,7 +2241,6 @@ async fn try_boss_magic(
             npc_apply_magic_effect(world, npc_id, ai, tmpl, tmpl.magic_3, target_id as i32).await;
             world.update_npc_ai(npc_id, |s| s.utc_second = 0);
         }
-        // C++ m_sUtcSecond++ is unconditional (runs after if/else block)
         world.update_npc_ai(npc_id, |s| s.utc_second += 1);
         broadcast_npc_attack(world, npc_id, ai, target_id, ATTACK_SUCCESS);
         return Some(1000);
@@ -2416,7 +2261,6 @@ async fn try_boss_magic(
             npc_apply_magic_effect(world, npc_id, ai, tmpl, tmpl.magic_3, target_id as i32).await;
             world.update_npc_ai(npc_id, |s| s.utc_second = 0);
         }
-        // C++ m_sUtcSecond++ is unconditional (runs after if/else block)
         world.update_npc_ai(npc_id, |s| s.utc_second += 1);
         broadcast_npc_attack(world, npc_id, ai, target_id, ATTACK_SUCCESS);
         return Some(1000);
@@ -2451,7 +2295,6 @@ async fn try_boss_magic(
             npc_apply_magic_effect(world, npc_id, ai, tmpl, skill, target_id as i32).await;
             world.update_npc_ai(npc_id, |s| s.utc_second = 0);
         }
-        // C++ m_sUtcSecond++ is unconditional (runs after if/else block)
         world.update_npc_ai(npc_id, |s| s.utc_second += 1);
         broadcast_npc_attack(world, npc_id, ai, target_id, ATTACK_SUCCESS);
         return Some(1000);
@@ -2472,7 +2315,6 @@ async fn try_boss_magic(
             npc_apply_magic_effect(world, npc_id, ai, tmpl, tmpl.magic_3, target_id as i32).await;
             world.update_npc_ai(npc_id, |s| s.utc_second = 0);
         }
-        // C++ m_sUtcSecond++ is unconditional (runs after if/else block)
         world.update_npc_ai(npc_id, |s| s.utc_second += 1);
         broadcast_npc_attack(world, npc_id, ai, target_id, ATTACK_SUCCESS);
         return Some(1000);
@@ -2493,7 +2335,6 @@ async fn try_boss_magic(
             npc_apply_magic_effect(world, npc_id, ai, tmpl, tmpl.magic_3, target_id as i32).await;
             world.update_npc_ai(npc_id, |s| s.utc_second = 0);
         }
-        // C++ m_sUtcSecond++ is unconditional (runs after if/else block)
         world.update_npc_ai(npc_id, |s| s.utc_second += 1);
         broadcast_npc_attack(world, npc_id, ai, target_id, ATTACK_SUCCESS);
         return Some(1000);
@@ -2514,7 +2355,6 @@ async fn try_boss_magic(
             npc_apply_magic_effect(world, npc_id, ai, tmpl, tmpl.magic_3, target_id as i32).await;
             world.update_npc_ai(npc_id, |s| s.utc_second = 0);
         }
-        // C++ m_sUtcSecond++ is unconditional (runs after if/else block)
         world.update_npc_ai(npc_id, |s| s.utc_second += 1);
         broadcast_npc_attack(world, npc_id, ai, target_id, ATTACK_SUCCESS);
         return Some(1000);
@@ -2535,7 +2375,6 @@ async fn try_boss_magic(
             npc_apply_magic_effect(world, npc_id, ai, tmpl, tmpl.magic_3, target_id as i32).await;
             world.update_npc_ai(npc_id, |s| s.utc_second = 0);
         }
-        // C++ m_sUtcSecond++ is unconditional (runs after if/else block)
         world.update_npc_ai(npc_id, |s| s.utc_second += 1);
         broadcast_npc_attack(world, npc_id, ai, target_id, ATTACK_SUCCESS);
         return Some(1000);
@@ -2556,7 +2395,6 @@ async fn try_boss_magic(
             npc_apply_magic_effect(world, npc_id, ai, tmpl, tmpl.magic_3, target_id as i32).await;
             world.update_npc_ai(npc_id, |s| s.utc_second = 0);
         }
-        // C++ m_sUtcSecond++ is unconditional (runs after if/else block)
         world.update_npc_ai(npc_id, |s| s.utc_second += 1);
         broadcast_npc_attack(world, npc_id, ai, target_id, ATTACK_SUCCESS);
         return Some(1000);
@@ -2595,7 +2433,6 @@ async fn try_boss_magic(
             npc_apply_magic_effect(world, npc_id, ai, tmpl, skill, target_id as i32).await;
             world.update_npc_ai(npc_id, |s| s.utc_second = 0);
         }
-        // C++ m_sUtcSecond++ is unconditional (runs after if/else block)
         world.update_npc_ai(npc_id, |s| s.utc_second += 1);
         broadcast_npc_attack(world, npc_id, ai, target_id, ATTACK_SUCCESS);
         return Some(1000);
@@ -2615,14 +2452,12 @@ async fn try_boss_magic(
             npc_apply_magic_effect(world, npc_id, ai, tmpl, skill, target_id as i32).await;
             world.update_npc_ai(npc_id, |s| s.utc_second = 0);
         }
-        // C++ m_sUtcSecond++ is unconditional (runs after if/else block)
         world.update_npc_ai(npc_id, |s| s.utc_second += 1);
         broadcast_npc_attack(world, npc_id, ai, target_id, ATTACK_SUCCESS);
         return Some(1000);
     }
 
     // ── Default boss fallback: same as magic_attack == 2 but with EFFECTING ──
-    // C++ Reference: `Npc.cpp:3267-3283` — default case in boss switch
     let n_random: i32 = rng.gen_range(1..=5000);
     if n_random < NPC_MAGIC_PERCENT_DEFAULT {
         let rand_skill: i32 = rng.gen_range(0..400);
@@ -2644,16 +2479,10 @@ async fn try_boss_magic(
 }
 
 /// Alert nearby same-family NPCs to assist (pack behavior).
-///
-/// C++ Reference: `Npc.cpp:1522-1561` — `CNpc::FindFriend()`
 /// + `Npc.cpp:1576-1650` — `CNpc::FindFriendRegion()`
-///
 /// Searches the 3x3 region grid for same-family NPCs. If found, sets their
 /// target to the current attacker and transitions them to Attacking state.
 /// Alert nearby NPCs to join combat when a pack NPC or boss is attacked.
-///
-/// C++ Reference: `CNpc::FindFriend()` in `Npc.cpp:1522-1561`
-///
 /// When `is_boss` is true, uses MonSearchAny — alerts ANY nearby NPC regardless
 /// of family type. When false, uses MonSearchSameFamily — only alerts NPCs with
 /// matching `family_type` that also have `has_friends`.
@@ -2682,7 +2511,6 @@ fn alert_pack(
         };
 
         // Skip if already fighting or dead
-        // C++ Reference: `Npc.cpp:1604,1620`
         //   if (pNpc->hasTarget() && pNpc->GetNpcState() == NPC_FIGHTING) continue;
         if ally_ai.state == NpcState::Fighting || ally_ai.state == NpcState::Dead {
             continue;
@@ -2697,10 +2525,8 @@ fn alert_pack(
 
         if is_boss {
             // MonSearchAny: alert any NPC in range (boss path)
-            // C++ Reference: `Npc.cpp:1602-1613`
         } else {
             // MonSearchSameFamily: only same-family NPCs with has_friends
-            // C++ Reference: `Npc.cpp:1616-1630`
             if !ally_ai.has_friends || ally_ai.family_type != ai.family_type {
                 continue;
             }
@@ -2721,7 +2547,6 @@ fn alert_pack(
         }
 
         // Distance check — use tracing range
-        // C++ Reference: `Npc.cpp:1584` — fSearchRange = m_byTracingRange
         let dx = ai.cur_x - ally_ai.cur_x;
         let dz = ai.cur_z - ally_ai.cur_z;
         let dist = (dx * dx + dz * dz).sqrt();
@@ -2731,7 +2556,6 @@ fn alert_pack(
         }
 
         // Alert this ally — set target and transition to Attacking
-        // C++ Reference: `Npc.cpp:1607-1613,1623-1629`
         //   pNpc->m_Target.id = m_Target.id;
         //   pNpc->NpcStrategy(NPC_ATTACK_SHOUT);
         world.update_npc_ai(ally_nid, |s| {
@@ -2744,9 +2568,6 @@ fn alert_pack(
 }
 
 /// Find the most injured same-family NPC for healer AI.
-///
-/// C++ Reference: `Npc.cpp:1632-1650` — `MonSearchNeedsHealing` branch
-///
 /// Searches 3x3 region for same-family NPCs with HP below 90% threshold.
 /// Returns the NPC with the lowest HP percentage.
 fn find_injured_friend(
@@ -2827,21 +2648,15 @@ fn transition_to_dead(world: &WorldState, npc_id: NpcId) {
 }
 
 /// Find the closest enemy player in the NPC's search range.
-///
-/// C++ Reference: `Npc.cpp:6095-6220` — `CNpc::FindEnemy()`
 /// + `Npc.cpp:5698-5830` — `CNpc::FindEnemyExpand()`
-///
 /// For ATROCITY (aggressive) NPCs: targets any valid player in range.
 /// For TENDER (passive) NPCs: only targets players who have damaged this NPC
-/// (or friends' current target, per C++ `m_bHasFriends && m_Target.id == target_uid`).
-///
-/// C++ Reference: `Npc.cpp:5825-5834` — TENDER_ATTACK_TYPE check
+/// (or friends' current target, per `m_bHasFriends && m_Target.id == target_uid`).
 fn find_enemy(world: &WorldState, ai: &NpcAiState, npc_id: NpcId) -> Option<SessionId> {
     let npc = world.get_npc_instance(npc_id)?;
     let tmpl = world.get_npc_template(npc.proto_id, npc.is_monster)?;
     let npc_event_room = npc.event_room;
 
-    // C++ Reference: `Npc.cpp:6097` — `isNonAttackingObject()` early bail-out.
     // Gates, levers, artifacts, scarecrows, trees never search for enemies.
     if is_gate_npc_type(tmpl.npc_type) || matches!(tmpl.npc_type, 171 | 200) {
         return None;
@@ -2849,7 +2664,6 @@ fn find_enemy(world: &WorldState, ai: &NpcAiState, npc_id: NpcId) -> Option<Sess
 
     let is_guard_type = matches!(tmpl.npc_type, 11..=15);
 
-    // C++ Reference: `Npc.cpp:6103-6106` — guards in neutral zones don't attack.
     // `bIsNeutralZone = (isInMoradon() || GetZoneID() == ZONE_ARENA)`
     if is_guard_type {
         let is_neutral = matches!(
@@ -2866,7 +2680,6 @@ fn find_enemy(world: &WorldState, ai: &NpcAiState, npc_id: NpcId) -> Option<Sess
         }
     }
 
-    // C++ Reference: `Npc.cpp:6138` — `fSearchRange = (float)m_bySearchRange`
     // Use template value directly for C++ parity.  Only guard NPCs get a
     // minimum floor (they always search per C++ CheckFindEnemy logic).
     let search_range = if is_guard_type {
@@ -2879,7 +2692,6 @@ fn find_enemy(world: &WorldState, ai: &NpcAiState, npc_id: NpcId) -> Option<Sess
     }
 
     // NPC nation for guard hostility check.
-    // C++ Reference: `Npc.cpp:5742-5744` — guards only target enemy nation.
     let npc_nation = ai.nation;
 
     // Get zone and search the 3x3 region grid
@@ -2918,13 +2730,11 @@ fn find_enemy(world: &WorldState, ai: &NpcAiState, npc_id: NpcId) -> Option<Sess
             }
 
             // Skip invisible (stealthed) players
-            // C++ Reference: `Npc.cpp:1714` — `if (pUser->m_bInvisibilityType != 0) continue;`
             if h.invisibility_type != 0 {
                 return None;
             }
 
             // Skip blinking (respawn invulnerable) players
-            // C++ Reference: `Npc.cpp:2835` — `pTarget->isBlinking()` check
             if h.blink_expiry_time > 0 && now_unix < h.blink_expiry_time {
                 return None;
             }
@@ -2943,14 +2753,12 @@ fn find_enemy(world: &WorldState, ai: &NpcAiState, npc_id: NpcId) -> Option<Sess
         };
 
         // Guard nation hostility check — guards only attack enemy-nation players.
-        // C++ Reference: `Npc.cpp:5742-5744` — CanAttack() checks nation.
         // Nation 0 = neutral (attacks everyone), 1 = Karus, 2 = Elmorad.
         if is_guard_type && npc_nation != 0 && player_nation == npc_nation {
             continue; // Same nation — friendly, skip
         }
 
         // TENDER (passive) NPC: only target players who have damaged us
-        // C++ Reference: `Npc.cpp:5825-5827`
         //   if (m_tNpcAttType == TENDER_ATTACK_TYPE
         //       && (IsDamagedUserList(pUser)
         //           || (m_bHasFriends && m_Target.id == target_uid)))
@@ -2977,15 +2785,10 @@ fn find_enemy(world: &WorldState, ai: &NpcAiState, npc_id: NpcId) -> Option<Sess
 }
 
 /// Find an enemy NPC (for NPC-vs-NPC combat: guards attacking monsters, etc.).
-///
-/// C++ Reference: `Npc.cpp:6197-6220` — FindEnemy() UnitNPC branch:
 ///   `if (bIsGuard || isMonster() || isGuardSummon())`
-///
-/// C++ Reference: `Npc.cpp:5951-6021` — `FindEnemyExpand()` UnitNPC branch:
 ///   - Skip self, dead, non-attackable NPCs, pets
 ///   - Guards only attack monsters (isGuard && !pNpc->isMonster => skip)
 ///   - Hostility: isHostileTo(pNpc) — primarily nation-based
-///
 /// Returns the NpcId of the closest enemy NPC within search range, or None.
 fn find_npc_enemy(
     world: &WorldState,
@@ -3034,29 +2837,24 @@ fn find_npc_enemy(
         }
 
         // Skip non-attackable objects (gates, levers, artifacts, scarecrows, trees)
-        // C++ Reference: `Npc.cpp:5978` — `pNpc->isNonAttackableObject()`
         if is_gate_npc_type(other_tmpl.npc_type) {
             continue;
         }
 
         // Guards only attack monsters
-        // C++ Reference: `Npc.cpp:5980` — `isGuard() && !pNpc->isMonster()`
         if is_guard && !other_tmpl.is_monster {
             continue;
         }
 
         // Monsters don't attack other monsters
-        // C++ Reference: `Unit.cpp:2384-2388` — `isMonster() && pTarget->isMonster() => false`
         if is_monster && other_tmpl.is_monster {
             continue;
         }
 
         // Skip guard-summons as targets
-        // C++ Reference: `Unit.cpp:2381-2382` — `pTarget->isGuardSummon() => false`
         // (We don't implement guard-summons yet, but check for guard types too)
 
         // Hostility check: different nations are hostile
-        // C++ Reference: `Unit.cpp:2391-2392` — `if (GetNation() == ALL) return false;`
         // Only the ATTACKER being nation-0 (neutral/ALL) skips hostility.
         // A nation-0 TARGET can still be attacked by non-neutral NPCs.
         if ai.nation == 0 {
@@ -3088,9 +2886,6 @@ fn find_npc_enemy(
 }
 
 /// Send WIZ_NPC_MOVE broadcast to the 3x3 region.
-///
-/// C++ Reference: `Npc.cpp:7184-7195` — `CNpc::SendMoveResult()`
-///
 /// Wire format: `[u8 1][u32 npc_id][u16 x*10][u16 z*10][u16 y*10][u16 speed*10]`
 #[allow(clippy::too_many_arguments)]
 fn send_npc_move(
@@ -3126,9 +2921,6 @@ fn send_npc_move(
 }
 
 /// Broadcast an NPC attack result to the 3x3 region.
-///
-/// C++ Reference: `Npc.cpp:2860-2862` — `SendAttackRequest()` packet
-///
 /// Wire format: `[u8 LONG_ATTACK][u8 result][u32 npc_id][u32 target_id]`
 fn broadcast_npc_attack(
     world: &WorldState,
@@ -3204,9 +2996,6 @@ fn send_npc_respawn(
 }
 
 /// Broadcast WIZ_STATE_CHANGE for an NPC (used on sleep/faint wake-up).
-///
-/// C++ Reference: `User.cpp:2941-3007` — `StateChangeServerDirect`
-///
 /// Wire format: `[u32 npc_id] [u8 type] [u32 buff]`
 fn broadcast_state_change(
     world: &WorldState,
@@ -3237,14 +3026,10 @@ fn broadcast_state_change(
 use crate::npc::NPC_BAND;
 
 /// Apply the server-side effect of an NPC's magic skill after broadcasting.
-///
-/// C++ Reference: `CMagicProcess::MagicPacketNpc()` → `MagicInstance::Run()` → `ExecuteType3()`
-///
 /// This handles:
 /// - **Damage skills (Type 3, MORAL_ENEMY):** Compute magic damage and apply to player target.
 /// - **Heal skills (Type 3, MORAL_FRIEND/SELF):** Restore HP on friendly NPC target.
 /// - Death handling when player HP reaches 0.
-///
 /// The damage formula follows the C++ NPC caster path in `GetMagicDamage()`:
 /// - `total_hit` = raw `sFirstDamage` from magic table (no CHA scaling for NPCs)
 /// - `damage = 485 * total_hit / (total_r + 510)` — total_r simplified to 0
@@ -3386,7 +3171,6 @@ async fn npc_apply_magic_effect(
     }
 
     // Apply damage to player through HpChange pipeline
-    // C++ Reference: UserHealtMagicSpSystem.cpp:43-135
     // Mirror: SKIP for NPC attackers (C++ line 75: pAttacker->isPlayer() required)
     let mut final_damage = damage;
 
@@ -3394,7 +3178,6 @@ async fn npc_apply_magic_effect(
     let original_damage = final_damage;
 
     // ── Mastery passive damage reduction ────────────────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:114-123
     {
         let victim_zone = world
             .get_position(target_sid)
@@ -3412,7 +3195,6 @@ async fn npc_apply_magic_effect(
     }
 
     // ── Mana Absorb (Outrage/Frenzy/Mana Shield) ─────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:125-135
     {
         let victim_zone = world
             .get_position(target_sid)
@@ -3460,7 +3242,6 @@ async fn npc_apply_magic_effect(
     // Handle death
     if new_hp <= 0 {
         crate::handler::dead::broadcast_death(world, target_sid);
-        // C++ Reference: UserHealtMagicSpSystem.cpp:878-891 — OnDeathKilledNpc
         // XP loss only on NPC kills (with type exclusions)
         let (npc_type, npc_proto) = world
             .get_npc_instance(npc_id)
@@ -3518,9 +3299,6 @@ async fn npc_apply_magic_effect(
 }
 
 /// Broadcast WIZ_MAGIC_PROCESS EFFECTING for an NPC skill.
-///
-/// C++ Reference: `MagicInstance.cpp:2542-2564` — `BuildSkillPacket` writes 7 sData fields
-///
 /// Wire format: `[u8 MAGIC_EFFECTING] [u32 skill_id] [u32 caster_id] [u32 target_id] [u32 x7 sData]`
 fn broadcast_npc_magic(
     world: &WorldState,
@@ -3558,9 +3336,6 @@ fn broadcast_npc_magic(
 }
 
 /// Broadcast WIZ_MAGIC_PROCESS CASTING for an NPC skill (pre-cast animation).
-///
-/// C++ Reference: `MagicInstance.cpp:2542-2564` — `BuildSkillPacket` writes 7 sData fields
-///
 /// Wire format: `[u8 MAGIC_CASTING] [u32 skill_id] [u32 caster_id] [u32 target_id] [u32 x7 sData]`
 fn broadcast_npc_magic_casting(
     world: &WorldState,
@@ -3598,9 +3373,6 @@ fn broadcast_npc_magic_casting(
 }
 
 /// Broadcast WIZ_MAGIC_PROCESS with a configurable opcode for an NPC skill.
-///
-/// C++ Reference: `MagicInstance.cpp:2542-2564` — `BuildSkillPacket`
-///
 /// Used for boss-specific opcodes like MAGIC_FLYING (4) for Elite Timarli.
 fn broadcast_npc_magic_with_opcode(
     world: &WorldState,
@@ -3638,9 +3410,6 @@ fn broadcast_npc_magic_with_opcode(
 }
 
 /// Determine hit result using the C++ hit rate table.
-///
-/// C++ Reference: `Unit.cpp:1898-1984` — `Unit::GetHitRate(float rate)`
-///
 /// Returns: 1=GREAT_SUCCESS, 2=SUCCESS, 3=NORMAL, 4=FAIL
 fn get_hit_rate(rate: f32, rng: &mut impl Rng) -> u8 {
     let random = rng.gen_range(1..=10000);
@@ -3739,9 +3508,6 @@ fn get_hit_rate(rate: f32, rng: &mut impl Rng) -> u8 {
 // ── Gate NPC Logic ──────────────────────────────────────────────────────
 
 /// Handle gate-type NPC behavior during NPC_STANDING state.
-///
-/// C++ Reference: `Npc.cpp:4413-4466` — gate behavior at the end of `NpcStanding()`
-///
 /// Returns `Some(delay_ms)` if the gate logic consumed the tick, `None` to fall through
 /// to the default stand_time return.
 fn handle_gate_standing(
@@ -3754,7 +3520,6 @@ fn handle_gate_standing(
     let stand_time = tmpl.stand_time as u64;
 
     // ── NPC_SPECIAL_GATE: Cycle open/close during nation war ─────────
-    // C++ Reference: `Npc.cpp:4413-4433`
     //   if (GetType() == NPC_SPECIAL_GATE && GetMap()->isWarZone()
     //       && (m_byBattleOpen == NATION_BATTLE || m_byBattleOpen == SNOW_BATTLE))
     if npc_type == NPC_SPECIAL_GATE {
@@ -3788,7 +3553,6 @@ fn handle_gate_standing(
     }
 
     // ── NPC_OBJECT_WOOD: Auto-close after cooldown during nation war ─
-    // C++ Reference: `Npc.cpp:4435-4447`
     //   else if (GetType() == NPC_OBJECT_WOOD && GetMap()->isWarZone()
     //       && m_byBattleOpen == NATION_BATTLE)
     //   { if (m_byGateOpen == 1 && WoodCooldownClose++ >= 30) { close; } }
@@ -3818,7 +3582,6 @@ fn handle_gate_standing(
     }
 
     // ── NPC_KROWAZ_GATE: Auto-close in Krowaz Dominion zone ─────────
-    // C++ Reference: `Npc.cpp:4449-4458`
     //   else if (GetType() == NPC_KROWAZ_GATE && GetZoneID() == ZONE_KROWAZ_DOMINION)
     //   { if (m_byGateOpen == 1) { close; return m_sStandTime * 10; } }
     if npc_type == NPC_KROWAZ_GATE && ai.zone_id == ZONE_KROWAZ_DOMINION && ai.gate_open == 1 {
@@ -3833,13 +3596,9 @@ fn handle_gate_standing(
 }
 
 /// Send a gate flag broadcast (WIZ_OBJECT_EVENT) to the NPC's 3x3 region.
-///
-/// C++ Reference: `Npc.cpp:412-433` — `CNpc::SendGateFlag(uint8 bFlag)`
-///
 /// Sets `m_byGateOpen` and broadcasts the new state. For NPC_OBJECT_WOOD and
 /// NPC_ROLLINGSTONE, the flag is set but no packet is broadcast (C++ returns early
 /// after setting m_byGateOpen).
-///
 /// Wire format: `WIZ_OBJECT_EVENT [u8 object_type] [u8 1] [u32 npc_id] [u8 gate_open]`
 fn send_gate_flag(
     world: &WorldState,
@@ -3852,14 +3611,12 @@ fn send_gate_flag(
     world.update_npc_gate_open(npc_id, gate_open);
 
     // NPC_OBJECT_WOOD and NPC_ROLLINGSTONE: only update state, no broadcast
-    // C++ Reference: `Npc.cpp:426-428`
     //   if (GetType() == NPC_OBJECT_WOOD || GetType() == NPC_ROLLINGSTONE) return;
     if tmpl.npc_type == NPC_OBJECT_WOOD || tmpl.npc_type == NPC_ROLLINGSTONE {
         return;
     }
 
     // Build WIZ_OBJECT_EVENT packet
-    // C++ Reference: `Npc.cpp:421-432`
     //   Packet result(WIZ_OBJECT_EVENT, objectType);
     //   result << uint8(1) << uint32(GetID()) << m_byGateOpen;
     let mut pkt = Packet::new(Opcode::WizObjectEvent as u8);
@@ -4276,7 +4033,7 @@ mod tests {
         // WIZ_MAGIC_PROCESS EFFECTING packet format
         // C++ BuildSkillPacket writes: opcode + skill_id + caster + target + sData[0..6]
         let mut pkt = Packet::new(Opcode::WizMagicProcess as u8);
-        pkt.write_u8(3); // MAGIC_EFFECTING (C++ packets.h:560)
+        pkt.write_u8(3); // MAGIC_EFFECTING
         pkt.write_u32(502022); // skill_id
         pkt.write_u32(10001); // caster (npc)
         pkt.write_u32(42); // target
@@ -4368,7 +4125,6 @@ mod tests {
     #[test]
     fn test_magic_percent_default() {
         // Default threshold for magic chance out of 5000
-        // C++ Reference: Npc.cpp:2878 — `int nPercent = 1000;`
         assert_eq!(NPC_MAGIC_PERCENT_DEFAULT, 1000);
     }
 
@@ -4490,7 +4246,6 @@ mod tests {
         // Type 2/4/5 use 5000 threshold (lower magic chance)
         // Type 6 uses 3500 threshold (higher magic chance)
         // Both use NPC_MAGIC_PERCENT_DEFAULT = 1000 as the pass mark
-        // C++ Reference: Npc.cpp:2878 — `int nPercent = 1000;`
 
         // Type 2: 1000/5000 = 20% chance to try magic
         let type2_chance = NPC_MAGIC_PERCENT_DEFAULT as f64 / 5000.0;
@@ -4512,7 +4267,6 @@ mod tests {
 
     #[test]
     fn test_skill_cooldown_reset_on_attacking() {
-        // C++ Reference: Npc.cpp:6311-6312 — m_sSkillCoolDown[0] = UNIXTIME + 2
         // When NPC transitions to Attacking, cooldown should be set to current_time + 2s
         let mut ai = make_test_ai();
         ai.last_tick_ms = 5_000;
@@ -4758,7 +4512,6 @@ mod tests {
     // ── Sprint 248: Tracer timeout tests ─────────────────────────────
 
     /// NPC tracer timeout: after 12 seconds with no combat, NPC disengages.
-    /// C++ Reference: Npc.cpp:4047-4051 — `m_Target.m_tLastDamageTime + 12000 < UNIXTIME`
     #[test]
     fn test_tracer_timeout_12s() {
         let mut ai = make_test_ai();
@@ -4992,7 +4745,6 @@ mod tests {
 
     #[test]
     fn test_gate_npc_type_constants() {
-        // C++ Reference: `globals.h:140-202`
         assert_eq!(NPC_SPECIAL_GATE, 52);
         assert_eq!(NPC_OBJECT_WOOD, 54);
         assert_eq!(NPC_KROWAZ_GATE, 180);
@@ -5099,7 +4851,6 @@ mod tests {
     #[test]
     fn test_wood_no_broadcast() {
         // NPC_OBJECT_WOOD and NPC_ROLLINGSTONE should NOT broadcast gate flag
-        // C++ Reference: `Npc.cpp:426-428` — returns early for these types
         assert_eq!(NPC_OBJECT_WOOD, 54);
         assert_eq!(NPC_ROLLINGSTONE, 181);
 
@@ -5190,7 +4941,6 @@ mod tests {
     #[test]
     fn test_wood_requires_nation_battle_only() {
         // NPC_OBJECT_WOOD should only auto-close during NATION_BATTLE (not SNOW_BATTLE)
-        // C++ Reference: Npc.cpp:4435-4437
         use crate::systems::war::{NATION_BATTLE, SNOW_BATTLE};
 
         let is_nation = NATION_BATTLE == NATION_BATTLE;
@@ -5229,7 +4979,6 @@ mod tests {
 
     #[test]
     fn test_gate_open_state_values() {
-        // C++ Reference: `Npc.h:461` — isGateOpen() returns (m_byGateOpen == 1 || m_byGateOpen == 2)
         // 0 = closed, 1 = open, 2 = event-forced open
         let closed: u8 = 0;
         let open: u8 = 1;
@@ -5572,13 +5321,12 @@ mod tests {
 
     #[test]
     fn test_npc_boss_constant() {
-        // NPC_BOSS should match C++ `globals.h:107` — value 3
+        // NPC_BOSS should match `globals.h:107` — value 3
         assert_eq!(NPC_BOSS, 3);
     }
 
     #[test]
     fn test_boss_alert_pack_condition() {
-        // C++ Reference: `Npc.cpp:1806-1807`
         //   if (m_bHasFriends || GetType() == NPC_BOSS)
         //     FindFriend(GetType() == NPC_BOSS ? MonSearchAny : MonSearchSameFamily);
 
@@ -5623,7 +5371,6 @@ mod tests {
 
     #[test]
     fn test_boss_search_type_selection() {
-        // C++ `GetType() == NPC_BOSS ? MonSearchAny : MonSearchSameFamily`
         // Boss: MonSearchAny (skips family check)
         // Non-boss: MonSearchSameFamily (requires family match)
         let boss_type: u8 = NPC_BOSS;
@@ -5700,7 +5447,6 @@ mod tests {
     #[test]
     fn test_alert_pack_skips_fighting_npcs() {
         // NPCs in Fighting state with a target should be skipped.
-        // C++ Reference: `Npc.cpp:1604,1620`
         let ally_ai = NpcAiState {
             state: NpcState::Fighting,
             target_id: Some(77),
@@ -6284,7 +6030,6 @@ mod tests {
     #[test]
     fn test_invisible_player_skipped_in_find_enemy() {
         // find_enemy should skip players with invisibility_type > 0
-        // C++ Reference: Npc.cpp:1714 — `if (pUser->m_bInvisibilityType != 0) continue;`
         let world = WorldState::new();
         let (tx, _rx) = mpsc::unbounded_channel();
         world.register_session(1, tx);
@@ -6310,7 +6055,6 @@ mod tests {
     #[test]
     fn test_invisible_player_combat_abort() {
         // npc_fighting should abort combat against invisible targets
-        // C++ Reference: Npc.cpp:2832 — `if (pTarget->m_bInvisibilityType != 0) return;`
         let world = WorldState::new();
         let (tx, _rx) = mpsc::unbounded_channel();
         world.register_session(1, tx);
@@ -6350,7 +6094,6 @@ mod tests {
 
     #[test]
     fn test_guard_type_constants() {
-        // C++ Reference: globals.h:110-112
         assert_eq!(NPC_GUARD, 11);
         assert_eq!(NPC_PATROL_GUARD, 12);
         assert_eq!(NPC_STORE_GUARD, 13);
@@ -7631,7 +7374,6 @@ mod tests {
 
     /// QA M3: Guard (nation 1) SHOULD attack nation-0 monsters.
     ///
-    /// C++ Reference: `Unit.cpp:2391-2392` — only checks `if (GetNation() == ALL)`,
     /// meaning only the ATTACKER being nation-0 skips. Target being nation-0 is OK.
     #[tokio::test]
     async fn test_guard_attacks_nation0_monster() {
@@ -7724,7 +7466,6 @@ mod tests {
 
     /// QA M3: Nation-0 (neutral) NPC should NOT attack anything.
     ///
-    /// C++ Reference: `Unit.cpp:2391-2392` — `if (GetNation() == ALL) return false;`
     #[tokio::test]
     async fn test_nation0_npc_does_not_attack() {
         use crate::npc::{NpcInstance, NPC_BAND};
@@ -8567,7 +8308,6 @@ mod tests {
 
     /// Integration: Pet decay respects the 60-second interval timer.
     ///
-    /// C++ Reference: `User.cpp:1218` — `m_bPetLastTime + (PLAYER_TRAINING_INTERVAL * 4) < UNIXTIME`
     #[test]
     fn test_integration_pet_decay_interval_gating() {
         use crate::world::PetState;
@@ -8613,7 +8353,6 @@ mod tests {
 
     /// Integration: Pet death removes pet data from session.
     ///
-    /// C++ Reference: `PetMainHandler.cpp:PetOnDeath()` — removes pet from user.
     #[test]
     fn test_integration_pet_death_cleanup() {
         use crate::world::PetState;
@@ -8654,7 +8393,6 @@ mod tests {
 
     /// Integration: Wanted event position broadcast sends to enemy nation only.
     ///
-    /// C++ Reference: `WandetEvent.cpp:258` — `Send_Zone(zone, pUser->GetNation())`
     /// sends to enemy nation, not the wanted player's own nation.
     #[test]
     fn test_integration_wanted_broadcast_enemy_nation() {
@@ -8741,7 +8479,6 @@ mod tests {
 
     /// Integration: Wanted room status gating prevents broadcasts for non-running rooms.
     ///
-    /// C++ Reference: `WandetEvent.cpp` — broadcasts only happen when room status is Running.
     #[test]
     fn test_integration_wanted_tick_status_gating() {
         use crate::handler::vanguard::tick_wanted_position_broadcasts;
@@ -8887,7 +8624,6 @@ mod tests {
 
     /// Integration: Pet satisfaction boundaries (max 10000, min 0).
     ///
-    /// C++ Reference: `PetMainHandler.cpp:276-287` — satisfaction clamped at 0 (death).
     #[test]
     fn test_integration_pet_satisfaction_boundaries() {
         use crate::world::PetState;
@@ -8928,7 +8664,6 @@ mod tests {
 
     /// Integration: Wanted map show timer throttles broadcasts to 60-second intervals.
     ///
-    /// C++ Reference: `WandetEvent.cpp` — `m_WantedSystemMapShowTime` comparison.
     #[test]
     fn test_integration_wanted_map_show_timer_throttle() {
         use crate::handler::vanguard::tick_wanted_position_broadcasts;
@@ -9116,7 +8851,6 @@ mod tests {
 
     /// Integration: Pet feeding via apply_pet_decay with positive amount.
     ///
-    /// C++ Reference: `PetMainHandler.cpp:276` — PetSatisFactionUpdate can take
     /// positive values (feeding) or negative (decay).
     #[test]
     fn test_integration_pet_feeding_positive_decay() {
@@ -9182,7 +8916,6 @@ mod tests {
 
     /// Integration: Zone kill reward lookup returns only rewards matching zone + status=1.
     ///
-    /// C++ Reference: `User.cpp:3348-3437` — GiveKillReward iterates rewards
     /// filtered by ZoneID and Status.
     #[test]
     fn test_integration_zone_kill_reward_lookup() {
@@ -9302,7 +9035,6 @@ mod tests {
 
     /// Integration: Online reward timer expiry grants the reward.
     ///
-    /// C++ Reference: `User.cpp:1643-1669` — ZoneOnlineRewardCheck.
     /// Verifies that when a timer expires and zone matches, the reward is triggered.
     #[test]
     fn test_integration_online_reward_timer_expiry() {
@@ -9367,7 +9099,6 @@ mod tests {
 
     /// Integration: Pet satisfaction decay over multiple ticks leads to de-summon at 0.
     ///
-    /// C++ Reference: `PetMainHandler.cpp:276-287` — pet dies when satisfaction <= 0.
     /// Simulates repeated 40-second decay ticks until pet satisfaction reaches 0.
     #[test]
     fn test_integration_pet_decay_to_desummon() {
@@ -9427,7 +9158,6 @@ mod tests {
 
     /// Integration: Cinderella zone matching and gating lifecycle.
     ///
-    /// C++ Reference: `User.cpp:668` — cinderella event participant check.
     /// Verifies zone matching, activation, and player-in-event detection.
     #[test]
     fn test_integration_cinderella_gating_zone_and_lifecycle() {
@@ -9519,7 +9249,6 @@ mod tests {
 
     /// Integration: Guard NPC targeting priority selects closest enemy.
     ///
-    /// C++ Reference: `CNpc::FindEnemy()` — iterates region 3x3 grid and
     /// picks the closest hostile NPC by distance squared.
     /// This test verifies the guard picks the nearest of two enemies.
     #[tokio::test]
@@ -9648,7 +9377,6 @@ mod tests {
 
     /// Integration: NPC-vs-NPC combat terminates when target dies.
     ///
-    /// C++ Reference: `CNpc::Attack()` — checks target HP <= 0 to stop attacking.
     /// Verifies that when the target NPC's HP reaches 0, find_npc_enemy no longer
     /// returns the dead NPC.
     #[tokio::test]
@@ -9744,7 +9472,6 @@ mod tests {
 
     /// Integration: Nation-0 (neutral) NPC is excluded from attacking.
     ///
-    /// C++ Reference: `Unit.cpp:2391-2392` — `if (GetNation() == ALL) return false;`
     /// The attacker being nation-0 means it never initiates combat.
     #[tokio::test]
     async fn test_integration_nation0_npc_hostility_exclusion() {

@@ -1,27 +1,17 @@
 //! WIZ_STEALTH (0x60) handler — stealth/invisibility management.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:4537-4574`
-//!
 //! ## Incoming Packet (C->S)
-//!
 //! The client does not send WIZ_STEALTH — this opcode is server-to-client only.
 //! The handler is a no-op for safety.
-//!
 //! ## Server-initiated Stealth Packets
-//!
 //! - `InitializeStealth()`: `WIZ_STEALTH << u8(0) << u16(0)` — resets stealth (sent on respawn)
 //! - Type9 Lupine stealth: `WIZ_STEALTH << u8(1) << u16(radius)` — mini-map stealth
-//!
 //! ## Stealth Removal
-//!
 //! `remove_stealth()` is called when a stealthed player moves (INVIS_DISPEL_ON_MOVE)
 //! or attacks (any invisibility type). It:
 //! 1. Clears the invisibility_type to INVIS_NONE
 //! 2. Removes the BUFF_TYPE_INVISIBILITY buff
 //! 3. Broadcasts `WIZ_STATE_CHANGE(7, INVIS_NONE)` to the 3x3 region
-//!
 //! ## C++ InvisibilityType Enum (globals.h:757-762)
-//!
 //! | Value | Name                  | Description                          |
 //! |-------|-----------------------|--------------------------------------|
 //! | 0     | INVIS_NONE            | Not invisible                        |
@@ -40,25 +30,17 @@ use crate::zone::SessionId;
 use crate::magic_constants::MAGIC_DURATION_EXPIRED;
 
 /// Response code for stealth removal (stateChange <= 2 or 5-6).
-///
-/// C++ Reference: `MagicInstance.cpp:6821` — `bResponse = 91` for stealths
 const TYPE9_CANCEL_STEALTH_RESPONSE: u8 = 91;
 
 // ── Invisibility type constants ─────────────────────────────────────────────
 
 /// Not invisible.
-///
-/// C++ Reference: `globals.h:759` — `INVIS_NONE = 0`
 pub const INVIS_NONE: u8 = 0;
 
 /// Stealth that breaks when the player moves.
-///
-/// C++ Reference: `globals.h:760` — `INVIS_DISPEL_ON_MOVE = 1`
 pub const INVIS_DISPEL_ON_MOVE: u8 = 1;
 
 /// Stealth that breaks only on attack or offensive skill.
-///
-/// C++ Reference: `globals.h:761` — `INVIS_DISPEL_ON_ATTACK = 2`
 pub const INVIS_DISPEL_ON_ATTACK: u8 = 2;
 
 use crate::buff_constants::BUFF_TYPE_INVISIBILITY;
@@ -66,8 +48,6 @@ use crate::buff_constants::BUFF_TYPE_INVISIBILITY;
 // ── Handler ─────────────────────────────────────────────────────────────────
 
 /// Handle incoming WIZ_STEALTH from the client.
-///
-/// C++ Reference: `User.cpp:2922` — case 7 in `StateChange` just returns.
 /// The client should never send WIZ_STEALTH; this is a server-initiated opcode.
 /// We silently ignore it (matching C++ behavior where StateChange case 7 returns).
 pub fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
@@ -84,12 +64,8 @@ pub fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
 // ── Stealth Removal ─────────────────────────────────────────────────────────
 
 /// Remove all stealth from a player.
-///
-/// C++ Reference: `CUser::RemoveStealth()` in `User.cpp:4567-4574`
-///
 /// Checks if the player is invisible (invisibility_type != INVIS_NONE), and if so:
 /// 1. Calls `remove_stealth_type()` for both INVIS_DISPEL_ON_MOVE and INVIS_DISPEL_ON_ATTACK
-///
 /// This is called from:
 /// - `attack.rs` (before processing an attack)
 /// - `magic_process.rs` (before casting offensive spells of type 1-3, 7)
@@ -103,14 +79,10 @@ pub fn remove_stealth(world: &WorldState, sid: SessionId) {
 }
 
 /// Remove a specific type of stealth from a player.
-///
-/// C++ Reference: `CMagicProcess::RemoveStealth()` in `MagicProcess.cpp:479-506`
-///
 /// 1. Validates the invisibility type (must be 1 or 2)
 /// 2. Removes the BUFF_TYPE_INVISIBILITY buff
 /// 3. Resets invisibility_type to INVIS_NONE
 /// 4. Broadcasts `WIZ_STATE_CHANGE(7, INVIS_NONE)` to the 3x3 region
-///
 /// This is also called directly from `move_handler.rs` (only for INVIS_DISPEL_ON_MOVE).
 pub fn remove_stealth_type(world: &WorldState, sid: SessionId, invis_type: u8) {
     if invis_type != INVIS_DISPEL_ON_MOVE && invis_type != INVIS_DISPEL_ON_ATTACK {
@@ -136,7 +108,6 @@ pub fn remove_stealth_type(world: &WorldState, sid: SessionId, invis_type: u8) {
     world.set_invisibility_type(sid, INVIS_NONE);
 
     // Broadcast StateChange(7, INVIS_NONE) to 3x3 region
-    // C++ Reference: MagicInstance.cpp:6820 — StateChangeServerDirect(7, INVIS_NONE)
     let mut pkt = Packet::new(Opcode::WizStateChange as u8);
     pkt.write_u32(sid as u32);
     pkt.write_u8(7); // type 7 = invisibility
@@ -165,7 +136,6 @@ pub fn remove_stealth_type(world: &WorldState, sid: SessionId, invis_type: u8) {
     }
 
     // Send MAGIC_DURATION_EXPIRED to the player to clear the client buff icon.
-    // C++ Reference: MagicInstance.cpp:6847-6849
     //   Packet result(WIZ_MAGIC_PROCESS, uint8(MAGIC_DURATION_EXPIRED));
     //   result << bResponse;   // 91 for stealths
     //   pCaster->Send(&result);
@@ -197,7 +167,6 @@ mod tests {
 
     #[test]
     fn test_invis_constants_match_cpp() {
-        // C++ Reference: globals.h:757-762
         assert_eq!(INVIS_NONE, 0);
         assert_eq!(INVIS_DISPEL_ON_MOVE, 1);
         assert_eq!(INVIS_DISPEL_ON_ATTACK, 2);
@@ -478,14 +447,12 @@ mod tests {
 
     #[test]
     fn test_invis_dispel_on_move_is_rogue_stealth() {
-        // C++ Reference: BotHandler.cpp:364 — rogue bots use INVIS_DISPEL_ON_MOVE
         // This is the standard rogue stealth that breaks on movement
         assert_eq!(INVIS_DISPEL_ON_MOVE, 1);
     }
 
     #[test]
     fn test_invis_dispel_on_attack_is_assassin_stealth() {
-        // C++ Reference: globals.h:761 — INVIS_DISPEL_ON_ATTACK = 2
         // Used for assassin stealth that only breaks on attack/skill
         assert_eq!(INVIS_DISPEL_ON_ATTACK, 2);
     }
@@ -508,7 +475,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_attack_stealth_break_removes_both_types() {
-        // C++ Reference: AttackHandler.cpp:57 — RemoveStealth() calls both
         // INVIS_DISPEL_ON_MOVE and INVIS_DISPEL_ON_ATTACK
         let world = create_test_world();
         register_session(&world, 1);
@@ -524,7 +490,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_magic_stealth_break_types_1_to_3_and_7() {
-        // C++ Reference: MagicInstance.cpp:2413-2414
         // Skills of type 1-3 and 7 remove stealth before executing
         let world = create_test_world();
         register_session(&world, 1);
@@ -540,7 +505,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_move_stealth_break_only_type_1() {
-        // C++ Reference: CharacterMovementHandler.cpp:138-139
         // Only INVIS_DISPEL_ON_MOVE (1) breaks on movement
         let world = create_test_world();
         register_session(&world, 1);
@@ -558,7 +522,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_move_does_not_break_attack_dispel_stealth() {
-        // C++ Reference: CharacterMovementHandler.cpp:138
         // Only if m_bInvisibilityType == INVIS_DISPEL_ON_MOVE, stealth is broken
         let world = create_test_world();
         register_session(&world, 1);
@@ -577,7 +540,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_initialize_stealth_resets_invisibility() {
-        // C++ Reference: User.cpp:4537-4542 — InitializeStealth sends reset packet
         // Our send_initialize_stealth also resets invisibility_type to 0
         let world = create_test_world();
         register_session(&world, 1);
@@ -592,7 +554,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_stealth_state_change_packet_format() {
-        // C++ Reference: User.cpp:2978-2980 — StateChangeServerDirect case 7
         // Packet: [u32 socket_id] [u8 type=7] [u32 invis_type]
         let mut pkt = Packet::new(Opcode::WizStateChange as u8);
         pkt.write_u32(42); // session id
@@ -608,19 +569,16 @@ mod tests {
 
     #[test]
     fn test_magic_duration_expired_constant() {
-        // C++ Reference: packets.h:564 — MAGIC_DURATION_EXPIRED = 5
         assert_eq!(MAGIC_DURATION_EXPIRED, 5);
     }
 
     #[test]
     fn test_type9_cancel_stealth_response_constant() {
-        // C++ Reference: MagicInstance.cpp:6821 — bResponse = 91 for stealths
         assert_eq!(TYPE9_CANCEL_STEALTH_RESPONSE, 91);
     }
 
     #[test]
     fn test_type9_cancel_packet_format() {
-        // C++ Reference: MagicInstance.cpp:6847-6849
         // Packet result(WIZ_MAGIC_PROCESS, uint8(MAGIC_DURATION_EXPIRED));
         // result << bResponse;
         let mut pkt = Packet::new(Opcode::WizMagicProcess as u8);

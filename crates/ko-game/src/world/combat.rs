@@ -3,7 +3,6 @@
 use super::*;
 
 /// Combined results from a single-pass buff tick scan.
-///
 /// Replaces 6 separate DashMap traversals with one unified scan.
 #[derive(Default)]
 pub struct BuffTickResults {
@@ -22,7 +21,6 @@ pub struct BuffTickResults {
 }
 
 /// Snapshot of combat-relevant data from a single session read.
-///
 /// Consolidates 15 separate DashMap lock acquisitions into 1 for damage
 /// calculation in `handle_player_attack()`.
 pub struct CombatSnapshot {
@@ -189,7 +187,6 @@ impl WorldState {
 
     /// Apply a buff to a session. Overwrites any existing buff of the same type.
     ///
-    /// C++ Reference: `Unit::AddType4Buff()` in `Unit.cpp:2128`
     pub fn apply_buff(&self, sid: SessionId, buff: ActiveBuff) {
         if let Some(mut handle) = self.sessions.get_mut(&sid) {
             handle.buffs.insert(buff.buff_type, buff);
@@ -197,7 +194,6 @@ impl WorldState {
     }
     /// Remove a specific buff type from a session.
     ///
-    /// C++ Reference: `CMagicProcess::RemoveType4Buff()` in `MagicProcess.cpp:1031`
     pub fn remove_buff(&self, sid: SessionId, buff_type: i32) -> Option<ActiveBuff> {
         if let Some(mut handle) = self.sessions.get_mut(&sid) {
             handle.buffs.remove(&buff_type)
@@ -207,7 +203,6 @@ impl WorldState {
     }
     /// Check if a buff type is a "lockable scroll" — auto-recast on debuff displacement.
     ///
-    /// C++ Reference: `CUser::isLockableScroll()` in `User.h:1036-1043`
     pub fn is_lockable_scroll(buff_type: i32) -> bool {
         matches!(
             buff_type,
@@ -222,7 +217,6 @@ impl WorldState {
     }
     /// Check if the player currently has a debuff on the given buff type slot.
     ///
-    /// C++ Reference: `Unit::hasDebuff(uint8 buffType)` — checks m_buffMap for non-buff entry.
     pub fn has_debuff_on_slot(&self, sid: SessionId, buff_type: i32) -> bool {
         self.sessions
             .get(&sid)
@@ -231,7 +225,6 @@ impl WorldState {
     }
     /// Extend the duration of an active buff. Returns true if extended.
     ///
-    /// C++ Reference: `MagicInstance::Type4Extend()` in MagicInstance.cpp:6964-7025
     /// Extends `m_tEndTime += sDuration` and sets `m_bDurationExtended = true`.
     /// A buff can only be extended once.
     pub fn extend_buff_duration(&self, sid: SessionId, buff_type: i32, extra_secs: u32) -> bool {
@@ -240,7 +233,6 @@ impl WorldState {
                 if buff.duration_secs == 0 {
                     return false; // Permanent buffs — nothing to extend
                 }
-                // C++ Reference: MagicInstance.cpp:6979 — only extend once
                 if buff.duration_extended {
                     return false;
                 }
@@ -260,7 +252,6 @@ impl WorldState {
     }
     /// Get the total AC bonus from active Type4 buffs for a session.
     ///
-    /// C++ Reference: `m_sACAmount` — accumulated from all active buffs' `sAC` field.
     /// Used in the physical damage formula: `temp_ac = m_sTotalAc + m_sACAmount`
     pub fn get_buff_ac_amount(&self, sid: SessionId) -> i32 {
         self.sessions
@@ -278,7 +269,6 @@ impl WorldState {
     }
     /// Get the total AC percentage modifier from active Type4 buffs.
     ///
-    /// C++ Reference: `m_sACPercent` — starts at 100, modified by `(sACPct - 100)`.
     /// Applied in SetUserAbility: `m_sTotalAc = m_sTotalAc * m_sACPercent / 100`.
     /// Returns the final multiplier (100 = no change, 130 = +30%).
     pub fn get_buff_ac_pct(&self, sid: SessionId) -> i32 {
@@ -298,7 +288,6 @@ impl WorldState {
     }
     /// Get the flat weapon damage bonus from active Type4 buffs.
     ///
-    /// C++ Reference: `m_bAddWeaponDamage` — set by BUFF_TYPE_WEAPON_DAMAGE (13).
     /// Added to weapon power in `SetUserAbility()`.
     pub fn get_buff_weapon_damage(&self, sid: SessionId) -> i32 {
         self.sessions
@@ -313,7 +302,6 @@ impl WorldState {
     }
     /// Get the AC reduction source amount from active Type4 debuffs.
     ///
-    /// C++ Reference: `m_sACSourAmount` — set by BUFF_TYPE_ATTACK_SPEED_ARMOR (18)
     /// when `sAC < 0`. Subtracted from target AC in damage formula.
     pub fn get_buff_ac_sour_amount(&self, sid: SessionId) -> i32 {
         self.sessions
@@ -328,7 +316,6 @@ impl WorldState {
     }
     /// Get the cumulative magic attack amount modifier from active Type4 buffs.
     ///
-    /// C++ Reference: `m_sMagicAttackAmount` — accumulated from buffs as
     /// `(bMagicAttack - 100)` on apply. Used in `GetMagicDamage()`:
     /// `total_hit = total_hit * (m_sMagicAttackAmount + 100) / 100`
     ///
@@ -347,7 +334,6 @@ impl WorldState {
     }
     /// Get the cumulative physical attack amount modifier from active buffs.
     ///
-    /// C++ Reference: `m_bAttackAmount` (Unit.h:435) — base 100, modified by:
     /// - BUFF_TYPE_DAMAGE (4)
     /// - BUFF_TYPE_BLESS_OF_TEMPLE (39)
     /// - BUFF_TYPE_HELL_FIRE_DRAGON (37)
@@ -373,7 +359,6 @@ impl WorldState {
 
     /// Get the cumulative elemental resistance modifier from active Type4 buffs.
     ///
-    /// C++ Reference: `m_bAddFireR` / `m_bAddColdR` / etc. — accumulated from buff Type4.
     /// Used in `GetMagicDamage()` (MagicInstance.cpp:6346-6373) as part of `total_r`.
     ///
     /// # Arguments
@@ -400,7 +385,6 @@ impl WorldState {
     }
     /// Get the player attack amount multiplier from active Type4 buffs.
     ///
-    /// C++ Reference: `m_bPlayerAttackAmount` — set by BUFF_TYPE_DAMAGE_DOUBLE (19).
     /// Default is 100 (no change). Used in PvP: `temp_ap = temp_ap * amount / 100`
     pub fn get_buff_player_attack_amount(&self, sid: SessionId) -> i32 {
         self.sessions
@@ -418,7 +402,6 @@ impl WorldState {
     }
     /// Check if a session has a specific buff type active.
     ///
-    /// C++ Reference: `Unit::hasBuff(BuffType)` — checks `m_buffMap`
     pub fn has_buff(&self, sid: SessionId, buff_type: i32) -> bool {
         self.sessions
             .get(&sid)
@@ -428,7 +411,6 @@ impl WorldState {
 
     /// Check if a session has physical damage fully blocked.
     ///
-    /// C++ Reference: `Unit::m_bBlockPhysical` — set by BUFF_TYPE_BLOCK_PHYSICAL_DAMAGE (157).
     pub fn has_block_physical(&self, sid: SessionId) -> bool {
         self.sessions
             .get(&sid)
@@ -437,7 +419,6 @@ impl WorldState {
     }
     /// Check if a session has magical damage fully blocked.
     ///
-    /// C++ Reference: `Unit::m_bBlockMagic` — set by BUFF_TYPE_BLOCK_MAGICAL_DAMAGE (158)
     /// and also BUFF_TYPE_FREEZE (22).
     pub fn has_block_magic(&self, sid: SessionId) -> bool {
         self.sessions
@@ -447,7 +428,6 @@ impl WorldState {
     }
     /// Get mirror damage state for a session.
     ///
-    /// C++ Reference: `m_bMirrorDamage`, `m_bMirrorDamageType`, `m_byMirrorAmount`
     /// Returns (active, is_direct_type, amount_pct).
     pub fn get_mirror_damage_state(&self, sid: SessionId) -> (bool, bool, u8) {
         self.sessions
@@ -458,7 +438,6 @@ impl WorldState {
 
     /// Get the dagger defense amount modifier for a session.
     ///
-    /// C++ Reference: `m_byDaggerRAmount` — default 100, reduced by Eskrima debuff (45).
     pub fn get_dagger_r_amount(&self, sid: SessionId) -> u8 {
         self.sessions
             .get(&sid)
@@ -468,7 +447,6 @@ impl WorldState {
 
     /// Get the bow defense amount modifier for a session.
     ///
-    /// C++ Reference: `m_byBowRAmount` — default 100, reduced by Eskrima debuff (45).
     pub fn get_bow_r_amount(&self, sid: SessionId) -> u8 {
         self.sessions
             .get(&sid)
@@ -478,7 +456,6 @@ impl WorldState {
 
     /// Insert a skill into the saved magic map for persistence.
     ///
-    /// C++ Reference: `CUser::InsertSavedMagic` in `User.cpp:4431`
     pub fn insert_saved_magic(&self, sid: SessionId, skill_id: u32, duration_secs: u16) {
         if skill_id <= Self::SAVED_MAGIC_MIN_SKILL_ID {
             return;
@@ -501,7 +478,6 @@ impl WorldState {
     }
     /// Remove a skill from the saved magic map.
     ///
-    /// C++ Reference: `CUser::RemoveSavedMagic` in `User.cpp:4446`
     pub fn remove_saved_magic(&self, sid: SessionId, skill_id: u32) {
         if let Some(mut handle) = self.sessions.get_mut(&sid) {
             handle.saved_magic_map.remove(&skill_id);
@@ -509,7 +485,6 @@ impl WorldState {
     }
     /// Check if a skill exists in the saved magic map.
     ///
-    /// C++ Reference: `CUser::HasSavedMagic` in `User.cpp:4460`
     pub fn has_saved_magic(&self, sid: SessionId, skill_id: u32) -> bool {
         self.sessions
             .get(&sid)
@@ -518,7 +493,6 @@ impl WorldState {
     }
     /// Get remaining duration in seconds for a saved skill.
     ///
-    /// C++ Reference: `CUser::GetSavedMagicDuration` in `User.cpp:4474`
     pub fn get_saved_magic_duration(&self, sid: SessionId, skill_id: u32) -> u16 {
         self.sessions
             .get(&sid)
@@ -565,7 +539,6 @@ impl WorldState {
     }
     /// Load saved magic entries into the session's map (game entry).
     ///
-    /// C++ Reference: `CDBAgent::LoadSavedMagic` in `DBAgent.cpp:976`
     pub fn load_saved_magic(&self, sid: SessionId, entries: &[(u32, i32)]) {
         if let Some(mut handle) = self.sessions.get_mut(&sid) {
             handle.saved_magic_map.clear();
@@ -587,7 +560,6 @@ impl WorldState {
     }
     /// Check and remove expired entries from the saved magic map.
     ///
-    /// C++ Reference: `CUser::CheckSavedMagic` in `User.cpp:4413`
     pub fn check_saved_magic(&self, sid: SessionId) {
         if let Some(mut handle) = self.sessions.get_mut(&sid) {
             let now_ms = std::time::SystemTime::now()
@@ -599,7 +571,6 @@ impl WorldState {
     }
     /// Get saved skill IDs for recasting on login/zone change.
     ///
-    /// C++ Reference: `CUser::RecastSavedMagic` in `User.cpp:4487`
     pub fn get_saved_magic_for_recast(&self, sid: SessionId) -> Vec<(u32, u16)> {
         self.sessions
             .get(&sid)
@@ -668,7 +639,6 @@ impl WorldState {
     }
     /// Clear all active buffs from a session (InitType4 equivalent).
     ///
-    /// C++ Reference: `Unit::InitType4()` in `Unit.cpp:1999-2019`
     ///
     /// Iterates all active Type4 buffs and removes them.
     /// If `remove_saved_magic` is true, also removes corresponding saved magic entries.
@@ -699,7 +669,6 @@ impl WorldState {
 
     /// Clear all durational skills (DOTs/HOTs) from a session (InitType3 equivalent).
     ///
-    /// C++ Reference: `Unit::InitType3()` in `Unit.cpp:1991-1997`
     ///
     /// Resets all durational skill slots to inactive.
     pub fn clear_all_dots(&self, sid: SessionId) {
@@ -710,7 +679,6 @@ impl WorldState {
     ///
     /// Returns `(session_id, expired_buff)` pairs for notification.
     ///
-    /// C++ Reference: `CUser::Type4Duration()` in `UserDurationSkillSystem.cpp:206`
     pub fn collect_expired_buffs(&self) -> Vec<(SessionId, ActiveBuff)> {
         let mut expired = Vec::new();
         for mut entry in self.sessions.iter_mut() {
@@ -807,7 +775,6 @@ impl WorldState {
     ///
     /// Returns true if a slot was available and the effect was added.
     ///
-    /// C++ Reference: `MagicInstance.cpp:4319-4343` — DOT setup in `ExecuteType3`
     pub fn add_durational_skill(
         &self,
         sid: SessionId,
@@ -852,7 +819,6 @@ impl WorldState {
     /// The `expired` flag is `true` when that slot just reached its tick limit and was cleared.
     /// Expired DOTs (tick_count >= tick_limit) are automatically cleared.
     ///
-    /// C++ Reference: `CUser::HPTimeChangeType3()` in `UserDurationSkillSystem.cpp:138-204`
     pub fn process_dot_tick(&self) -> Vec<(SessionId, i16, bool)> {
         let mut results = Vec::new();
         for mut entry in self.sessions.iter_mut() {
@@ -884,7 +850,6 @@ impl WorldState {
 
     /// Check if a session has any active harmful DOT (damage-over-time) effect.
     ///
-    /// C++ Reference: `UserDurationSkillSystem.cpp:192-194` — counts `totalActiveDOTSkills`
     /// where `pEffect->m_sHPAmount < 0`.
     pub fn has_active_harmful_dot(&self, sid: SessionId) -> bool {
         self.with_session(sid, |h| {
@@ -896,7 +861,6 @@ impl WorldState {
     }
     /// Remove all durational skills from a session (e.g., on death).
     ///
-    /// C++ Reference: `MagicInstance.cpp:4933-4945` — `REMOVE_TYPE3`
     pub fn clear_durational_skills(&self, sid: SessionId) {
         if let Some(mut handle) = self.sessions.get_mut(&sid) {
             for slot in handle.durational_skills.iter_mut() {
@@ -911,7 +875,6 @@ impl WorldState {
     }
     /// Check if a session has any active durational skill (DOT or HOT).
     ///
-    /// C++ Reference: `CUser::m_bType3Flag` — set when any Type3 durational slot is active.
     /// Used by `MagicInstance.cpp:3633-3638` to skip Type3 application in temple event
     /// zones when combat is not allowed.
     pub fn has_active_durational(&self, sid: SessionId) -> bool {
@@ -921,7 +884,6 @@ impl WorldState {
 
     /// Check if a session has any active HOT (heal-over-time) effect.
     ///
-    /// C++ Reference: `MagicInstance.cpp:2174-2178, 2210-2214` — prevents HOT stacking
     /// A HOT is a durational skill with hp_amount > 0.
     pub fn has_active_hot(&self, sid: SessionId) -> bool {
         self.with_session(sid, |h| {
@@ -935,7 +897,6 @@ impl WorldState {
     /// Remove only harmful (negative hp_amount) DOT effects from a session.
     ///
     /// Returns true if any harmful DOTs were removed.
-    /// C++ Reference: `MagicInstance::ExecuteType5` — REMOVE_TYPE3 case
     pub fn clear_harmful_dots(&self, sid: SessionId) -> bool {
         let mut removed_any = false;
         if let Some(mut handle) = self.sessions.get_mut(&sid) {
@@ -956,7 +917,6 @@ impl WorldState {
     /// Remove only healing (positive hp_amount) DOT/HOT effects from a session.
     ///
     /// Returns true if any HOTs were removed.
-    /// C++ Reference: `MagicInstance::Type3Cancel()` in MagicInstance.cpp:6913-6961
     /// Type3Cancel only cancels HOTs (m_sHPAmount > 0), not harmful DOTs.
     pub fn clear_healing_dots(&self, sid: SessionId) -> bool {
         let mut removed_any = false;
@@ -980,7 +940,6 @@ impl WorldState {
     /// Remove all debuff-type buffs from a session.
     ///
     /// Returns the list of removed buff types for notification.
-    /// C++ Reference: `MagicInstance::ExecuteType5` — REMOVE_TYPE4 case
     pub fn remove_debuffs(&self, sid: SessionId) -> Vec<i32> {
         let mut removed = Vec::new();
         if let Some(mut handle) = self.sessions.get_mut(&sid) {
@@ -1008,7 +967,6 @@ impl WorldState {
     }
     /// Get a perk definition by index.
     ///
-    /// C++ Reference: `g_pMain->m_PerksArray.GetData(index)`
     pub fn get_perk_definition(&self, index: i32) -> Option<PerkRow> {
         self.perk_definitions.get(&index).map(|r| r.clone())
     }
@@ -1107,7 +1065,6 @@ impl WorldState {
 
     /// Roll the jackpot multiplier from the given setting.
     ///
-    /// C++ Reference: `UserLevelExperienceSystem.cpp:550-556` (Noah) / `592-598` (EXP).
     /// Returns 0 if the roll doesn't hit any tier.
     pub(crate) fn roll_jackpot_multiplier(setting: &JackPotSetting) -> u32 {
         let rand_ = rand::random::<u32>() % 10001;
@@ -1130,7 +1087,6 @@ impl WorldState {
 
     /// Try to apply Noah (gold) jackpot to a gold pickup.
     ///
-    /// C++ Reference: `CUser::JackPotNoah()` in `UserLevelExperienceSystem.cpp:536-573`.
     /// Returns `true` if the jackpot fired (caller should NOT do normal GoldGain).
     /// Returns `false` if no jackpot (caller should do normal GoldGain).
     pub fn try_jackpot_noah(&self, sid: SessionId, gold: u32) -> bool {
@@ -1210,7 +1166,6 @@ impl WorldState {
 
     /// Try to apply EXP jackpot to an XP gain.
     ///
-    /// C++ Reference: `CUser::JackPotExp()` in `UserLevelExperienceSystem.cpp:575-616`.
     /// Returns `true` if the jackpot fired (caller should NOT do normal ExpChange).
     /// Returns `false` if no jackpot (caller should do normal ExpChange).
     pub async fn try_jackpot_exp(&self, sid: SessionId, exp: i64) -> bool {
@@ -1291,7 +1246,6 @@ impl WorldState {
 
     /// Get the class-vs-class PvP damage multiplier.
     ///
-    /// C++ Reference: `Unit.cpp:523-604` — class matchup branch in GetDamage
     ///
     /// Returns 1.0 if damage settings are not loaded or classes are unrecognized.
     pub fn get_class_damage_multiplier(&self, attacker_class: u16, target_class: u16) -> f64 {
@@ -1374,7 +1328,6 @@ impl WorldState {
     }
     /// Get the monster defense AC multiplier.
     ///
-    /// C++ Reference: `Unit.cpp:345` — `acc *= g_pMain->pDamageSetting.mondef`
     pub fn get_mon_def_multiplier(&self) -> f64 {
         self.damage_settings
             .read()
@@ -1384,7 +1337,6 @@ impl WorldState {
     }
     /// Get the monster take-damage multiplier.
     ///
-    /// C++ Reference: `Unit.cpp:510` — `daaa *= g_pMain->pDamageSetting.montakedamage`
     pub fn get_mon_take_damage_multiplier(&self) -> f64 {
         self.damage_settings
             .read()
@@ -1394,7 +1346,6 @@ impl WorldState {
     }
     /// Get the R-damage multiplier for non-priest level 30+.
     ///
-    /// C++ Reference: `Unit.cpp:487` — `dm *= g_pMain->pDamageSetting.rdamage`
     pub fn get_r_damage_multiplier(&self) -> f64 {
         self.damage_settings
             .read()
@@ -1442,7 +1393,6 @@ impl WorldState {
 
     /// Get the weapon quality damage multiplier for a player (mage weapon bonus).
     ///
-    /// C++ Reference: `CUser::getplusdamage()` in `MagicInstance.cpp:6694-6744`
     /// Checks left hand first, then right hand, and returns a multiplier based on
     /// the weapon's `m_ItemType` and `ItemClass` fields from the `DAMAGE_SETTINGS` table.
     pub fn get_plus_damage(&self, sid: SessionId) -> f64 {
@@ -1496,7 +1446,6 @@ impl WorldState {
 
     /// Get the caster's weapon damage and attribute damage for the magic damage formula.
     ///
-    /// C++ Reference: `MagicInstance::GetMagicDamage()` in MagicInstance.cpp:6375-6433
     ///
     /// Returns `(righthand_damage, attribute_damage)`:
     /// - **Mages** (class 3/9/10): staff damage + `m_bAddWeaponDamage` buff, plus
@@ -1586,7 +1535,6 @@ impl WorldState {
 
     /// Recast saved magic (persistent buffs) after zone change, login, respawn, etc.
     ///
-    /// C++ Reference: `CUser::RecastSavedMagic()` in `User.cpp:4487-4524`
     ///
     /// For each saved magic entry:
     /// 1. Look up the MagicType4 data for the skill
@@ -1602,7 +1550,6 @@ impl WorldState {
     }
     /// Recast a lockable scroll after debuff displacement.
     ///
-    /// C++ Reference: `CUser::RecastLockableScrolls(uint8 buffType)` in `User.cpp:4527-4534`
     ///
     /// 1. Removes the current buff entry for the given buff type (without removing saved magic)
     /// 2. Recasts saved magic filtered by the buff type
@@ -1616,7 +1563,6 @@ impl WorldState {
     }
     /// Recast saved magic, optionally filtered by buff type.
     ///
-    /// C++ Reference: `CUser::RecastSavedMagic(uint8 buffType)` in `User.cpp:4487-4525`
     /// When `filter_buff_type` is `Some(bt)`, only recasts saved skills whose
     /// `_MAGIC_TYPE4::bBuffType == bt`. When `None`, recasts all.
     pub fn recast_saved_magic_filtered(
@@ -1630,7 +1576,6 @@ impl WorldState {
             return 0;
         }
 
-        // C++ Reference: User.cpp:4514 — skip if siege-transformed
         if self.is_transformed(sid) {
             return 0;
         }
@@ -1651,7 +1596,6 @@ impl WorldState {
                 }
             };
 
-            // C++ Reference: User.cpp:4503-4511 — filter by buff type when specified
             if let Some(ft) = filter_buff_type {
                 if type4.buff_type.unwrap_or(0) != ft {
                     continue;
@@ -1698,7 +1642,6 @@ impl WorldState {
             self.apply_buff(sid, buff);
 
             // Apply Type4 special stats (DECREASE_RESIST, EXPERIENCE, Kaul, mirror, etc.)
-            // C++ Reference: MagicInstance.cpp:4757 — SetUserAbility() after GrantType4Buff
             let s_skill = self
                 .get_magic(*skill_id as i32)
                 .and_then(|m| m.skill)
@@ -1709,11 +1652,9 @@ impl WorldState {
             // are applied inside apply_type4_stats above — no need to duplicate here.
 
             // Recalculate derived stats after buff application
-            // C++ Reference: MagicInstance.cpp — pUser->SetUserAbility()
             self.set_user_ability(sid);
 
             // Build MAGIC_EFFECTING broadcast packet
-            // C++ Reference: MagicInstance::BuildSkillPacket() — format:
             //   WIZ_MAGIC_PROCESS | u8(MAGIC_EFFECTING) | u32(skill_id) |
             //   u32(caster=sid) | u32(target=sid) | u32[7](data)
             let mut pkt = Packet::new(Opcode::WizMagicProcess as u8);
@@ -1755,16 +1696,12 @@ impl WorldState {
 // ── NPC Magic Damage Computation ─────────────────────────────────────
 
 /// Compute magic damage dealt by an NPC caster to a player target.
-///
-/// C++ Reference: `MagicInstance::GetMagicDamage()` in MagicInstance.cpp:6250
-///
 /// When the caster is an NPC:
 /// - Hit rate check uses `GetHitRate(target_hitrate / caster_evasion + 2.0)` — NPCs get +2.0 bonus
 /// - `total_hit` = raw `sFirstDamage` from magic_type3 table (no CHA/stat scaling)
 /// - damage formula vs players: `485 * total_hit / (total_r + 510)` where total_r = elemental resistance
 /// - Final: `rand(0, damage) * 0.3 + damage * 0.85`
 /// - NPC casters have no righthand_damage or attribute_damage, so those terms are 0
-///
 /// # Arguments
 /// * `base_damage` — raw `sFirstDamage` from magic_type3 table
 /// * `target_total_r` — target's total elemental resistance (items + buffs)
@@ -1807,9 +1744,6 @@ pub fn compute_npc_magic_damage(
 }
 
 /// Compute heal amount for an NPC healer casting on a friendly NPC.
-///
-/// C++ Reference: `MagicInstance::ExecuteType3()` — heal path
-///
 /// For healer NPCs, the heal amount is the absolute value of `sFirstDamage`
 /// from the magic_type3 table. No CHA scaling applies to NPC healers.
 pub fn compute_npc_heal_amount(base_damage: i32) -> i32 {
@@ -2914,7 +2848,6 @@ mod blink_duration_tests {
 
     #[test]
     fn test_perk_weight_formula() {
-        // C++: max_weight += (perkCount * pointsSpent) * 10
         let (world, _sid) = setup_perk_world();
         let mut levels = [0i16; 13];
         levels[0] = 5; // 5 levels × 150 per level × 10 = 7500 extra weight
@@ -2924,7 +2857,6 @@ mod blink_duration_tests {
 
     #[test]
     fn test_perk_hp_mp_formula() {
-        // C++: max_hp += perkCount * pointsSpent (flat)
         let (world, _sid) = setup_perk_world();
         let mut levels = [0i16; 13];
         levels[1] = 4; // HP: 4 × 100 = 400
@@ -2935,7 +2867,6 @@ mod blink_duration_tests {
 
     #[test]
     fn test_perk_damage_percent_formula() {
-        // C++: damage += damage * (perkCount * pointsSpent) / 100
         let (world, _sid) = setup_perk_world();
         let mut levels = [0i16; 13];
         levels[9] = 5; // percentDamageMonster: 5 × 4 = 20%
@@ -2953,7 +2884,6 @@ mod blink_duration_tests {
 
     #[test]
     fn test_perk_exp_percent_formula() {
-        // C++: final_exp += (temp_exp * perkExperience) / 100
         let (world, _sid) = setup_perk_world();
         let mut levels = [0i16; 13];
         levels[5] = 5; // percentExp: 5 × 4 = 20%
@@ -2968,7 +2898,6 @@ mod blink_duration_tests {
 
     #[test]
     fn test_perk_loyalty_flat_bonus() {
-        // C++: nChangeAmount += perkLoyalty (flat, not percent)
         let (world, _sid) = setup_perk_world();
         let mut levels = [0i16; 13];
         levels[3] = 5; // loyalty: 5 × 3 = 15 flat NP
@@ -2978,7 +2907,6 @@ mod blink_duration_tests {
 
     #[test]
     fn test_perk_drop_percent_formula() {
-        // C++: iPer += iPer * perkDrop / 100; cap at 10000
         let (world, _sid) = setup_perk_world();
         let mut levels = [0i16; 13];
         levels[4] = 3; // percentDrop: 3 × 2 = 6%
@@ -2993,8 +2921,6 @@ mod blink_duration_tests {
 
     #[test]
     fn test_perk_ac_attack_flat_formula() {
-        // C++: m_sTotalAc += perkCount * pointsSpent
-        // C++: m_sTotalHit += perkCount * pointsSpent
         let (world, _sid) = setup_perk_world();
         let mut levels = [0i16; 13];
         levels[11] = 5; // defence: 5 × 20 = 100 flat AC
@@ -3005,7 +2931,7 @@ mod blink_duration_tests {
 
     // ── Sprint 963: Additional coverage ──────────────────────────────
 
-    /// Saved magic constants match C++ reference.
+    /// Saved magic constants match protocol specification.
     #[test]
     fn test_saved_magic_constants() {
         assert_eq!(WorldState::SAVED_MAGIC_MIN_SKILL_ID, 500_000);
@@ -3219,7 +3145,6 @@ mod blink_duration_tests {
     // ── Sprint 1000: Additional coverage ──────────────────────────────
 
     /// is_lockable_scroll recognizes exactly 7 buff types.
-    /// C++ Reference: `CUser::isLockableScroll()` in `User.h:1036-1043`
     #[test]
     fn test_is_lockable_scroll_types() {
         let lockable = [1, 2, 4, 6, 7, 48, 171];
@@ -3236,7 +3161,6 @@ mod blink_duration_tests {
     /// Weapon slot indices: RIGHTHAND=6, LEFTHAND=8 in inventory layout.
     #[test]
     fn test_weapon_slot_indices() {
-        // C++ Reference: snapshot_combat reads inventory[6] and inventory[8]
         const RIGHTHAND: usize = 6;
         const LEFTHAND: usize = 8;
         assert_eq!(RIGHTHAND, 6);

@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use super::*;
 
-/// C++ Reference: `KnightsPacket::KNIGHTS_CLAN_BONUS` in `packets.h:645`
 const KNIGHTS_CLAN_BONUS: u8 = 98;
 
 impl WorldState {
@@ -12,13 +11,11 @@ impl WorldState {
 
     /// Look up a clan by ID.
     ///
-    /// C++ Reference: `CGameServerDlg::GetClanPtr(sClanID)`
     pub fn get_knights(&self, clan_id: u16) -> Option<KnightsInfo> {
         self.knights.get(&clan_id).map(|r| r.clone())
     }
     /// Get all clan IDs and names (for WIZ_KNIGHTS_LIST).
     ///
-    /// C++ Reference: `CUser::SendAllKnightsID` in `User.cpp:3703-3724`
     pub fn get_all_knights(&self) -> Vec<(u16, String)> {
         self.knights
             .iter()
@@ -44,7 +41,6 @@ impl WorldState {
     ///
     /// Used by the tournament system to look up clans by name string.
     ///
-    /// C++ Reference: `ChatHandler.cpp:1194-1204` — iterates `m_KnightsArray` by name.
     pub fn find_knights_by_name(&self, name: &str) -> Option<KnightsInfo> {
         self.knights
             .iter()
@@ -56,21 +52,18 @@ impl WorldState {
 
     /// Insert or replace a tournament arena entry.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ClanVsDataList.SetData(zone_id, data)`
     pub fn insert_tournament(&self, state: crate::handler::tournament::TournamentState) {
         self.tournament_registry.insert(state.zone_id, state);
     }
 
     /// Remove a tournament arena entry by zone ID.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ClanVsDataList.DeleteData(zone_id)`
     pub fn remove_tournament(&self, zone_id: u16) {
         self.tournament_registry.remove(&zone_id);
     }
 
     /// Mutate the tournament state for a zone via a closure (if it exists).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ClanVsDataList.GetData(zone_id)` (mutable ptr).
     pub fn with_tournament(
         &self,
         zone_id: u16,
@@ -92,7 +85,6 @@ impl WorldState {
     }
     /// Get top N clans for a nation, sorted by points (descending).
     ///
-    /// C++ Reference: `KnightsManager.cpp:1334-1362` — `KnightsTop10`
     /// Returns up to `limit` clans with (id, name, mark_version) for the given nation.
     pub fn get_top_knights_by_nation(&self, nation: u8, limit: usize) -> Vec<(u16, String, u16)> {
         let mut clans: Vec<(u32, u16, String, u16)> = self
@@ -116,7 +108,6 @@ impl WorldState {
     }
     /// Check if a clan name already exists (case-insensitive).
     ///
-    /// C++ Reference: `NameChangeHandler.cpp` — scans `m_KnightsArray` for duplicate names
     pub fn knights_name_exists(&self, name: &str) -> bool {
         let upper = name.to_uppercase();
         for entry in self.knights.iter() {
@@ -128,7 +119,6 @@ impl WorldState {
     }
     /// Send a packet to all online members of a clan.
     ///
-    /// C++ Reference: `CKnights::Send(Packet *pkt)`
     pub fn send_to_knights_members(
         &self,
         clan_id: u16,
@@ -163,7 +153,6 @@ impl WorldState {
     }
     /// Get all online session IDs that belong to a clan.
     ///
-    /// C++ Reference: `ZoneChangeWarpHandler.cpp:572-584` — iterates clan member list.
     pub fn get_online_knights_session_ids(&self, clan_id: u16) -> Vec<SessionId> {
         let mut sids = Vec::new();
         for entry in self.sessions.iter() {
@@ -177,7 +166,6 @@ impl WorldState {
     }
     /// Clear the clan from all online sessions (used when a clan is disbanded).
     ///
-    /// C++ Reference: `CKnightsManager::ReqKnightsDestroy` — clears all members.
     pub fn clear_knights_from_sessions(&self, clan_id: u16) {
         for mut entry in self.sessions.iter_mut() {
             if let Some(ref mut ch) = entry.value_mut().character {
@@ -192,7 +180,6 @@ impl WorldState {
 
     /// Look up an alliance by its main clan ID.
     ///
-    /// C++ Reference: `CGameServerDlg::GetAlliancePtr(sAllianceID)`
     pub fn get_alliance(&self, main_clan_id: u16) -> Option<KnightsAlliance> {
         self.alliances.get(&main_clan_id).map(|r| r.clone())
     }
@@ -212,7 +199,6 @@ impl WorldState {
     }
     /// Send a packet to all online members of all clans in an alliance.
     ///
-    /// C++ Reference: `CKnights::SendChatAlliance` — sends to all alliance members.
     pub fn send_to_alliance_members(
         &self,
         alliance_id: u16,
@@ -242,7 +228,6 @@ impl WorldState {
 
     /// Create a new party with the given leader. Returns the party ID.
     ///
-    /// C++ Reference: `CGameServerDlg::CreateParty` in `GameServerDlg.cpp`
     pub fn create_party(&self, leader_sid: SessionId) -> Option<u16> {
         let party_id = self.next_party_id.fetch_add(1, Ordering::Relaxed);
         if party_id == 0 {
@@ -274,7 +259,6 @@ impl WorldState {
     }
     /// Add a member to a party. Returns true on success.
     ///
-    /// C++ Reference: `CGameServerDlg::AgreeToJoinTheParty`
     pub fn add_party_member(&self, party_id: u16, sid: SessionId) -> bool {
         let added = if let Some(mut party) = self.parties.get_mut(&party_id) {
             party.add_member(sid)
@@ -292,7 +276,6 @@ impl WorldState {
     }
     /// Remove a member from a party. Returns true if found and removed.
     ///
-    /// C++ Reference: `CGameServerDlg::PartyNemberRemove`
     pub fn remove_party_member(&self, party_id: u16, sid: SessionId) -> bool {
         let removed = if let Some(mut party) = self.parties.get_mut(&party_id) {
             party.remove_member(sid)
@@ -312,7 +295,6 @@ impl WorldState {
     /// Disband an entire party, clearing party_id on all members.
     /// Returns the list of member session IDs that were in the party.
     ///
-    /// C++ Reference: `CGameServerDlg::PartyisDelete`
     pub fn disband_party(&self, party_id: u16) -> Vec<SessionId> {
         let members = if let Some((_, party)) = self.parties.remove(&party_id) {
             party.active_members()
@@ -331,7 +313,6 @@ impl WorldState {
     }
     /// Promote a new leader in a party.
     ///
-    /// C++ Reference: `CGameServerDlg::PartyLeaderPromote`
     pub fn promote_party_leader(&self, party_id: u16, new_leader_sid: SessionId) -> bool {
         if let Some(mut party) = self.parties.get_mut(&party_id) {
             if let Some(pos) = party.find_slot(new_leader_sid) {
@@ -383,7 +364,6 @@ impl WorldState {
     }
     /// Clean up party state when a player disconnects.
     ///
-    /// C++ Reference: `DatabaseThread.cpp:1479-1486`
     ///
     /// If the disconnecting player is the party leader, promote the next member
     /// before removal. If only one member remains after removal, disband entirely.
@@ -403,7 +383,6 @@ impl WorldState {
         };
 
         // If the disconnecting player is the leader, promote the next member first
-        // C++ Reference: DatabaseThread.cpp:1482-1483
         if party.is_leader(sid) {
             // Find first non-leader member
             if let Some(&Some(next_sid)) = party.members.iter().skip(1).find(|m| m.is_some()) {
@@ -447,7 +426,6 @@ impl WorldState {
     }
     /// Create a new chat room and return its index, or None on failure.
     ///
-    /// C++ Reference: `CUser::ChatRoomCreate` in `ChatRoomHandler.cpp:82-155`
     pub fn create_chat_room(
         &self,
         name: String,
@@ -501,7 +479,6 @@ impl WorldState {
     }
     /// Send a packet to all members of a chat room.
     ///
-    /// C++ Reference: `CUser::SendChatRoom` in `ChatRoomHandler.cpp:293-306`
     pub fn send_to_chat_room(&self, room_index: u16, packet: &Packet) {
         let member_names: Vec<String> = {
             match self.chat_rooms.get(&room_index) {
@@ -521,7 +498,6 @@ impl WorldState {
     }
     /// Collect all chat rooms for listing.
     ///
-    /// C++ Reference: `CUser::ChatRoomList` in `ChatRoomHandler.cpp:51-80`
     pub fn list_chat_rooms(&self) -> Vec<(u16, String, bool, u8, u16, u16)> {
         let mut rooms = Vec::new();
         for entry in self.chat_rooms.iter() {
@@ -541,13 +517,11 @@ impl WorldState {
 
     /// Get a clone of the king system state for a nation.
     ///
-    /// C++ Reference: `CGameServerDlg::m_KingSystemArray.GetData(nation)`
     pub fn get_king_system(&self, nation: u8) -> Option<KingSystem> {
         self.king_systems.get(&nation).map(|r| r.clone())
     }
     /// Check if a character name is the king of a given nation.
     ///
-    /// C++ Reference: `UserInfoSystem.cpp:37-41` — `pData->m_strKingName == m_strUserID`
     pub fn is_king(&self, nation: u8, name: &str) -> bool {
         self.king_systems
             .get(&nation)
@@ -566,19 +540,16 @@ impl WorldState {
 
     /// Get read access to the siege warfare state.
     ///
-    /// C++ Reference: `CGameServerDlg::pSiegeWar` member access
     pub fn siege_war(&self) -> &tokio::sync::RwLock<SiegeWarfare> {
         &self.siege_war
     }
     /// Access the CSW runtime event state (lifecycle, timers, clan kill list).
     ///
-    /// C++ Reference: `CGameServerDlg::pCswEvent`
     pub fn csw_event(&self) -> &tokio::sync::RwLock<CswEventState> {
         &self.csw_event
     }
     /// Check if the Cinderella War event is currently active.
     ///
-    /// C++ Reference: `CGameServerDlg::pCindWar.isON()`
     pub fn is_cinderella_active(&self) -> bool {
         self.cindwar_active
             .load(std::sync::atomic::Ordering::Relaxed)
@@ -586,7 +557,6 @@ impl WorldState {
 
     /// Check if Zindan War (special event) is currently opened/active.
     ///
-    /// C++ Reference: `CGameServerDlg::pSpecialEvent.opened`
     pub fn is_zindan_event_opened(&self) -> bool {
         self.zindan_event_opened
             .load(std::sync::atomic::Ordering::Relaxed)
@@ -594,7 +564,6 @@ impl WorldState {
 
     /// Set the Zindan War (special event) opened state.
     ///
-    /// C++ Reference: `CGameServerDlg::pSpecialEvent.opened`
     pub fn set_zindan_event_opened(&self, opened: bool) {
         self.zindan_event_opened
             .store(opened, std::sync::atomic::Ordering::Relaxed);
@@ -602,7 +571,6 @@ impl WorldState {
 
     /// Get the zone ID of the active Cinderella War event.
     ///
-    /// C++ Reference: `CGameServerDlg::isCindirellaZone()`
     pub fn cinderella_zone_id(&self) -> u16 {
         self.cindwar_zone_id
             .load(std::sync::atomic::Ordering::Relaxed)
@@ -610,7 +578,6 @@ impl WorldState {
 
     /// Check if a player is a Cinderella War event participant in the event zone.
     ///
-    /// C++ Reference: `User.cpp:668` — `bool isCindIn = pCindWar.isEventUser() && g_pMain->isCindirellaZone(GetZoneID());`
     ///
     /// Returns true if ALL of: event is active, player is in event user set,
     /// and player is currently in the Cinderella zone.
@@ -765,7 +732,6 @@ impl WorldState {
 
     /// Check whether a player can enter the Delos zone during active CSW.
     ///
-    /// C++ Reference: `CUser::CastleSiegeWarfareCanenterDelos()` in `thyke_csw.cpp:282-297`
     /// Requires: in a real clan (not auto-clan), clan grade <= 3, and loyalty > 0.
     pub fn can_enter_delos(&self, clan_id: u16, loyalty: u32) -> bool {
         if clan_id == 0 || loyalty == 0 {
@@ -779,7 +745,6 @@ impl WorldState {
     }
     /// Get the top 10 ranked clans for a nation, sorted by points descending.
     ///
-    /// C++ Reference: `CKingSystem::LoadRecommendList()` — uses `m_KnightsRatingArray`
     /// to find top 10 clan leaders who become senators.
     pub fn get_top_ranked_clans(&self, nation: u8, limit: usize) -> Vec<(u16, String)> {
         let mut clans: Vec<(u16, String, u32)> = Vec::new();
@@ -819,7 +784,6 @@ impl WorldState {
     }
     /// Get the loyalty symbol rank for a player.
     ///
-    /// C++ Reference: `CUser::GetLoyaltySymbolRank()` in `User.cpp:4922`
     pub fn get_loyalty_symbol_rank(&self, sid: SessionId) -> i8 {
         self.with_session(sid, |h| {
             let pr = h.personal_rank;
@@ -851,7 +815,6 @@ impl WorldState {
     /// If an entry with the same `sid` already exists, updates the note.
     /// Otherwise creates a new entry.
     ///
-    /// C++ Reference: `CUser::PartyBBSRegister` in `PartyHandler.cpp:959-1038`
     pub fn register_seeking_party(&self, entry: SeekingPartyUser) {
         let mut list = self.seeking_party.write();
         if let Some(existing) = list.iter_mut().find(|e| e.sid == entry.sid) {
@@ -867,20 +830,17 @@ impl WorldState {
     }
     /// Remove a seeking-party entry by session ID.
     ///
-    /// C++ Reference: `CUser::PartyBBSDelete` in `PartyHandler.cpp:1040-1061`
     pub fn remove_seeking_party(&self, sid: SessionId) {
         let mut list = self.seeking_party.write();
         list.retain(|e| e.sid != sid);
     }
     /// Get a snapshot of the seeking-party list for iteration.
     ///
-    /// C++ Reference: `CGameServerDlg::m_SeekingPartyArray`
     pub fn get_seeking_party_list(&self) -> Vec<SeekingPartyUser> {
         self.seeking_party.read().clone()
     }
     /// Get the number of party members for a given party ID.
     ///
-    /// C++ Reference: `CUser::GetPartyMemberAmount` in `PartyHandler.cpp:1258-1273`
     pub fn get_party_member_count(&self, party_id: u16) -> u8 {
         self.parties
             .get(&party_id)
@@ -898,8 +858,6 @@ impl WorldState {
 
     /// Broadcast a merchant wind notice to all players in a zone.
     ///
-    /// C++ Reference: `CUser::ClientMerchantWindNotice` in `User.cpp:4863-4873`
-    ///                `CGameServerDlg::Send_Merchant` in `FundamentalMethods.cpp:458-479`
     ///
     /// Sends a scrolling merchant notice to all players in the zone.
     ///
@@ -935,7 +893,6 @@ impl WorldState {
 
     /// Add a GM to the online list (called on gamestart phase 2).
     ///
-    /// C++ Reference: `CUser::GmListProcess(false)` in `User.cpp:4983-5012`
     pub fn gm_list_add(&self, name: &str) {
         let mut list = self.gm_list.write();
         if !list.iter().any(|n| n == name) {
@@ -945,7 +902,6 @@ impl WorldState {
 
     /// Remove a GM from the online list (called on logout/disconnect).
     ///
-    /// C++ Reference: `CUser::GmListProcess(true)` in `User.cpp:4983-5012`
     pub fn gm_list_remove(&self, name: &str) {
         let mut list = self.gm_list.write();
         list.retain(|n| n != name);
@@ -953,7 +909,6 @@ impl WorldState {
 
     /// Build a WIZ_NOTICE(5) packet containing the current GM online list.
     ///
-    /// C++ Reference: `User.cpp:5003-5011`
     ///
     /// Wire: `[u8 sub=5] [u8 count] [for each: u16le len + string bytes]`
     ///
@@ -975,8 +930,7 @@ impl WorldState {
 
     /// Update clan online member count and broadcast bonus info to all clan members.
     ///
-    /// C++ Reference: `CUser::KnightsClanBuffUpdate(bool sign, CKnights* pmyknights)`
-    /// in `KnightsManager.cpp:1900-1938`
+    ///
     ///
     /// - `sign=true` (login): increment online member count
     /// - `sign=false` (logout): decrement online member count
@@ -985,7 +939,6 @@ impl WorldState {
     /// based on online member count, then broadcasts `WIZ_KNIGHTS_PROCESS(KNIGHTS_CLAN_BONUS)`
     /// to all online clan members.
     pub fn knights_clan_buff_update(&self, clan_id: u16, sign: bool, session_id: SessionId) {
-        // C++ Reference: if (!isInClan() || isInAutoClan()) return;
         if clan_id == 0 {
             return;
         }
@@ -1018,7 +971,6 @@ impl WorldState {
         }
 
         // Calculate NP bonus: ceil(online_members * 10 / 100), max 5
-        // C++ Reference: KnightsManager.cpp:1923-1930
         if info.online_members >= 5 {
             info.online_np_count = ((info.online_members as f64 * 10.0) / 100.0).ceil() as u16;
         } else {
@@ -1026,7 +978,6 @@ impl WorldState {
         }
 
         // Calculate EXP bonus: 15 + online_members, max 65
-        // C++ Reference: KnightsManager.cpp:1926-1929
         if info.online_members >= 5 {
             info.online_exp_count = 15 + info.online_members;
         } else {
@@ -1044,7 +995,6 @@ impl WorldState {
         drop(entry); // Release DashMap lock before broadcasting
 
         // Broadcast to all clan members
-        // C++ Reference: KnightsManager.cpp:1935-1937
         let mut pkt = Packet::new(Opcode::WizKnightsProcess as u8);
         pkt.write_u8(KNIGHTS_CLAN_BONUS);
         pkt.write_u16(online_members);

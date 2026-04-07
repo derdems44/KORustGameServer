@@ -1,19 +1,14 @@
 //! Premium system models — maps to `premium_item_types`, `premium_item_exp`,
 //! `account_premium`, and `premium_gift_item` PostgreSQL tables.
-//!
-//! C++ Reference:
 //! - `_PREMIUM_ITEM` struct — per-type bonus definitions
 //! - `_PREMIUM_ITEM_EXP` struct — level-range XP bonus per premium type
 //! - `ACCOUNT_PREMIUM_DATA` — per-account active subscriptions
-//!
 //! Premium types (1-13) define what bonuses a player receives while that
 //! premium tier is active: XP restore on death, gold bonus, drop bonus,
 //! loyalty bonus, repair discount, and sell price bonus.
 
 /// A premium item type definition row from the database.
-///
 /// Defines the bonus percentages for each premium tier.
-/// C++ equivalent: `_PREMIUM_ITEM` (loaded via `CPremiumItemSet`).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PremiumItemRow {
     /// Premium type identifier (1-13).
@@ -47,8 +42,6 @@ pub struct PremiumItemRow {
 }
 
 /// Premium XP bonus by level range for a specific premium type.
-///
-/// C++ equivalent: `_PREMIUM_ITEM_EXP` (loaded via `CPremiumItemExpSet`).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PremiumItemExpRow {
     /// Unique index.
@@ -64,11 +57,8 @@ pub struct PremiumItemExpRow {
 }
 
 /// A premium gift item row from the database.
-///
 /// Bonus items automatically sent to players via letter when a premium
 /// of the matching type is activated.
-///
-/// C++ equivalent: `_ITEM_PREMIUM_GIFT` (loaded via `CPremiumGiftItemSet`).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PremiumGiftItemRow {
     /// Row identifier.
@@ -90,7 +80,6 @@ pub struct PremiumGiftItemRow {
 }
 
 /// Per-account premium subscription slot (normalized from MSSQL blob).
-///
 /// Each account can have up to 6 premium slots. The `premium_type` and
 /// `expiry_time` (Unix timestamp) define what premium is available.
 #[derive(Debug, Clone, sqlx::FromRow)]

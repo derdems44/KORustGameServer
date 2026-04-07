@@ -1,13 +1,7 @@
 //! WIZ_HOME (0x48) handler — teleport to bind point (/town command).
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:3835-3882`
-//!
 //! ## Client -> Server
-//!
 //! Empty packet (just the opcode, no data).
-//!
 //! ## Server Processing
-//!
 //! 1. Check player is alive and HP >= 50% of max
 //! 2. Get respawn location (bind point or zone start)
 //! 3. If different zone → trigger zone change
@@ -23,19 +17,14 @@ use crate::world::types::{
 };
 
 /// /town cooldown in seconds.
-///
-/// C++ Reference: `User.cpp:3837` — `#define TOWN_TİME 1200` (milliseconds, UNIXTIME2=GetTickCount64)
 /// C++ actual cooldown: 1.2 seconds (flood prevention). Server config: 5 seconds.
 const TOWN_COOLDOWN_SECS: u64 = 5;
 
 use crate::buff_constants::BUFF_TYPE_FREEZE;
 
 /// Handle WIZ_HOME from the client.
-///
 /// The /town command teleports the player to their bind point or the
 /// zone's default spawn position.
-///
-/// C++ Reference: `User.cpp:3835-3882` (CUser::Home)
 pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -45,21 +34,18 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     let sid = session.session_id();
 
     // Dead players cannot use /town
-    // C++ Reference: User.cpp:3841
     if world.is_player_dead(sid) {
         tracing::warn!("[sid={}] WIZ_HOME rejected: player dead", sid);
         return Ok(());
     }
 
     // Kaul transformation prevents /town
-    // C++ Reference: User.cpp:3842 — `|| isKaul()`
     if world.with_session(sid, |h| h.is_kaul).unwrap_or(false) {
         tracing::warn!("[sid={}] WIZ_HOME rejected: kaul form", sid);
         return Ok(());
     }
 
     // NO_RECALL debuff prevents teleportation
-    // C++ Reference: Unit.h — `m_bCanTeleport` checked by isIncapacitated()
     if !world.can_teleport(sid) {
         tracing::warn!("[sid={}] WIZ_HOME rejected: can_teleport=false", sid);
         return Ok(());
@@ -73,7 +59,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     };
 
     // HP must be >= 50% of max HP
-    // C++ Reference: User.cpp:3843 — `GetHealth() < (GetMaxHealth() / 2)`
     if char_info.hp < (char_info.max_hp / 2) {
         tracing::warn!(
             "[sid={}] WIZ_HOME rejected: HP too low ({}/{}, need >= {})",
@@ -92,8 +77,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // Event zone check — cannot /town from BDW, Juraid, or Chaos Dungeon
-    // C++ Reference: User.cpp:3844 — `isInEventZone()`
-    // C++ Reference: User.h:1022 — checks ZONE_BORDER_DEFENSE_WAR, ZONE_JURAID_MOUNTAIN, ZONE_CHAOS_DUNGEON
     if matches!(
         current_zone,
         ZONE_BORDER_DEFENSE_WAR | ZONE_CHAOS_DUNGEON | ZONE_JURAID_MOUNTAIN
@@ -107,7 +90,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // Forgotten Temple — /town kicks user out of zone to Moradon
-    // C++ Reference: User.cpp:3867-3871 — `KickOutZoneUser(true)` defaults to zone 21
     // Use (0,0) — resolve_zero_coords handles nation-specific start_position.
     if current_zone == ZONE_FORGOTTEN_TEMPLE {
         zone_change::trigger_zone_change(session, ZONE_MORADON, 0.0, 0.0).await?;
@@ -115,13 +97,11 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // Quest arena zone block — zones 50-59 are quest arenas, cannot /town out
-    // C++ Reference: User.cpp:3873 — `(GetZoneID() / 10) == 5`
     if current_zone / 10 == 5 {
         return Ok(());
     }
 
     // Cooldown check: 5 seconds between /town uses
-    // C++ Reference: User.cpp:3846 — `(UNIXTIME2 - m_TownTime) < TOWN_TİME`
     let cooldown_ok = world
         .with_session(sid, |h| {
             h.last_town_time.elapsed().as_secs() >= TOWN_COOLDOWN_SECS
@@ -148,7 +128,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // Freeze buff check — cannot /town while frozen
-    // C++ Reference: User.cpp:3845 — `hasBuff(BUFF_TYPE_FREEZE)`
     let has_freeze = world
         .with_session(sid, |h| h.buffs.contains_key(&BUFF_TYPE_FREEZE))
         .unwrap_or(false);
@@ -176,12 +155,9 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // Use trigger_zone_change which handles both same-zone and cross-zone
-    // C++ Reference: User.cpp:3859 — `Warp(x * 10, z * 10)` for same zone
-    // C++ Reference: User.cpp:3880 — `Warp(x * 10, z * 10)` for /town
     zone_change::trigger_zone_change(session, dest_zone, dest_x, dest_z).await?;
 
     // Update cooldown timer
-    // C++ Reference: User.cpp:3879 — `m_TownTime = UNIXTIME2`
     world.update_session(sid, |h| {
         h.last_town_time = std::time::Instant::now();
     });
@@ -201,10 +177,9 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
 }
 
 /// Determine the home/town destination for a player.
-///
-/// Priority (C++ Reference: `User.cpp:3850-3874`):
+/// Priority ():
 /// 1. Bind point (bind_zone, bind_x, bind_z) if set and not in ZONE_DELOS
-/// 2. Nation-specific spawn from start_position table (C++ `GetStartPosition(x, z)`)
+/// 2. Nation-specific spawn from start_position table
 /// 3. Fallback: zone init_x/init_z
 /// 4. Moradon (zone 21) fallback
 fn determine_home_location(
@@ -215,7 +190,6 @@ fn determine_home_location(
     use rand::Rng;
 
     // 1. Check bind point
-    // C++ Reference: User.cpp:3854 — bind points NOT usable in ZONE_DELOS (siege zone)
     let bind_zone = char_info.bind_zone as u16;
     if bind_zone > 0
         && (char_info.bind_x != 0.0 || char_info.bind_z != 0.0)
@@ -225,8 +199,6 @@ fn determine_home_location(
     }
 
     // 2. Nation-specific spawn from start_position table
-    // C++ Reference: User.cpp:3873-3874 — `GetStartPosition(x, z)` uses nation-specific coords
-    // C++ Reference: User.cpp:3884-3925 — `CUser::GetStartPosition()` implementation
     if let Some(sp) = world.get_start_position(current_zone) {
         let mut rng = rand::thread_rng();
         let (base_x, base_z) = if char_info.nation == 1 {
@@ -258,7 +230,6 @@ fn determine_home_location(
     }
 
     // 4. Moradon fallback
-    // C++ Reference: User.cpp:3873-3874 — if (zoneID/10)==5 or !GetStartPosition → return
     // C++ does NOT warp at all in this case. We use Moradon fallback for safety.
     (21, 512.0, 341.0)
 }
@@ -514,7 +485,6 @@ mod tests {
 
     #[test]
     fn test_zone_delos_blocks_bind_point() {
-        // C++ Reference: User.cpp:3854
         // `if (pEvent && pEvent->byLife == 1 && GetZoneID() != ZONE_DELOS ...)`
         // Bind points are NOT usable when in ZONE_DELOS (siege zone).
         let current_zone = ZONE_DELOS;

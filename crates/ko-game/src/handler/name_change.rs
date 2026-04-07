@@ -1,15 +1,9 @@
 //! WIZ_NAME_CHANGE (0x6E) handler — character and clan name change.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/NameChangeHandler.cpp`
-//!
 //! ## Sub-Opcodes
-//!
 //! - `CharNameChange (0)`: Player character name change
 //! - `CharSelectNameChange (2)`: Character selection screen name change (stub)
 //! - `ClanNameChange (16)`: Clan/Knights name change
-//!
 //! ## Items Required
-//!
 //! - Character name: `ITEM_SCROLL_OF_IDENTITY (800032000)` — GMs bypass
 //! - Clan name: `ITEM_CLAN_NAME_SCROLL (800086000)`
 
@@ -26,79 +20,51 @@ use crate::world::MAX_ID_SIZE;
 // ── Sub-opcodes ─────────────────────────────────────────────────────────────
 
 /// Character name change request.
-///
-/// C++ Reference: `packets.h:421` — `CharNameChange = 0`
 const CHAR_NAME_CHANGE: u8 = 0;
 
 /// Character select screen name change (stub).
-///
-/// C++ Reference: `packets.h:422` — `CharSelectNameChange = 2`
 const CHAR_SELECT_NAME_CHANGE: u8 = 2;
 
 /// Clan name change request.
-///
-/// C++ Reference: `packets.h:423` — `ClanNameChange = 16`
 const CLAN_NAME_CHANGE: u8 = 16;
 
 // ── Response codes (character) ──────────────────────────────────────────────
 
 /// Show name change dialog (missing scroll / prompt).
-///
-/// C++ Reference: `packets.h:428` — `NameChangeShowDialog = 1`
 const NAME_CHANGE_SHOW_DIALOG: u8 = 1;
 
 /// Invalid name (empty, too long, or already taken).
-///
-/// C++ Reference: `packets.h:429` — `NameChangeInvalidName = 2`
 const NAME_CHANGE_INVALID_NAME: u8 = 2;
 
 /// Success — name changed.
-///
-/// C++ Reference: `packets.h:430` — `NameChangeSuccess = 3`
 const NAME_CHANGE_SUCCESS: u8 = 3;
 
 /// Cannot change name while king.
-///
-/// C++ Reference: `packets.h:432` — `NameChangeKing = 5`
 const NAME_CHANGE_KING: u8 = 5;
 
 // ── Response codes (clan) ───────────────────────────────────────────────────
 
 /// Clan name change: show dialog (missing scroll).
-///
-/// C++ Reference: `packets.h:437` — `ShowDialog = 1`
 const CLAN_NAME_SHOW_DIALOG: u8 = 1;
 
 /// Clan name change: invalid name.
-///
-/// C++ Reference: `packets.h:438` — `InvalidName = 2`
 const CLAN_NAME_INVALID: u8 = 2;
 
 /// Clan name change: success.
-///
-/// C++ Reference: `packets.h:440` — `Succes = 16`
 const CLAN_NAME_SUCCESS: u8 = 16;
 
 /// Clan name change: not in clan or not leader.
-///
-/// C++ Reference: `packets.h:439` — `NotClan = 4`
 const CLAN_NAME_NOT_CLAN: u8 = 4;
 
 // ── Item IDs ────────────────────────────────────────────────────────────────
 
 /// Scroll of Identity — required for character name change.
-///
-/// C++ Reference: `Define.h:299` — `#define ITEM_SCROLL_OF_IDENTITY 800032000`
 const ITEM_SCROLL_OF_IDENTITY: u32 = 800032000;
 
 /// Clan Name Change Scroll — required for clan name change.
-///
-/// C++ Reference: `Define.h:300` — `#define ITEM_CLAN_NAME_SCROLL 800086000`
 const ITEM_CLAN_NAME_SCROLL: u32 = 800086000;
 
 /// Handle WIZ_NAME_CHANGE from the client.
-///
-/// C++ Reference: `NameChangeHandler.cpp` — dispatches by sub-opcode
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -114,7 +80,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         CHAR_NAME_CHANGE => handle_char_name_change(session, &mut reader).await,
         CHAR_SELECT_NAME_CHANGE => {
             // Character select screen name change — sends a static response.
-            // C++ Reference: NameChangeHandler.cpp:48-53 — HandleSelectCharacterNameChange
             // Wire: WIZ_NAME_CHANGE << u8(CharSelectNameChange=2) << u16(2) << u8(16)
             handle_char_select_name_change(session).await
         }
@@ -131,9 +96,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle character name change.
-///
-/// C++ Reference: `NameChangeHandler.cpp` — `HandlePlayerNameChange()`
-///
 /// Packet: `[u8 sub=0] [string new_name]`
 async fn handle_char_name_change(
     session: &mut ClientSession,
@@ -190,7 +152,6 @@ async fn handle_char_name_change(
     };
 
     // Perform DB rename (checks uniqueness, updates all tables in transaction)
-    // C++ Reference: `CDBAgent::UpdateCharacterName` / `CHANGE_NEW_ID` stored proc
     let char_repo = CharacterRepository::new(session.pool());
     let db_result = match char_repo
         .rename_character(&account_id, &old_name, &new_name)
@@ -216,7 +177,6 @@ async fn handle_char_name_change(
     }
 
     // DB success — update in-memory state
-    // C++ Reference: NameChangeHandler.cpp:263 — `g_pMain->ReplaceCharacterName(this, strName)`
     // Update name index: remove old, add new
     world.update_name_index(&old_name, &new_name, sid);
     world.update_character_stats(sid, |ch| {
@@ -225,7 +185,6 @@ async fn handle_char_name_change(
     session.set_character_id(new_name.clone());
 
     // Update clan member name if in a clan
-    // C++ Reference: NameChangeHandler.cpp:217-237
     if ch.knights_id > 0 {
         world.update_knights(ch.knights_id, |k| {
             if k.chief.eq_ignore_ascii_case(&old_name) {
@@ -244,7 +203,6 @@ async fn handle_char_name_change(
     }
 
     // Region re-broadcast: remove + re-add so nearby players see updated name
-    // C++ Reference: NameChangeHandler.cpp:270-271
     let pos = world.get_position(sid).unwrap_or_default();
     let out_pkt = crate::handler::region::build_user_inout(
         crate::handler::region::INOUT_OUT,
@@ -270,14 +228,12 @@ async fn handle_char_name_change(
     world.broadcast_to_zone(pos.zone_id, Arc::new(in_pkt), Some(sid));
 
     // Send success response
-    // C++ Reference: NameChangeHandler.cpp:273-275 — result.DByte() << NameChangeSuccess << strName
     let mut result = Packet::new(Opcode::WizNameChange as u8);
     result.write_u8(NAME_CHANGE_SUCCESS);
     result.write_string(&new_name);
     session.send_packet(&result).await?;
 
     // Consume scroll (non-GM)
-    // C++ Reference: NameChangeHandler.cpp:278 — `RobItem(ITEM_SCROLL_OF_IDENTITY)`
     if !is_gm {
         world.rob_item(sid, ITEM_SCROLL_OF_IDENTITY, 1);
     }
@@ -302,9 +258,6 @@ async fn handle_char_name_change(
 }
 
 /// Handle clan name change.
-///
-/// C++ Reference: `NameChangeHandler.cpp` — `HandlePlayerClanNameChange()`
-///
 /// Packet: `[u8 sub=16] [string new_clan_name]`
 async fn handle_clan_name_change(
     session: &mut ClientSession,
@@ -364,7 +317,6 @@ async fn handle_clan_name_change(
     }
 
     // Check clan name uniqueness (case-insensitive scan of all clans)
-    // C++ Reference: scans g_pMain->m_KnightsArray
     let name_upper = new_name.to_uppercase();
     let name_exists = world.knights_name_exists(&name_upper);
     if name_exists {
@@ -375,7 +327,6 @@ async fn handle_clan_name_change(
     let old_name = knights.name.clone();
 
     // Perform DB rename
-    // C++ Reference: `CDBAgent::UpdateCharacterClanName` / `CHANGE_NEW_CLANID` stored proc
     let knights_repo = KnightsRepository::new(session.pool());
     let db_result = match knights_repo
         .rename_clan(ch.knights_id as i16, &new_name)
@@ -403,13 +354,11 @@ async fn handle_clan_name_change(
     }
 
     // DB success — update clan name in WorldState
-    // C++ Reference: NameChangeHandler.cpp:312 — `pKnights->m_strName = strClanName`
     world.update_knights(ch.knights_id, |k| {
         k.name = new_name.clone();
     });
 
     // Region re-broadcast for the requesting player
-    // C++ Reference: NameChangeHandler.cpp:315-316
     let pos = world.get_position(sid).unwrap_or_default();
     let out_pkt = crate::handler::region::build_user_inout(
         crate::handler::region::INOUT_OUT,
@@ -435,7 +384,6 @@ async fn handle_clan_name_change(
     world.broadcast_to_zone(pos.zone_id, Arc::new(in_pkt), Some(sid));
 
     // Send success to requesting player and all clan members
-    // C++ Reference: NameChangeHandler.cpp:319-322
     // Wire: WIZ_NAME_CHANGE << u8(ClanNameChange=16) << u8(Success=3) << strClanName
     let mut result = Packet::new(Opcode::WizNameChange as u8);
     result.write_u8(CLAN_NAME_CHANGE);
@@ -447,7 +395,6 @@ async fn handle_clan_name_change(
     world.send_to_knights_members(ch.knights_id, Arc::new(result), Some(sid));
 
     // Consume scroll
-    // C++ Reference: NameChangeHandler.cpp:325 — `RobItem(ITEM_CLAN_NAME_SCROLL)`
     world.rob_item(sid, ITEM_CLAN_NAME_SCROLL, 1);
 
     // FerihaLog: ClanNameChangeInsertLog
@@ -470,10 +417,7 @@ async fn handle_clan_name_change(
 }
 
 /// Validate pre-requisite state for name change operations.
-///
-/// C++ Reference: `NameChangeHandler.cpp` — checks isInGame, isDead, isTrading, etc.
 fn validate_state(world: &crate::world::WorldState, sid: crate::zone::SessionId) -> bool {
-    // C++ Reference: NameChangeHandler.cpp:11-20 — 8 busy state checks
     if world.is_player_dead(sid)
         || world.is_trading(sid)
         || world.is_store_open(sid)
@@ -503,9 +447,6 @@ fn has_item(world: &crate::world::WorldState, sid: crate::zone::SessionId, item_
 }
 
 /// Handle character select screen name change.
-///
-/// C++ Reference: `NameChangeHandler.cpp:48-53` — `HandleSelectCharacterNameChange`
-///
 /// Sends a static response packet. The client-side UI handles the rest.
 async fn handle_char_select_name_change(session: &mut ClientSession) -> anyhow::Result<()> {
     let mut result = Packet::new(Opcode::WizNameChange as u8);
@@ -522,13 +463,10 @@ async fn handle_char_select_name_change(session: &mut ClientSession) -> anyhow::
 }
 
 /// Validate a character or clan name.
-///
 /// Rules:
 /// - Must not be empty
 /// - Must not exceed `MAX_ID_SIZE` (20) characters
 /// - Must contain only ASCII alphanumeric characters (letters and digits)
-///
-/// C++ Reference: The client enforces these rules; the server does length checks.
 pub fn is_valid_name(name: &str) -> bool {
     if name.is_empty() || name.len() > MAX_ID_SIZE {
         return false;

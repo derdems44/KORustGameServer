@@ -1,25 +1,15 @@
 //! Level & Experience system — handles XP gains/losses and level changes.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/UserLevelExperienceSystem.cpp`
-//!
 //! ## Key Functions
-//!
 //! - `exp_change()`: Central XP change function for all XP gains/losses.
 //! - `level_change()`: Handles stat/skill point awards and broadcasts on level up/down.
 //! - `on_death_lost_exp_calc()`: Calculates XP penalty on death.
-//!
 //! ## Packet Formats
-//!
 //! ### WIZ_EXP_CHANGE (0x1A)
-//!
 //! `[u8 flag] [i64 total_exp]`
-//!
 //! Flag values:
 //! - 1: exp seal update
 //! - 4: normal XP update
-//!
 //! ### WIZ_LEVEL_CHANGE (0x1B)
-//!
 //! `[u32 sid] [u8 level] [i16 stat_points] [u8 free_skill_points]
 //!  [i64 max_exp] [i64 exp] [i16 max_hp] [i16 hp] [i16 max_mp] [i16 mp]
 //!  [u16 max_weight] [u16 item_weight]`
@@ -31,43 +21,32 @@ use crate::world::{CharacterInfo, WorldState, MAX_LEVEL};
 use crate::zone::SessionId;
 
 /// Maximum bonus multiplier cap (percentage).
-///
 /// If the total bonus exceeds this, it is clamped to prevent overflow.
 /// The C++ code has no explicit cap, but we add one for safety.
 const MAX_BONUS_PERCENT: u64 = 10_000;
 
 /// WIZ_EXP_CHANGE flag: normal XP update.
-///
-/// C++ Reference: `UserLevelExperienceSystem.cpp:143` — `uint8(0x04)`
 const EXP_FLAG_NORMAL: u8 = 0x04;
 
 /// Re-export from party module for local use.
 use super::party::PARTY_LEVELCHANGE;
 
 /// Apply an experience point change to a character.
-///
 /// This is the central function for all XP changes (kills, quest rewards,
 /// death penalties, etc.). It handles:
 /// - XP bonus multipliers (king event XP) when gaining XP
 /// - Level-up when XP >= max_exp
 /// - Level-down when XP goes below 0 (death penalty)
 /// - Sending WIZ_EXP_CHANGE packet
-///
 /// `is_bonus_reward` skips bonus multiplier calculation (for bonus XP that
 /// should not be further multiplied, e.g., level-up rewards, flash bonuses).
-///
-/// C++ Reference: `CUser::ExpChange()` in `UserLevelExperienceSystem.cpp:10-145`
 pub async fn exp_change(world: &WorldState, sid: SessionId, i_exp: i64) {
     exp_change_inner(world, sid, i_exp, false).await;
 }
 
 /// Apply an experience point change with explicit bonus-reward flag.
-///
 /// When `is_bonus_reward` is true, the server-side XP multipliers (event XP,
 /// premium bonuses, etc.) are skipped — the XP is applied as-is.
-///
-/// C++ Reference: `CUser::ExpChange(desc, iExp, bIsBonusReward)` —
-///   `UserLevelExperienceSystem.cpp:10`
 pub async fn exp_change_with_bonus(
     world: &WorldState,
     sid: SessionId,
@@ -89,7 +68,6 @@ async fn exp_change_inner(
         None => return,
     };
 
-    // C++ Reference: line 19-22 — Stop players level 5 or under from losing XP
     // Also stop XP loss in war zones.
     if i_exp < 0 {
         if ch.level < 6 {
@@ -104,13 +82,11 @@ async fn exp_change_inner(
         }
     }
 
-    // C++ Reference: line 26-27 — m_iExp should never be negative
     if (ch.exp as i64) < 0 {
         return;
     }
 
     // Apply bonus multipliers for XP gains (not losses, not bonus rewards)
-    // C++ Reference: line 29-84
     if i_exp > 0 && !is_bonus_reward {
         i_exp = apply_exp_bonuses(world, sid, i_exp, &ch);
     }
@@ -124,7 +100,6 @@ async fn exp_change_inner(
     }
 
     // EXP seal check: when seal is active, positive XP goes to sealed pool
-    // C++ Reference: line 94-95 — `if (bExpSealStatus) ExpSealChangeExp(iExp);`
     if ch.exp_seal_status && i_exp > 0 {
         Box::pin(crate::handler::exp_seal::exp_seal_change_exp(
             world,
@@ -136,11 +111,9 @@ async fn exp_change_inner(
     }
 
     // Apply XP change
-    // C++ Reference: line 97 — m_iExp += iExp
     let new_exp = (ch.exp as i64) + i_exp;
 
     // Level-down check: XP dropped below 0
-    // C++ Reference: line 101-117
     if new_exp < 0 {
         // Drop a level
         let new_level = ch.level.saturating_sub(1);
@@ -154,7 +127,6 @@ async fn exp_change_inner(
         }
 
         // Calculate excess XP to carry over as penalty.
-        // C++ Reference: line 107 — `diffXP = m_iExp + OnDeathLostExpCalc(...)`
         // C++ uses the ORIGINAL m_iExp (not modified when bLevel==false, line 90-91).
         let prev_level_max = world.get_exp_by_level(new_level, 0);
         let diff_xp = ch.exp as i64 + on_death_lost_exp_calc(prev_level_max, 0.0);
@@ -170,7 +142,6 @@ async fn exp_change_inner(
         level_change(world, sid, new_level, false);
 
         // Recurse to apply remaining penalty
-        // C++ Reference: line 116 — `ExpChange("abc1", -diffXP);`
         if diff_xp > 0 {
             Box::pin(exp_change_inner(world, sid, -diff_xp, false)).await;
         }
@@ -178,7 +149,6 @@ async fn exp_change_inner(
     }
 
     // Level-up check
-    // C++ Reference: line 120-131
     let max_exp = ch.max_exp;
     if max_exp > 0 && new_exp >= max_exp {
         if (ch.level as u16) < MAX_LEVEL {
@@ -209,12 +179,8 @@ async fn exp_change_inner(
 }
 
 /// Apply server-side XP bonus multipliers.
-///
-/// C++ Reference: `UserLevelExperienceSystem.cpp:29-84`
-///
 /// Bonus sources implemented:
 /// - King system XP event (`g_pMain->m_byExpEventAmount`)
-///
 /// Bonus sources implemented:
 /// - King system XP event (`g_pMain->m_byExpEventAmount`)
 /// - Clan leader online bonus
@@ -223,28 +189,24 @@ async fn exp_change_inner(
 /// - Item XP bonus from equipment
 /// - Burning feature / flame level (`m_bFlamelevel`)
 /// - Flash XP bonus (`m_FlashExpBonus`)
-///
 /// Each bonus is additive: `FinalExp += (TempExp * bonus_percent) / 100`
 fn apply_exp_bonuses(world: &WorldState, sid: SessionId, base_exp: i64, ch: &CharacterInfo) -> i64 {
     let temp_exp = base_exp as u64;
     let mut final_exp = base_exp as u64;
 
     // King system XP event bonus
-    // C++ Reference: line 44-45 — `g_pMain->m_byExpEventAmount`
     let exp_event = get_king_exp_event(world, ch.nation);
     if exp_event > 0 {
         final_exp += (temp_exp * exp_event as u64) / 100;
     }
 
     // Clan leader online XP bonus: +5% when the clan chief is online.
-    // C++ Reference: line 77-79 — `ClanOnlineExpCount` bonus
     let clan_bonus = get_clan_leader_online_bonus(world, sid, ch);
     if clan_bonus > 0 {
         final_exp += (temp_exp * clan_bonus as u64) / 100;
     }
 
     // Premium XP bonus (level-range based)
-    // C++ Reference: line 51-54 — `GetPremiumProperty(PremiumExpPercent)`
     let is_dead = world.is_player_dead(sid);
     if !is_dead {
         let prem_exp = world.get_premium_exp_percent(sid, ch.level);
@@ -253,7 +215,6 @@ fn apply_exp_bonuses(world: &WorldState, sid: SessionId, base_exp: i64, ch: &Cha
         }
 
         // Clan premium XP bonus
-        // C++ Reference: line 58-61 — `GetClanPremiumProperty(PremiumExpPercent)`
         let clan_prem_exp = world.get_clan_premium_exp_percent(sid, ch.level);
         if clan_prem_exp > 0 {
             final_exp += (temp_exp * clan_prem_exp as u64) / 100;
@@ -261,14 +222,12 @@ fn apply_exp_bonuses(world: &WorldState, sid: SessionId, base_exp: i64, ch: &Cha
     }
 
     // Item XP bonus from equipment (set items, castellan cape).
-    // C++ Reference: line 35-36 — `m_bItemExpGainAmount`
     let item_exp = world.get_equipped_stats(sid).item_exp_bonus;
     if item_exp > 0 {
         final_exp += (temp_exp * item_exp as u64) / 100;
     }
 
     // Burning / Flame XP bonus
-    // C++ Reference: line 47-48 — `pBurningFea[m_bFlamelevel - 1].exprate`
     let flame_level = world.with_session(sid, |h| h.flame_level).unwrap_or(0);
     if flame_level > 0 && flame_level <= 3 {
         if let Some(feat) = world.get_burning_feature(flame_level) {
@@ -279,14 +238,12 @@ fn apply_exp_bonuses(world: &WorldState, sid: SessionId, base_exp: i64, ch: &Cha
     }
 
     // Flash EXP bonus
-    // C++ Reference: line 64-65 — `m_FlashExpBonus`
     let flash_exp = world.with_session(sid, |h| h.flash_exp_bonus).unwrap_or(0);
     if flash_exp > 0 {
         final_exp += (temp_exp * flash_exp as u64) / 100;
     }
 
     // Buff EXP bonuses (BUFF_TYPE_EXPERIENCE=11, BUFF_TYPE_VARIOUS_EFFECTS=33)
-    // C++ Reference: UserLevelExperienceSystem.cpp:38-42 — m_bExpGainAmount
     let (buff11, buff33) = world
         .with_session(sid, |h| (h.exp_gain_buff11, h.exp_gain_buff33))
         .unwrap_or((0, 0));
@@ -297,7 +254,6 @@ fn apply_exp_bonuses(world: &WorldState, sid: SessionId, base_exp: i64, ch: &Cha
         final_exp += (temp_exp * buff33 as u64) / 100;
     }
 
-    // C++ Reference: UserLevelExperienceSystem.cpp:73-82 — perk EXP bonus
     // `FinalExp += (TempExp * perkExperience) / 100`
     let perk_exp = world
         .with_session(sid, |h| world.compute_perk_bonus(&h.perk_levels, 5, false))
@@ -315,9 +271,6 @@ fn apply_exp_bonuses(world: &WorldState, sid: SessionId, base_exp: i64, ch: &Cha
 }
 
 /// Get the active king system XP event bonus percentage for a nation.
-///
-/// C++ Reference: `g_pMain->m_byExpEventAmount` — set by `CKingSystem::KingsNotification()`
-///
 /// Returns 0 if no event is active or expired.
 fn get_king_exp_event(world: &WorldState, nation: u8) -> u8 {
     let ks = match world.get_king_system(nation) {
@@ -336,11 +289,8 @@ fn get_king_exp_event(world: &WorldState, nation: u8) -> u8 {
 }
 
 /// Get clan leader online XP bonus percentage.
-///
 /// When a player is in a clan and the clan chief (leader) is currently
 /// online (has an active session), the player gets a 5% XP bonus.
-///
-/// C++ Reference: `UserLevelExperienceSystem.cpp:77` — `ClanOnlineExpCount`
 fn get_clan_leader_online_bonus(world: &WorldState, _sid: SessionId, ch: &CharacterInfo) -> u8 {
     if ch.knights_id == 0 {
         return 0;
@@ -366,14 +316,10 @@ fn get_clan_leader_online_bonus(world: &WorldState, _sid: SessionId, ch: &Charac
 }
 
 /// Handle stat/skill point updates after a level change.
-///
 /// This does NOT change the level itself — it handles the consequences of a level
 /// change: stat points, skill points, HP/MP recalculation, and broadcasting.
-///
 /// Supports both single-level increments (normal level-up) and multi-level
 /// jumps (GM commands like `/levelup 83`).
-///
-/// C++ Reference: `CUser::LevelChange()` in `UserLevelExperienceSystem.cpp:154-281`
 pub fn level_change(world: &WorldState, sid: SessionId, level: u8, is_level_up: bool) {
     if level < 1 || (level as u16) > MAX_LEVEL {
         return;
@@ -384,7 +330,6 @@ pub fn level_change(world: &WorldState, sid: SessionId, level: u8, is_level_up: 
 
     if is_level_up {
         // Check for multi-level jump (GM level set)
-        // C++ Reference: line 159-169
         let ch = match world.get_character_info(sid) {
             Some(c) => c,
             None => return,
@@ -392,7 +337,6 @@ pub fn level_change(world: &WorldState, sid: SessionId, level: u8, is_level_up: 
 
         if level > ch.level.saturating_add(1) {
             // Multi-level jump: calculate totals from scratch
-            // C++ Reference: line 161-168
             let stat_total_expected = {
                 let mut total = 300i32 + (level as i32 - 1) * 3;
                 if level > 60 {
@@ -422,19 +366,16 @@ pub fn level_change(world: &WorldState, sid: SessionId, level: u8, is_level_up: 
             });
         } else {
             // Normal single-level increment
-            // C++ Reference: line 171-180
             let levels_after_60 = if level > 60 { level as u16 - 60 } else { 0 };
             let stat_pts = if levels_after_60 == 0 { 3u16 } else { 5u16 };
             let skill_pts = if level >= 10 { 2u8 } else { 0 };
 
             world.update_character_stats(sid, |ch| {
-                // C++ Reference: line 176-177
                 let expected_total = 297 + (3 * level as u16) + (2 * levels_after_60);
                 if (ch.free_points + get_stat_total(ch)) < expected_total {
                     ch.free_points += stat_pts;
                 }
 
-                // C++ Reference: line 179-180
                 if level >= 10 && get_total_skill_points(ch) < 2 * (level as u16 - 9) {
                     ch.skill_points[0] += skill_pts;
                 }
@@ -444,25 +385,21 @@ pub fn level_change(world: &WorldState, sid: SessionId, level: u8, is_level_up: 
         }
     } else {
         // De-level — just update max_exp (stat/skill points are NOT removed)
-        // C++ Reference: line 209-210
         world.update_character_stats(sid, |ch| {
             ch.max_exp = new_max_exp;
         });
     }
 
     // Recalculate equipment stats + max HP/MP (includes item + buff bonuses)
-    // C++ Reference: line 214-216 — SetMaxHp/SetMaxMp then restore to full
     world.set_user_ability(sid);
 
     // Restore HP/MP to full on level up
-    // C++ Reference: line 215-216 — HpChange(GetMaxHealth()), MSpChange(GetMaxMana())
     world.update_character_stats(sid, |ch| {
         ch.hp = ch.max_hp;
         ch.mp = ch.max_mp;
     });
 
     // Start the 10 Level Skill — auto-accept initial skill quest.
-    // C++ Reference: User.cpp:1227-1229
     //   if (GetLevel() == 10 && CheckExistEvent(71, 0))
     //       SaveEvent(71, 1);
     // C++ does this in the per-second tick; we do it in level_change for efficiency.
@@ -500,7 +437,6 @@ pub fn level_change(world: &WorldState, sid: SessionId, level: u8, is_level_up: 
     let equipped_stats = world.get_equipped_stats(sid);
 
     // Broadcast WIZ_LEVEL_CHANGE to 3x3 region
-    // C++ Reference: line 221-233
     let mut pkt = Packet::new(Opcode::WizLevelChange as u8);
     pkt.write_u32(sid as u32); // GetSocketID()
     pkt.write_u8(ch.level); // GetLevel()
@@ -527,7 +463,6 @@ pub fn level_change(world: &WorldState, sid: SessionId, level: u8, is_level_up: 
     }
 
     // Send party level change notification if in party
-    // C++ Reference: line 236-242
     if let Some(party_id) = ch.party_id {
         let mut party_pkt = Packet::new(Opcode::WizParty as u8);
         party_pkt.write_u8(PARTY_LEVELCHANGE);
@@ -537,7 +472,6 @@ pub fn level_change(world: &WorldState, sid: SessionId, level: u8, is_level_up: 
     }
 
     // Send updated stat/skill reset cost after level change
-    // C++ Reference: UserLevelExperienceSystem.cpp:280 — SendPresetReqMoney()
     let premium = world.with_session(sid, |h| h.premium_in_use).unwrap_or(0);
     let discount = world.is_discount_active(ch.nation);
     let cost_pkt = super::ext_hook::build_preset_req_money(ch.level, premium, discount);
@@ -558,13 +492,9 @@ pub fn level_change(world: &WorldState, sid: SessionId, level: u8, is_level_up: 
 }
 
 /// Calculate XP lost on death.
-///
 /// Default: `max_exp / 20` (5% of current level's max XP).
 /// When `premium_exp_restore_percent` > 0, the loss is reduced to that
 /// percentage of max XP instead of the default 5%.
-///
-/// C++ Reference: `CUser::OnDeathLostExpCalc()` in `UserHealtMagicSpSystem.cpp:858-871`
-///
 /// ```text
 /// int64 nExpLost = maxexp / 20;
 /// if (GetPremiumPropertyExp(PremiumExpRestorePercent) > 0)
@@ -572,7 +502,6 @@ pub fn level_change(world: &WorldState, sid: SessionId, level: u8, is_level_up: 
 /// if (nExpLostFloat) nExpLost = (int64)nExpLostFloat;
 /// ```
 pub fn on_death_lost_exp_calc(max_exp: i64, premium_exp_restore_percent: f32) -> i64 {
-    // C++ Reference: line 861 — `nExpLost = maxexp / 20`
     let default_loss = max_exp / 20;
 
     if premium_exp_restore_percent > 0.0 {
@@ -585,13 +514,9 @@ pub fn on_death_lost_exp_calc(max_exp: i64, premium_exp_restore_percent: f32) ->
 }
 
 /// Calculate the XP reward modifier based on level difference.
-///
-/// C++ Reference: `CNpc::GetRewardModifier(uint8 byLevel)` in `Npc.cpp:785-798`
-///
 /// NOTE: The C++ code has `return 1.0f;` at the very top, making the
 /// level-difference logic dead code. We match C++ behavior and always
 /// return 1.0.
-///
 /// Original (disabled) logic for reference:
 /// ```text
 /// diff <= -14 → 0.2
@@ -604,9 +529,6 @@ pub fn get_reward_modifier(_npc_level: u8, _player_level: u8) -> f32 {
 }
 
 /// Send WIZ_EXP_CHANGE packet to the player.
-///
-/// C++ Reference: `UserLevelExperienceSystem.cpp:142-144`
-///
 /// Packet format: `[u8 flag=4] [i64 total_exp]`
 fn send_exp_change(world: &WorldState, sid: SessionId) {
     let ch = match world.get_character_info(sid) {
@@ -621,15 +543,11 @@ fn send_exp_change(world: &WorldState, sid: SessionId) {
 }
 
 /// Get the total of all allocated stat points.
-///
-/// C++ Reference: `CUser::GetStatTotal()` — sum of STR+STA+DEX+INT+CHA
 fn get_stat_total(ch: &CharacterInfo) -> u16 {
     ch.str as u16 + ch.sta as u16 + ch.dex as u16 + ch.intel as u16 + ch.cha as u16
 }
 
 /// Get the total of all allocated skill points.
-///
-/// C++ Reference: `CUser::GetTotalSkillPoints()`
 fn get_total_skill_points(ch: &CharacterInfo) -> u16 {
     // Sum skill categories (indices 5-8), excluding free (0)
     ch.skill_points[5] as u16
@@ -639,10 +557,8 @@ fn get_total_skill_points(ch: &CharacterInfo) -> u16 {
 }
 
 /// Save level and experience data to the database asynchronously (fire-and-forget).
-///
 /// Called by handlers that have access to the session (e.g., GM commands,
 /// class change, etc.) to persist level changes to the DB.
-///
 /// NOTE: For normal gameplay (NPC kills, death penalties), level/XP is saved
 /// periodically or on character logout — not on every XP change. This
 /// matches the C++ server behavior.
@@ -679,9 +595,6 @@ pub fn save_level_exp_async(session: &crate::session::ClientSession) {
 }
 
 /// Calculate the expected total stat points for a given level.
-///
-/// C++ Reference: `UserLevelExperienceSystem.cpp:161-165`
-///
 /// `nStatTotal = 300 + (level - 1) * 3`
 /// For levels above 60: `+= 2 * (level - 60)`
 pub fn expected_stat_total(level: u8) -> u16 {
@@ -693,9 +606,6 @@ pub fn expected_stat_total(level: u8) -> u16 {
 }
 
 /// Calculate the expected total skill points for a given level.
-///
-/// C++ Reference: `UserLevelExperienceSystem.cpp:162`
-///
 /// `nSkillTotal = (level - 9) * 2` for levels >= 10, else 0.
 pub fn expected_skill_total(level: u8) -> u16 {
     if level >= 10 {
@@ -736,7 +646,6 @@ mod tests {
         // WIZ_LEVEL_CHANGE: [u32 sid] [u8 level] [i16 stat_pts] [u8 skill_pts]
         //   [i64 max_exp] [i64 exp] [i16 max_hp] [i16 hp] [i16 max_mp] [i16 mp]
         //   [u32 max_weight] [u32 item_weight]
-        // C++ Reference: UserLevelExperienceSystem.cpp:221-233
         //   m_sMaxWeight is uint32 (User.h:394), m_sItemWeight is uint32 (User.h:406)
         let mut pkt = Packet::new(Opcode::WizLevelChange as u8);
         pkt.write_u32(42); // sid
@@ -1234,7 +1143,6 @@ mod tests {
 
     #[test]
     fn test_delevel_diff_xp_uses_original_exp() {
-        // C++ Reference: UserLevelExperienceSystem.cpp:90-91,107
         // When (m_iExp + iExp) < 0, C++ does NOT update m_iExp.
         // Line 107: `diffXP = m_iExp + OnDeathLostExpCalc(...)` uses ORIGINAL exp.
         //

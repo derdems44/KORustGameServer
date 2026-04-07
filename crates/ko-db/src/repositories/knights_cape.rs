@@ -1,7 +1,5 @@
 //! Knights cape repository -- loads cape definitions, castellan bonuses,
 //! CSW options, and user knight data from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `CKnightsCapeSet` in `KnightsCapeSet.h` — cape table loading
 //! - `CCapeCastellanBonusSet` in `CapeCastellanBonusSet.h` — bonus loading
 //! - `HandleCapeChange()` in `KnightCape.cpp` — cape purchase/save
@@ -24,7 +22,6 @@ impl<'a> KnightsCapeRepository<'a> {
 
     /// Load all cape definitions from the `knights_cape` table.
     ///
-    /// C++ Reference: `CKnightsCapeSet::Fetch()` — loads all cape rows at startup
     pub async fn load_all_capes(&self) -> Result<Vec<KnightsCapeRow>, sqlx::Error> {
         sqlx::query_as::<_, KnightsCapeRow>(
             "SELECT s_cape_index, n_buy_price, by_grade, n_buy_loyalty, \
@@ -37,7 +34,6 @@ impl<'a> KnightsCapeRepository<'a> {
 
     /// Load all castellan cape bonus definitions.
     ///
-    /// C++ Reference: `CCapeCastellanBonusSet::Fetch()` — loads bonus rows at startup
     pub async fn load_all_castellan_bonuses(
         &self,
     ) -> Result<Vec<KnightsCapeCastellanBonusRow>, sqlx::Error> {
@@ -56,7 +52,6 @@ impl<'a> KnightsCapeRepository<'a> {
 
     /// Load the CSW configuration options (single row).
     ///
-    /// C++ Reference: CSW configuration loaded at startup
     pub async fn load_csw_opt(&self) -> Result<Option<KnightsCswOptRow>, sqlx::Error> {
         sqlx::query_as::<_, KnightsCswOptRow>(
             "SELECT id, preparing, war_time, money, tl, cash, loyalty, \
@@ -71,7 +66,6 @@ impl<'a> KnightsCapeRepository<'a> {
 
     /// Load all user knight data rows for a specific clan.
     ///
-    /// C++ Reference: Loaded during server startup to populate member data
     pub async fn load_by_clan(&self, clan_id: i16) -> Result<Vec<UserKnightDataRow>, sqlx::Error> {
         sqlx::query_as::<_, UserKnightDataRow>(
             "SELECT s_clan_id, str_user_id, n_donated_np, str_memo, \
@@ -97,7 +91,6 @@ impl<'a> KnightsCapeRepository<'a> {
 
     /// Update a user's knight data (donation, loyalty, etc.) after changes.
     ///
-    /// C++ Reference: `HandleCapeChange()` — saves cape + clan point changes
     pub async fn update_user_knightdata(
         &self,
         clan_id: i16,
@@ -154,7 +147,6 @@ impl<'a> KnightsCapeRepository<'a> {
 
     /// Sync user_knightdata on logout/save — update level, class, loyalty, last_login.
     ///
-    /// C++ Reference: `SAVE_USER_DATA` SP — updates USER_KNIGHTDATA on every save.
     #[allow(clippy::too_many_arguments)]
     pub async fn sync_user_knightdata_on_save(
         &self,
@@ -185,7 +177,6 @@ impl<'a> KnightsCapeRepository<'a> {
 
     /// Save a clan's cape to the knights table after purchase.
     ///
-    /// C++ Reference: `HandleCapeChange()` — saves `sCape`, `bCapeR/G/B` to KNIGHTS table
     pub async fn save_cape(
         &self,
         clan_id: i16,
@@ -210,7 +201,6 @@ impl<'a> KnightsCapeRepository<'a> {
 
     /// Save a castellan cape to the knights table.
     ///
-    /// C++ Reference: `HandleCapeChange()` — saves `sCastCape`, `bCastCapeR/G/B`
     pub async fn save_castellan_cape(
         &self,
         clan_id: i16,
@@ -235,7 +225,6 @@ impl<'a> KnightsCapeRepository<'a> {
 
     /// Deduct clan points (gold from clan bank) after a cape purchase.
     ///
-    /// C++ Reference: `HandleCapeChange()` — deducts from `CKnights::m_nClanPointFund`
     pub async fn deduct_clan_points(&self, clan_id: i16, amount: i32) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE knights SET clan_point_fund = clan_point_fund - $1 WHERE id_num = $2")
             .bind(amount)

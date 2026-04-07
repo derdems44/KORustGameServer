@@ -1,7 +1,4 @@
 //! Lua binding functions for quest scripts.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/lua_bindings.cpp`
-//!
 //! Each function is registered as a Lua global. The first argument is always
 //! the user's session ID (`uid`). The world state is retrieved from Lua's
 //! app data to look up player info and perform game actions.
@@ -59,9 +56,6 @@ fn lua_val_to_u16(val: &LuaValue) -> Option<u16> {
 }
 
 /// Build the premium info packet from WorldState + SessionId.
-///
-/// C++ Reference: `CUser::SendPremiumInfo()` — `PremiumSystem.cpp:35-68`
-///
 /// Wire: `WIZ_PREMIUM << u8(1) << u8(count) [foreach: u8(premType) << u16(timeHours)] << u8(premInUse) << u32(0)`
 fn build_premium_info_for_lua(w: &WorldState, sid: SessionId, now: u32) -> Packet {
     let mut entries: Vec<(u8, u16)> = Vec::new();
@@ -361,7 +355,6 @@ pub fn register_all(lua: &Lua) -> LuaResult<()> {
     g.set("NationChange", lua.create_function(lua_nation_change)?)?;
     g.set("GetExpPercent", lua.create_function(lua_get_exp_percent)?)?;
 
-    // CNpc methods
     g.set("NpcGetID", lua.create_function(lua_npc_get_id)?)?;
     g.set("NpcGetProtoID", lua.create_function(lua_npc_get_proto_id)?)?;
     g.set("NpcGetName", lua.create_function(lua_npc_get_name)?)?;
@@ -617,7 +610,6 @@ fn lua_check_class(lua: &Lua, uid: i32) -> LuaResult<u8> {
         .map(|c| (c.class % 100) as u8)
         .unwrap_or(0))
 }
-/// C++ Reference: `CUser::Lua_GetClass` — returns GetClass() (full value, e.g. 101, 201)
 fn lua_get_class_full(lua: &Lua, uid: i32) -> LuaResult<u16> {
     let w = get_world(lua)?;
     Ok(w.get_character_info(uid as SessionId)
@@ -625,7 +617,6 @@ fn lua_get_class_full(lua: &Lua, uid: i32) -> LuaResult<u16> {
         .unwrap_or(0))
 }
 /// Get the number of members in the player's party.
-/// C++ Reference: `CUser::GetPartyMemberAmount` — returns party size or 0
 fn lua_get_party_member_amount(lua: &Lua, uid: i32) -> LuaResult<u16> {
     let w = get_world(lua)?;
     let party_id = w.get_party_id(uid as SessionId);
@@ -664,7 +655,6 @@ fn lua_get_quest_status(lua: &Lua, (uid, qid): (i32, u16)) -> LuaResult<u8> {
     .unwrap_or(0))
 }
 
-/// C++ Reference: `QuestHandler.cpp:366-378`
 fn lua_check_exist_event(lua: &Lua, (uid, qid, status): (i32, u16, u8)) -> LuaResult<bool> {
     let w = get_world(lua)?;
     Ok(
@@ -680,7 +670,6 @@ fn lua_save_event(lua: &Lua, (uid, quest_helper_id): (i32, u16)) -> LuaResult<()
     let w = get_world(lua)?;
     let sid = uid as SessionId;
 
-    // C++ Reference: CUser::QuestV2SaveEvent(uint16 sQuestID) — QuestHandler.cpp:569-576
     // Lua passes quest_helper n_index, NOT the quest ID + status directly.
     // We look up the quest_helper to get sEventDataIndex and bEventStatus.
     let helper = match w.get_quest_helper(quest_helper_id as u32) {
@@ -740,7 +729,6 @@ fn lua_save_event(lua: &Lua, (uid, quest_helper_id): (i32, u16)) -> LuaResult<()
     }
 
     // Persist to DB (fire-and-forget async task)
-    // C++ Reference: CUser::SaveEvent() persists to DB via CDBAgent
     if let Some(pool) = w.db_pool() {
         let char_name = w
             .get_character_info(sid)
@@ -788,7 +776,6 @@ fn lua_save_event(lua: &Lua, (uid, quest_helper_id): (i32, u16)) -> LuaResult<()
 fn lua_howmuch_item(lua: &Lua, (uid, item_id): (i32, u32)) -> LuaResult<u32> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
-    // C++ Reference: CheckExistItem auto-returns true for virtual items.
     // ITEM_GOLD(900000000), ITEM_HUNT(900005000), ITEM_CHAT(900012000), ITEM_COUNT(900002000)
     match item_id {
         900_000_000 => {
@@ -818,8 +805,6 @@ fn lua_check_exist_item(lua: &Lua, (uid, item_id, count): (i32, u32, u32)) -> Lu
 }
 
 /// Give an item to a player from a quest script.
-///
-/// C++ Reference: `User.h:2661` — `DECLARE_LUA_FUNCTION(GiveItem)` returns `bool` via `LUA_RETURN`.
 /// Returns `true` to Lua on success, `false` on failure (inventory full, invalid item, etc.).
 fn lua_give_item(lua: &Lua, args: LuaMultiValue) -> LuaResult<bool> {
     let w = get_world(lua)?;
@@ -831,13 +816,11 @@ fn lua_give_item(lua: &Lua, args: LuaMultiValue) -> LuaResult<bool> {
     }
     let uid = lua_val_to_i32(&vals[0])?;
     let item_id = lua_val_to_u32(&vals[1])?;
-    // C++ Reference: GiveItemLuA.cpp:441 — `if (nGiveItemCount1 <= 0) nGiveItemCount1 = 1;`
     let count = if vals.len() >= 3 {
         lua_val_to_u16(&vals[2]).unwrap_or(1).max(1)
     } else {
         1
     };
-    // C++ Reference: GiveItemLuA.cpp:462-463 — 4th param is expiry in days
     let expiry_days = if vals.len() >= 4 {
         lua_val_to_i32_or(&vals[3], 0).max(0) as u32
     } else {
@@ -855,7 +838,6 @@ fn lua_give_item(lua: &Lua, args: LuaMultiValue) -> LuaResult<bool> {
             count,
             uid
         );
-        // C++ Reference: ItemHandler.cpp:2630-2632 — LuaCheckGiveSlot sends WIZ_QUEST(13, 3)
         let mut err_pkt = ko_protocol::Packet::new(ko_protocol::Opcode::WizQuest as u8);
         err_pkt.write_u8(13);
         err_pkt.write_u8(3); // error code 3 = not enough slots
@@ -975,11 +957,8 @@ fn lua_npc_say(lua: &Lua, args: LuaMultiValue) -> LuaResult<()> {
 }
 
 /// Lua `NpcMsg(uid, nQuestID [, sNpcID])` — send quest NPC dialog prompt.
-///
-/// C++ Reference: `User.h:2882` — `DECLARE_LUA_FUNCTION(NpcMsg)`
 ///   arg 2 = nQuestID (quest_helper n_index)
 ///   arg 3 = sNpcID   (optional, defaults to m_sEventSid)
-///
 /// Calls `QuestV2SendNpcMsg(nQuestID, sNpcID)`:
 ///   Packet: WIZ_QUEST [u8(7)] [u32(nQuestID)] [u32(sNpcID)]
 fn lua_npc_msg(lua: &Lua, args: LuaMultiValue) -> LuaResult<()> {
@@ -1093,7 +1072,6 @@ fn lua_zone_change(lua: &Lua, (uid, zone_id, x, z): (i32, u16, f32, f32)) -> Lua
     Ok(())
 }
 
-/// C++ Reference: `globals.h:769-775` — uses 0-1000 permillage range.
 /// `CheckPercent(500)` ≈ 50% chance, `CheckPercent(1000)` ≈ 100%.
 fn lua_check_percent(_lua: &Lua, percent: i32) -> LuaResult<bool> {
     use rand::Rng;
@@ -1111,8 +1089,6 @@ fn lua_get_name(lua: &Lua, uid: i32) -> LuaResult<String> {
         .unwrap_or_default())
 }
 /// Returns the account ID (login name) for the given session.
-///
-/// C++ Reference: `CUser::m_strAccountID` — the account login name, distinct from character name.
 fn lua_get_account_name(lua: &Lua, uid: i32) -> LuaResult<String> {
     Ok(get_world(lua)?
         .with_session(uid as SessionId, |h| h.account_id.clone())
@@ -1211,7 +1187,7 @@ fn lua_is_kurian(lua: &Lua, uid: i32) -> LuaResult<bool> {
         .unwrap_or(false))
 }
 
-// Class tier checks — C++ Reference: `lua_bindings.cpp` isBeginner/isNovice/isMastered variants
+// Class tier checks
 fn get_class_type(lua: &Lua, uid: i32) -> LuaResult<u16> {
     let w = get_world(lua)?;
     Ok(w.get_character_info(uid as SessionId)
@@ -1339,9 +1315,6 @@ fn lua_has_monthly_loyalty(lua: &Lua, (uid, amt): (i32, u32)) -> LuaResult<bool>
 // Inventory
 
 /// CheckWeight(uid, item_id, count) -> bool
-///
-/// C++ Reference: `ItemHandler.cpp:7-27` (CheckWeight)
-///
 /// Validates that adding `count` of `item_id` won't exceed carry weight
 /// and that there's a free slot for the item.
 fn lua_check_weight(lua: &Lua, args: LuaMultiValue) -> LuaResult<bool> {
@@ -1384,8 +1357,6 @@ fn lua_is_room_for_item(lua: &Lua, (uid, item_id, _count): (i32, u32, u16)) -> L
         .unwrap_or(-1))
 }
 /// Check if the player has enough free inventory slots.
-///
-/// C++ Reference: `ItemHandler.cpp:2611` — `LuaCheckGiveSlot` sends `WIZ_QUEST(13, 3)` on failure.
 fn lua_check_give_slot(lua: &Lua, (uid, count): (i32, u16)) -> LuaResult<bool> {
     let w = get_world(lua)?;
     let inv = w.get_inventory(uid as SessionId);
@@ -1396,7 +1367,6 @@ fn lua_check_give_slot(lua: &Lua, (uid, count): (i32, u16)) -> LuaResult<bool> {
         .filter(|s| s.item_id == 0)
         .count() as u16;
     let has_room = free >= count;
-    // C++ Reference: ItemHandler.cpp:2628-2633 — sends error packet when not enough slots
     if !has_room {
         let mut err_pkt = ko_protocol::Packet::new(ko_protocol::Opcode::WizQuest as u8);
         err_pkt.write_u8(13);
@@ -1409,13 +1379,9 @@ fn lua_check_give_slot(lua: &Lua, (uid, count): (i32, u16)) -> LuaResult<bool> {
 // ── Quest Monster Bindings ───────────────────────────────────────────
 
 /// Check a specific monster group kill count for a quest.
-///
-/// C++ Reference: `CUser::QuestV2CheckMonsterCount(uint16 sQuestID, uint8 sRate)`
 /// (QuestHandler.cpp:484-491)
-///
 /// Returns `kill_counts[index-1]` for the specified quest. Index is 1-based
 /// (1=group1, 2=group2, etc.). Returns 0 if quest not found or index out of range.
-///
 /// Lua call: `count = CountMonsterQuestSub(UID, quest_id, group_index)` — 3 args.
 fn lua_count_monster_quest_sub(lua: &Lua, (uid, qid, index): (i32, u16, u8)) -> LuaResult<u16> {
     let w = get_world(lua)?;
@@ -1436,14 +1402,10 @@ fn lua_count_monster_quest_sub(lua: &Lua, (uid, qid, index): (i32, u16, u8)) -> 
 }
 
 /// Trigger monster quest kill count processing for a given NPC.
-///
-/// C++ Reference: `CUser::DECLARE_LUA_FUNCTION(CountMonsterQuestMain)` (User.h:2835-2841)
 /// calls `QuestV2MonsterCountAdd(LUA_ARG(uint16, 2))` with `LUA_NO_RETURN`.
-///
 /// This is **not** a query — it adds kill counts for the specified NPC proto ID
 /// across all active quests that track that monster. If all required kills are met,
 /// the quest state transitions to 3 (ready to complete).
-///
 /// Lua call: `CountMonsterQuestMain(UID, npc_proto_id)` — 2 args, no return value.
 fn lua_count_monster_quest_main(lua: &Lua, (uid, npc_id): (i32, u16)) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -1452,24 +1414,18 @@ fn lua_count_monster_quest_main(lua: &Lua, (uid, npc_id): (i32, u16)) -> LuaResu
 }
 
 /// Check if a quest is finished (state == 3: ready to complete).
-///
-/// C++ Reference: `CUser::QuestV2CheckQuestFinished(uint16 sQuestID)` (QuestHandler.cpp:458-467)
-///
 /// Returns `true` if `quest_state == 3`, `false` otherwise.
 /// Note: C++ checks state==3 (ready to complete), NOT state==2 (completed).
-///
 /// Lua call: `result = QuestCheckQuestFinished(UID, quest_id)`
 fn lua_quest_check_finished(lua: &Lua, (uid, qid): (i32, u16)) -> LuaResult<bool> {
     lua_check_exist_event(lua, (uid, qid, 3))
 }
 
 /// Return the quest ID of the player's active monster-kill quest, or 0 if none.
-///
 /// C++ alias: `_LUA_WRAPPER_USER_FUNCTION(ExistMonsterQuestSub, GetActiveQuestID)`.
 /// C++ stub always returned 0 (`INLINE uint16 GetActiveQuestID() { return 0; }`).
 /// Our implementation iterates the player's in-progress quests and returns the
 /// first one that has a matching entry in the `quest_monsters` table.
-///
 /// Lua call: `result = ExistMonsterQuestSub(UID)` — returns u16 (quest_id or 0).
 fn lua_exist_monster_quest_sub(lua: &Lua, uid: i32) -> LuaResult<u16> {
     let w = get_world(lua)?;
@@ -1505,11 +1461,8 @@ fn lua_exist_monster_quest_sub(lua: &Lua, uid: i32) -> LuaResult<u16> {
 }
 
 /// Search for an eligible quest for the given NPC.
-///
-/// C++ Reference: `User.h:2795-2801` — `DECLARE_LUA_FUNCTION(SearchQuest)`
 /// Calls `QuestV2SearchEligibleQuest(npc_id)` which loops through QuestNpcList
 /// and returns 2 if an eligible quest is found, 0 otherwise.
-///
 /// Lua call: `QuestNum = SearchQuest(UID, NPC)` — 2 args, returns u32.
 fn lua_search_quest(lua: &Lua, (uid, npc_id): (i32, Option<u16>)) -> LuaResult<u32> {
     let w = get_world(lua)?;
@@ -1526,7 +1479,6 @@ fn lua_search_quest(lua: &Lua, (uid, npc_id): (i32, Option<u16>)) -> LuaResult<u
     };
 
     // Use provided NPC ID, or fall back to session's event_sid
-    // C++ Reference: `LUA_ARG_OPTIONAL(uint16, pUser->m_sEventSid, 2)`
     let npc = npc_id.unwrap_or_else(|| w.with_session(sid, |h| h.event_sid as u16).unwrap_or(0));
 
     // Look up quest helpers for this NPC
@@ -1536,7 +1488,6 @@ fn lua_search_quest(lua: &Lua, (uid, npc_id): (i32, Option<u16>)) -> LuaResult<u
     };
 
     // Loop through all QuestHelper instances attached to that NPC
-    // C++ Reference: QuestHandler.cpp:631-656
     for n_index in &helper_indices {
         let helper = match w.get_quest_helper(*n_index) {
             Some(h) => h,
@@ -1597,7 +1548,6 @@ fn lua_search_quest(lua: &Lua, (uid, npc_id): (i32, Option<u16>)) -> LuaResult<u
         }
 
         // Found an eligible quest
-        // C++ Reference: QuestHandler.cpp:653 — `return 2;`
         return Ok(2);
     }
 
@@ -1606,7 +1556,6 @@ fn lua_search_quest(lua: &Lua, (uid, npc_id): (i32, Option<u16>)) -> LuaResult<u
 
 // Actions
 
-/// C++ Reference: `CUser::ShowEffect` — `User.cpp:2678-2686`
 /// Sends WIZ_EFFECT << u32(player_id) << u32(skill_id) to region.
 fn lua_show_effect(lua: &Lua, (uid, eid): (i32, u32)) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -1623,7 +1572,6 @@ fn lua_show_effect(lua: &Lua, (uid, eid): (i32, u32)) -> LuaResult<()> {
     Ok(())
 }
 
-/// C++ Reference: `CUser::ShowNpcEffect` — `User.cpp:2694-2700`
 /// Sends WIZ_OBJECT_EVENT << u8(OBJECT_NPC=11) << u8(3) << u32(event_nid) << u32(effect_id).
 fn lua_show_npc_effect(lua: &Lua, (uid, eid): (i32, u32)) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -1637,7 +1585,6 @@ fn lua_show_npc_effect(lua: &Lua, (uid, eid): (i32, u32)) -> LuaResult<()> {
     w.send_to_session_owned(sid, pkt);
     Ok(())
 }
-/// C++ Reference: `CUser::QuestV2ShowMap` — `QuestHandler.cpp:658-663`
 /// Sends WIZ_QUEST << u8(11) << u32(quest_helper_id) to client.
 fn lua_show_map(lua: &Lua, (uid, mid): (i32, Option<u32>)) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -1650,20 +1597,16 @@ fn lua_show_map(lua: &Lua, (uid, mid): (i32, Option<u32>)) -> LuaResult<()> {
     Ok(())
 }
 
-/// C++ Reference: `QuestHandler.cpp:666-697` — PromoteUserNovice
-///
 /// 1. Guard: must be beginner class (class % 100 in {1,2,3,4,13})
 /// 2. Change class (base class → novice class)
 /// 3. Broadcast PROMOTE_NOVICE (sub-opcode 6) to region
 /// 4. Notify party of class change (PARTY_CLASSCHANGE = 0x08)
-///
 /// C++ does NOT reset stats or skills in PromoteUserNovice.
 fn lua_promote_user_novice(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
 
     // Guard: must be beginner (class % 100 in {1,2,3,4,13})
-    // C++ Reference: QuestHandler.cpp:677 — if (!isBeginner()) return false;
     let old_base = w
         .get_character_info(sid)
         .map(|c| c.class % 100)
@@ -1694,7 +1637,6 @@ fn lua_promote_user_novice(lua: &Lua, uid: i32) -> LuaResult<()> {
     }
 
     // 2. Broadcast PROMOTE_NOVICE to region
-    // C++ Reference: QuestHandler.cpp:680-685
     //   Packet result(WIZ_CLASS_CHANGE, uint8(6));
     //   result << sNewClass << uint32(GetID());
     //   SendToRegion(&result);
@@ -1714,12 +1656,10 @@ fn lua_promote_user_novice(lua: &Lua, uid: i32) -> LuaResult<()> {
     }
 
     // 3. ClassChange(result, false) — sets m_sClass, notifies party
-    // C++ Reference: NPCHandler.cpp:501-508
     // The class was already changed above; send party notification if in party.
     crate::handler::party::broadcast_party_class_change(&w, sid, new_class);
 
     // 4. Persist class change to DB (fire-and-forget)
-    // C++ Reference: NPCHandler.cpp:228 — ClassChange() calls UpdateUser
     if let Some(pool) = w.db_pool() {
         if let Some(ch) = w.get_character_info(sid) {
             let pool = pool.clone();
@@ -1744,8 +1684,6 @@ fn lua_promote_user_novice(lua: &Lua, uid: i32) -> LuaResult<()> {
     Ok(())
 }
 
-/// C++ Reference: `QuestHandler.cpp:699-731` — PromoteUser (2nd job change)
-///
 /// Same flow as PromoteUserNovice but promotes novice → master class.
 /// C++ does NOT reset stats/skills here — only changes class + broadcasts.
 fn lua_promote_user(lua: &Lua, uid: i32) -> LuaResult<()> {
@@ -1783,7 +1721,6 @@ fn lua_promote_user(lua: &Lua, uid: i32) -> LuaResult<()> {
     }
 
     // 2. Broadcast PROMOTE to region
-    // C++ Reference: QuestHandler.cpp:715-719
     if let Some(pos) = w.get_position(sid) {
         let mut pkt = Packet::new(Opcode::WizClassChange as u8);
         pkt.write_u8(6);
@@ -1800,11 +1737,9 @@ fn lua_promote_user(lua: &Lua, uid: i32) -> LuaResult<()> {
     }
 
     // 3. Party class change notification
-    // C++ Reference: NPCHandler.cpp:501-508
     crate::handler::party::broadcast_party_class_change(&w, sid, new_class);
 
     // 4. Persist class change to DB (fire-and-forget)
-    // C++ Reference: NPCHandler.cpp:228 — ClassChange() calls UpdateUser
     if let Some(pool) = w.db_pool() {
         if let Some(ch) = w.get_character_info(sid) {
             let pool = pool.clone();
@@ -1883,7 +1818,6 @@ fn lua_give_balance(lua: &Lua, (uid, amt): (i32, u32)) -> LuaResult<()> {
 fn lua_send_stat_skill_distribute(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
-    // C++ Reference: UserSkillStatPointSystem.cpp:39-43
     // Sends WIZ_CLASS_CHANGE with CLASS_CHANGE_REQ (0x01) to open the
     // stat/skill distribution UI on the client.
     let mut pkt = Packet::new(Opcode::WizClassChange as u8);
@@ -1904,7 +1838,6 @@ fn lua_check_clan_grade(lua: &Lua, uid: i32) -> LuaResult<u8> {
     Ok(w.get_knights(knights_id).map(|k| k.grade).unwrap_or(0))
 }
 
-/// C++ Reference: `CUser::GetClanRank` — `QuestHandler.cpp:774-784`
 /// Returns pClan->m_byFlag (clan type flag: Training=1, Promoted=2, etc.)
 /// Returns ClanTypeNone (0) if not in a clan.
 fn lua_get_clan_rank(lua: &Lua, uid: i32) -> LuaResult<u8> {
@@ -1917,7 +1850,6 @@ fn lua_get_clan_rank(lua: &Lua, uid: i32) -> LuaResult<u8> {
     Ok(w.get_knights(knights_id).map(|k| k.flag).unwrap_or(0))
 }
 
-/// C++ Reference: `User.h:3135-3140` — `GetStat((StatType)(LUA_ARG(uint8, 2) + 1))`
 /// C++ adds +1 to the lua argument before stat lookup.
 fn lua_check_stat_point(lua: &Lua, (uid, idx): (i32, u8)) -> LuaResult<u8> {
     let stat_idx = idx + 1; // C++ does LUA_ARG(uint8, 2) + 1
@@ -1963,9 +1895,6 @@ use crate::world::{ITEM_COUNT, ITEM_EXP, ITEM_LADDERPOINT};
 const ITEM_SKILL: u32 = 900_007_000;
 
 /// RunGiveItemExchange(uid, exchange_id) -> bool
-///
-/// C++ Reference: `GiveItemExchange.cpp:179-357` (RunGiveItemExchange)
-///
 /// Look up an ItemGiveExchangeRow, validate the player has all required items,
 /// remove them, then give all output items.
 fn lua_run_give_item_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResult<bool> {
@@ -2027,7 +1956,6 @@ fn lua_run_give_item_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaR
         {
             continue;
         }
-        // C++ Reference: GiveItemExchange.cpp:40-47 — GetItemPtr null → continue (skip).
         // Match C++ behavior: skip items not in DB, don't abort entire exchange.
         if w.get_item(item_id_u).is_none() {
             tracing::warn!(
@@ -2060,7 +1988,6 @@ fn lua_run_give_item_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaR
                 return Ok(false);
             }
         } else if item_id_u == ITEM_COUNT || item_id_u == ITEM_LADDERPOINT {
-            // C++ Reference: LoyaltyLose validates before subtracting
             let loyalty = w.get_character_info(sid).map(|c| c.loyalty).unwrap_or(0);
             if loyalty < count as u32 {
                 return Ok(false);
@@ -2091,9 +2018,6 @@ fn lua_run_give_item_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaR
 }
 
 /// CheckExchange(uid, exchange_id) -> bool
-///
-/// C++ Reference: `ItemHandler.cpp:1265-1358` (CheckExchange with nExchangeID)
-///
 /// Check if a player has all origin items for an exchange recipe.
 fn lua_check_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResult<bool> {
     let w = get_world(lua)?;
@@ -2156,9 +2080,6 @@ fn lua_check_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResult<bo
 }
 
 /// RunExchange(uid, exchange_id) -> bool
-///
-/// C++ Reference: `ItemHandler.cpp:1824-1925` (RunExchange)
-///
 /// Execute an item exchange: remove origin items, give exchange items.
 /// Handles random_flag: 0=fixed, 1-100=random selection, 101=weighted random.
 fn lua_run_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResult<bool> {
@@ -2270,16 +2191,12 @@ fn lua_run_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResult<bool
 }
 
 /// Helper: give an exchange output item (handles gold/exp/loyalty special IDs).
-///
-/// C++ Reference: `ItemHandler.cpp:1788-1808` (RunQuestExchange give section)
-///
 /// For ITEM_EXP, spawns an async task with `exp_change_with_bonus(is_bonus=true)`
-/// which handles level-up, EXP seal, and max-level cap — matching C++ `ExpChange()`.
+/// which handles level-up, EXP seal, and max-level cap — matching `ExpChange()`.
 fn give_exchange_item(w: &Arc<WorldState>, sid: SessionId, item_id: u32, count: u32) {
     if item_id == ITEM_GOLD {
         w.gold_gain(sid, count);
     } else if item_id == ITEM_EXP {
-        // C++ Reference: RunQuestExchange → ExpChange(desc, count, true)
         // true = bIsBonusReward (skip bonus multipliers, but DO handle level-up)
         // Use block_in_place to run async ExpChange synchronously from Lua context,
         // matching C++ behavior. Fire-and-forget tokio::spawn caused race conditions
@@ -2291,9 +2208,7 @@ fn give_exchange_item(w: &Arc<WorldState>, sid: SessionId, item_id: u32, count: 
             });
         });
     } else if item_id == ITEM_SKILL {
-        // C++ Reference: ItemHandler.cpp:1796-1797 — ITEM_SKILL is silently skipped
     } else if item_id == ITEM_COUNT {
-        // C++ Reference: SendLoyaltyChange("Quest Exchange", nCount, false, false, false)
         // false = bIsAddLoyaltyMonthly — ITEM_COUNT does NOT add to monthly NP
         w.update_character_stats(sid, |ch| {
             ch.loyalty = ch.loyalty.saturating_add(count);
@@ -2308,7 +2223,6 @@ fn give_exchange_item(w: &Arc<WorldState>, sid: SessionId, item_id: u32, count: 
             w.send_to_session_owned(sid, pkt);
         }
     } else if item_id == ITEM_LADDERPOINT {
-        // C++ Reference: SendLoyaltyChange("Quest Exchange", nCount) — default adds to monthly
         w.update_character_stats(sid, |ch| {
             ch.loyalty = ch.loyalty.saturating_add(count);
             ch.loyalty_monthly = ch.loyalty_monthly.saturating_add(count);
@@ -2329,7 +2243,6 @@ fn give_exchange_item(w: &Arc<WorldState>, sid: SessionId, item_id: u32, count: 
 }
 
 /// Give an exchange item and return success/failure.
-///
 /// Same as `give_exchange_item` but returns `bool` to indicate success.
 /// Used by quest exchange to detect and log failed item delivery.
 fn give_exchange_item_checked(
@@ -2386,8 +2299,6 @@ fn give_exchange_item_checked(
 }
 
 /// Special origin item IDs that are skipped during removal in quest/random exchanges.
-///
-/// C++ Reference: `ItemHandler.cpp:1604-1616, 1688-1700`
 fn is_special_origin_skip(item_id: u32) -> bool {
     matches!(
         item_id,
@@ -2407,9 +2318,6 @@ fn is_special_origin_skip(item_id: u32) -> bool {
 }
 
 /// RunQuestExchange(uid, exchange_id) -> bool
-///
-/// C++ Reference: `ItemHandler.cpp:1650-1821` (RunQuestExchange)
-///
 /// Quest-specific exchange: skips special origin items during removal,
 /// handles premium reward selection (flag 20/30), gives ALL output items.
 fn lua_run_quest_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResult<bool> {
@@ -2439,7 +2347,6 @@ fn lua_run_quest_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
     ];
 
     // Check all origin items exist
-    // C++ Reference: ItemHandler.cpp:1666-1672 — CheckExistItemAnd
     // Virtual items (ITEM_HUNT etc.) are skipped — C++ CheckExistItem returns true for them.
     for &(item_id, count) in &origins {
         if item_id == 0 || count == 0 {
@@ -2479,7 +2386,6 @@ fn lua_run_quest_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
     }
 
     // ── Pre-validate output items BEFORE removing origins ──
-    // C++ Reference: GiveItemExchange.cpp:3-108 (RunGiveItemCheckExchange)
     // Build the output list first, then check slots/weight, THEN remove origins.
 
     //
@@ -2495,7 +2401,6 @@ fn lua_run_quest_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
     let mut exchange_list: Vec<(u32, u32)> = Vec::new();
 
     if exchange.random_flag == 20 || exchange.random_flag == 30 {
-        // C++ Reference: ItemHandler.cpp:1732-1745 — premium selection
         // Premium users get slot[3], non-premium get slot[0]
         // C++ line 1743: if (nItemID == ITEM_EXP && nCount != 0) — ONLY ITEM_EXP
         let premium = w.with_session(sid, |h| h.premium_in_use).unwrap_or(0);
@@ -2513,7 +2418,6 @@ fn lua_run_quest_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
         }
     }
 
-    // C++ Reference: ItemHandler.cpp:1758-1771 — item_exchange_exp lookup
     // Uses bySelectedReward (member variable) to select a reward from the exp table.
     let by_selected_reward = w.with_session(sid, |h| h.by_selected_reward).unwrap_or(-1);
     if let Some(exp_exchange) = w.get_item_exchange_exp(exchange_id) {
@@ -2566,7 +2470,6 @@ fn lua_run_quest_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
     );
 
     // ── Pre-validate: check output items exist in DB and slots available ──
-    // C++ Reference: GiveItemExchange.cpp:3-108 (RunGiveItemCheckExchange)
     // Count how many inventory slots are needed for non-virtual output items.
     let mut slots_needed: u8 = 0;
     for &(item_id, _count) in &exchange_list {
@@ -2578,7 +2481,6 @@ fn lua_run_quest_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
         {
             continue;
         }
-        // C++ Reference: ItemHandler.cpp:1807 — GiveItem silently skips when GetItemPtr is null.
         // Match C++ behavior: skip this output item if not in DB, don't abort entire exchange.
         if w.get_item(item_id).is_none() {
             tracing::warn!(
@@ -2648,7 +2550,6 @@ fn lua_run_quest_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
                 return Ok(false);
             }
         } else if id_u == ITEM_COUNT {
-            // C++ Reference: ItemHandler.cpp:1708-1711 — LoyaltyLose validates first
             let loyalty = w.get_character_info(sid).map(|c| c.loyalty).unwrap_or(0);
             if loyalty < count as u32 {
                 return Ok(false);
@@ -2677,7 +2578,6 @@ fn lua_run_quest_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
         }
     }
 
-    // C++ Reference: QuestHandler.cpp:610-629 — QuestV2ShowGiveItem
     // Sends WIZ_QUEST sub-opcode 10 with up to 8 item/count pairs (u32 each)
     let mut show_pkt = Packet::new(Opcode::WizQuest as u8);
     show_pkt.write_u8(10); // sub-opcode for ShowGiveItem
@@ -2696,9 +2596,6 @@ fn lua_run_quest_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
 }
 
 /// RunRandomExchange(uid, exchange_id) -> bool
-///
-/// C++ Reference: `ItemHandler.cpp:1515-1646` (RunRandomExchange)
-///
 /// Random exchange: requires random_flag==101, skips special origin items,
 /// builds weighted random array, gives 1 random output item.
 fn lua_run_random_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResult<bool> {
@@ -2824,9 +2721,6 @@ fn lua_run_random_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResu
 }
 
 /// RunCountExchange(uid, exchange_id) -> bool
-///
-/// C++ Reference: `ItemHandler.cpp:2088-2210` (RunCountExchange)
-///
 /// Execute an exchange where the count is determined by the minimum inventory
 /// count of all origin items. All origin items are consumed, output items are
 /// given multiplied by the count.
@@ -2876,7 +2770,6 @@ fn lua_run_count_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
     }
 
     // Give output items
-    // C++ Reference: ItemHandler.cpp:2129-2142
     // Special items (GOLD/EXP/COUNT/LADDERPOINT): min_count * exchange_count
     // Regular items: just min_count (no multiplication by exchange_count)
     let outputs: [(i32, i32); 5] = [
@@ -2906,7 +2799,6 @@ fn lua_run_count_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
         give_exchange_item(&w, sid, item_id_u, total);
     }
 
-    // C++ Reference: ItemHandler.cpp:2215-2219 — QuestV2ShowGiveItem
     let mut show_pkt = Packet::new(Opcode::WizQuest as u8);
     show_pkt.write_u8(10);
     for i in 0..8 {
@@ -2928,9 +2820,6 @@ fn lua_run_count_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResul
 // ═══════════════════════════════════════════════════════════════════════
 
 /// JobChange(uid, type, newJob) -> u8
-///
-/// C++ Reference: `GenderJobChangeHandler.cpp:139-528`
-///
 /// Returns 1=success, 2=invalid job, 3=no scroll, 4=equipment worn, 5=error, 6=same job/no item.
 fn lua_job_change(lua: &Lua, (uid, change_type, new_job): (i32, u8, u8)) -> LuaResult<u8> {
     let w = get_world(lua)?;
@@ -2945,7 +2834,6 @@ fn lua_job_change(lua: &Lua, (uid, change_type, new_job): (i32, u8, u8)) -> LuaR
         return Ok(2);
     }
 
-    // C++ Reference: GenderJobChangeHandler.cpp:161-165 — check scroll item
     let scroll_id: u32 = if change_type == 0 {
         700_112_000
     } else {
@@ -2959,7 +2847,6 @@ fn lua_job_change(lua: &Lua, (uid, change_type, new_job): (i32, u8, u8)) -> LuaR
     let class_type = ch.class % 100;
     let prefix = (ch.class / 100) * 100;
 
-    // C++ Reference: GenderJobChangeHandler.cpp:167-171 — same job group check
     let same_group = match new_job {
         1 => matches!(class_type, 1 | 5 | 6),
         2 => matches!(class_type, 2 | 7 | 8),
@@ -2972,7 +2859,6 @@ fn lua_job_change(lua: &Lua, (uid, change_type, new_job): (i32, u8, u8)) -> LuaR
         return Ok(6);
     }
 
-    // C++ Reference: GenderJobChangeHandler.cpp:173-180 — equipment slot check
     // SLOT_MAX = 14 (equipment slots 0..13)
     let has_equipment = w
         .with_session(sid, |h| h.inventory.iter().take(14).any(|s| s.item_id != 0))
@@ -3037,7 +2923,6 @@ fn lua_job_change(lua: &Lua, (uid, change_type, new_job): (i32, u8, u8)) -> LuaR
 
     let new_class = prefix + new_class_type;
 
-    // C++ Reference: GenderJobChangeHandler.cpp — Elmo race mapping
     // BUG 4 FIX: Warrior(1) keeps barbarian(11), others map barbarian/portu→elmorad_man(12)
     let nation = ch.nation;
     let new_race = if new_job == 5 {
@@ -3069,7 +2954,6 @@ fn lua_job_change(lua: &Lua, (uid, change_type, new_job): (i32, u8, u8)) -> LuaR
         }
     };
 
-    // C++ Reference: GenderJobChangeHandler.cpp:494-497 — consume scroll
     if !w.rob_item(sid, scroll_id, 1) {
         return Ok(6);
     }
@@ -3079,7 +2963,6 @@ fn lua_job_change(lua: &Lua, (uid, change_type, new_job): (i32, u8, u8)) -> LuaR
         c.race = new_race;
     });
 
-    // C++ Reference: GenderJobChangeHandler.cpp:503-525 — reset stats and skills
     // AllPointChange(true) + AllSkillPointChange(true)
     w.update_character_stats(sid, |c| {
         let spent = (c.str.saturating_sub(10) as u16)
@@ -3110,9 +2993,6 @@ fn lua_job_change(lua: &Lua, (uid, change_type, new_job): (i32, u8, u8)) -> LuaR
 }
 
 /// GenderChange(uid, race) -> bool
-///
-/// C++ Reference: `GenderJobChangeHandler.cpp:75-97`
-///
 /// Change the character's race. Validates nation compatibility.
 fn lua_gender_change(lua: &Lua, (uid, race): (i32, u8)) -> LuaResult<bool> {
     let w = get_world(lua)?;
@@ -3127,7 +3007,6 @@ fn lua_gender_change(lua: &Lua, (uid, race): (i32, u8)) -> LuaResult<bool> {
         None => return Ok(false),
     };
 
-    // C++ Reference: GenderJobChangeHandler.cpp:80 — check scroll item
     const ITEM_GENDER_CHANGE: u32 = 810_594_000;
     let have = lua_howmuch_item(lua, (uid, ITEM_GENDER_CHANGE))?;
     if have == 0 {
@@ -3135,7 +3014,6 @@ fn lua_gender_change(lua: &Lua, (uid, race): (i32, u8)) -> LuaResult<bool> {
     }
 
     // Validate nation-race compatibility
-    // C++ Reference: Karus races 1-6, El Morad races 11-14
     if ch.nation == 1 && race > 6 {
         return Ok(false);
     }
@@ -3143,7 +3021,6 @@ fn lua_gender_change(lua: &Lua, (uid, race): (i32, u8)) -> LuaResult<bool> {
         return Ok(false);
     }
 
-    // C++ Reference: GenderJobChangeHandler.cpp:83 — consume scroll
     if !w.rob_item(sid, ITEM_GENDER_CHANGE, 1) {
         return Ok(false);
     }
@@ -3159,9 +3036,6 @@ fn lua_gender_change(lua: &Lua, (uid, race): (i32, u8)) -> LuaResult<bool> {
 // ═══════════════════════════════════════════════════════════════════════
 
 /// GivePremium(uid, premium_type, days) -> void
-///
-/// C++ Reference: `PremiumSystem.cpp:236-271`
-///
 /// Update premium_in_use on session and store premium expiry in premium_map.
 fn lua_give_premium(lua: &Lua, (uid, premium_type, days): (i32, u8, u16)) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -3189,7 +3063,6 @@ fn lua_give_premium(lua: &Lua, (uid, premium_type, days): (i32, u8, u16)) -> Lua
         }
     });
 
-    // C++ Reference: PremiumSystem.cpp:265 — SendPremiumInfo() after GivePremium
     let pkt = build_premium_info_for_lua(&w, sid, now);
     w.send_to_session_owned(sid, pkt);
 
@@ -3197,9 +3070,6 @@ fn lua_give_premium(lua: &Lua, (uid, premium_type, days): (i32, u8, u16)) -> Lua
 }
 
 /// NationChange(uid, nation) -> void
-///
-/// C++ Reference: `NationTransferHandler.cpp:601-616`
-///
 /// Update character nation. Simplified Lua version (no scroll check).
 fn lua_nation_change(lua: &Lua, (uid, nation): (i32, u8)) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -3216,9 +3086,6 @@ fn lua_nation_change(lua: &Lua, (uid, nation): (i32, u8)) -> LuaResult<()> {
 }
 
 /// GetExpPercent(uid) -> i32
-///
-/// C++ Reference: `User.cpp:4713-4726` (GetExpPercent)
-///
 /// Calculate XP percentage toward current level.
 /// Returns 0-100 as a percentage.
 fn lua_get_exp_percent(lua: &Lua, uid: i32) -> LuaResult<i32> {
@@ -3249,9 +3116,6 @@ fn lua_get_exp_percent(lua: &Lua, uid: i32) -> LuaResult<i32> {
 }
 
 /// CheckClanPoint(uid) -> i32
-///
-/// C++ Reference: `QuestHandler.cpp:762-772` (GetClanPoint)
-///
 /// Returns the clan's clan_point_fund. 0 if not in a clan.
 fn lua_check_clan_point(lua: &Lua, uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
@@ -3272,9 +3136,6 @@ fn lua_check_clan_point(lua: &Lua, uid: i32) -> LuaResult<i32> {
 }
 
 /// GetCash(uid) -> i32 / CheckCash(uid) -> i32
-///
-/// C++ Reference: `User.h:1100` — `GetCash() { return m_nKnightCash; }`
-///
 /// Returns the player's Knight Cash (KC) balance from the session.
 fn lua_get_cash(lua: &Lua, uid: i32) -> LuaResult<i32> {
     let world = get_world(lua)?;
@@ -3283,11 +3144,9 @@ fn lua_get_cash(lua: &Lua, uid: i32) -> LuaResult<i32> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// CNpc Lua Methods
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Helper: look up the NPC instance the player is currently interacting with.
-///
 /// Uses `event_nid` (runtime NPC ID) from the player's session handle.
 /// Returns `None` if no NPC interaction is active or the NPC doesn't exist.
 fn get_event_npc(w: &WorldState, uid: i32) -> Option<std::sync::Arc<crate::npc::NpcInstance>> {
@@ -3300,16 +3159,12 @@ fn get_event_npc(w: &WorldState, uid: i32) -> Option<std::sync::Arc<crate::npc::
 }
 
 /// NpcGetID(uid) -> i32
-///
-/// C++ Reference: `CNpc::GetID()` — returns the NPC's runtime session/spawn ID.
 fn lua_npc_get_id(lua: &Lua, uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
     Ok(get_event_npc(&w, uid).map(|n| n.nid as i32).unwrap_or(-1))
 }
 
 /// NpcGetProtoID(uid) -> i32
-///
-/// C++ Reference: `CNpc::GetProtoID()` — returns the NPC's template proto ID.
 fn lua_npc_get_proto_id(lua: &Lua, uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
     Ok(get_event_npc(&w, uid)
@@ -3318,8 +3173,6 @@ fn lua_npc_get_proto_id(lua: &Lua, uid: i32) -> LuaResult<i32> {
 }
 
 /// NpcGetName(uid) -> String
-///
-/// C++ Reference: `CNpc::GetName()` — returns the NPC's display name from template.
 fn lua_npc_get_name(lua: &Lua, uid: i32) -> LuaResult<String> {
     let w = get_world(lua)?;
     let npc = match get_event_npc(&w, uid) {
@@ -3334,16 +3187,12 @@ fn lua_npc_get_name(lua: &Lua, uid: i32) -> LuaResult<String> {
 }
 
 /// NpcGetNation(uid) -> u8
-///
-/// C++ Reference: `CNpc::GetNation()` — returns the NPC's nation from instance.
 fn lua_npc_get_nation(lua: &Lua, uid: i32) -> LuaResult<u8> {
     let w = get_world(lua)?;
     Ok(get_event_npc(&w, uid).map(|n| n.nation).unwrap_or(0))
 }
 
 /// NpcGetType(uid) -> i32
-///
-/// C++ Reference: `CNpc::GetType()` — returns the NPC's functional type from template.
 fn lua_npc_get_type(lua: &Lua, uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
     let npc = match get_event_npc(&w, uid) {
@@ -3356,8 +3205,6 @@ fn lua_npc_get_type(lua: &Lua, uid: i32) -> LuaResult<i32> {
 }
 
 /// NpcGetZoneID(uid) -> i32
-///
-/// C++ Reference: `CNpc::GetZoneID()` — returns the zone the NPC is in.
 fn lua_npc_get_zone_id(lua: &Lua, uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
     Ok(get_event_npc(&w, uid)
@@ -3366,35 +3213,26 @@ fn lua_npc_get_zone_id(lua: &Lua, uid: i32) -> LuaResult<i32> {
 }
 
 /// NpcGetX(uid) -> f32
-///
-/// C++ Reference: `CNpc::GetX()` — returns the NPC's X world coordinate.
 fn lua_npc_get_x(lua: &Lua, uid: i32) -> LuaResult<f32> {
     let w = get_world(lua)?;
     Ok(get_event_npc(&w, uid).map(|n| n.x).unwrap_or(0.0))
 }
 
 /// NpcGetY(uid) -> f32
-///
-/// C++ Reference: `CNpc::GetY()` — returns the NPC's Y coordinate (always 0 in 2D).
 fn lua_npc_get_y(lua: &Lua, uid: i32) -> LuaResult<f32> {
     let w = get_world(lua)?;
     Ok(get_event_npc(&w, uid).map(|n| n.y).unwrap_or(0.0))
 }
 
 /// NpcGetZ(uid) -> f32
-///
-/// C++ Reference: `CNpc::GetZ()` — returns the NPC's Z world coordinate.
 fn lua_npc_get_z(lua: &Lua, uid: i32) -> LuaResult<f32> {
     let w = get_world(lua)?;
     Ok(get_event_npc(&w, uid).map(|n| n.z).unwrap_or(0.0))
 }
 
 /// CastSkill(uid, skill_id) -> bool
-///
-/// C++ Reference: `lua_bindings.cpp:461-477` — gets the player's event NPC and
 /// makes it cast `skill_id` on the player. The NPC is the caster, the player is
 /// the target.
-///
 /// Returns true if the skill was cast, false otherwise.
 fn lua_npc_cast_skill(lua: &Lua, args: LuaMultiValue) -> LuaResult<bool> {
     let w = match lua.app_data_ref::<Arc<WorldState>>() {
@@ -3429,7 +3267,6 @@ fn lua_npc_cast_skill(lua: &Lua, args: LuaMultiValue) -> LuaResult<bool> {
     };
 
     // Look up skill in magic table to apply actual effects
-    // C++ Reference: LuaEngine.cpp — NpcCastSkill creates MagicInstance + Run()
     let magic = w.get_magic(skill_id as i32);
     let skill_type = magic.as_ref().and_then(|m| m.type1).unwrap_or(0) as i32;
 
@@ -3452,7 +3289,6 @@ fn lua_npc_cast_skill(lua: &Lua, args: LuaMultiValue) -> LuaResult<bool> {
     }
 
     // Apply type 4 (buff) effect — duration-based stat modifier
-    // C++ Reference: LuaEngine.cpp — NpcCastSkill creates MagicInstance + Run()
     // MagicInstance dispatches to ApplyType4 which registers ActiveBuff
     if skill_type == 4 {
         if let Some(t4) = w.get_magic_type4(skill_id as i32) {
@@ -3522,9 +3358,6 @@ fn lua_npc_cast_skill(lua: &Lua, args: LuaMultiValue) -> LuaResult<bool> {
 // ═══════════════════════════════════════════════════════════════════════
 
 /// ChangeManner(uid, amount) -> void
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:1072-1085` (SendMannerChange)
-///
 /// Update manner points. Clamps to [0, LOYALTY_MAX].
 /// Sends WIZ_LOYALTY_CHANGE with sub-opcode 2 (LOYALTY_MANNER_POINTS).
 fn lua_change_manner(lua: &Lua, (uid, amount): (i32, i32)) -> LuaResult<()> {
@@ -3545,10 +3378,6 @@ fn lua_change_manner(lua: &Lua, (uid, amount): (i32, i32)) -> LuaResult<()> {
 }
 
 /// RobClanPoint(uid, amount) -> void
-///
-/// C++ Reference: `User.h:3143-3148` — calls `SendClanPointChange(-amount)`
-/// C++ Reference: `KnightsManager.cpp:1503-1523` (UpdateClanPoint)
-///
 /// Deduct `amount` from the player's clan's clan_point_fund.
 fn lua_rob_clan_point(lua: &Lua, (uid, amount): (i32, i32)) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -3566,9 +3395,6 @@ fn lua_rob_clan_point(lua: &Lua, (uid, amount): (i32, i32)) -> LuaResult<()> {
 }
 
 /// KissUser(uid) -> void
-///
-/// C++ Reference: `NPCHandler.cpp:219-225` (KissUser)
-///
 /// Sends WIZ_KISS (0x66) packet with player ID + event NPC ID,
 /// and gives item 910014000 ("Kiss" item).
 fn lua_kiss_user(lua: &Lua, uid: i32) -> LuaResult<()> {
@@ -3586,9 +3412,6 @@ fn lua_kiss_user(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// SendNameChange(uid) -> void
-///
-/// C++ Reference: `NameChangeHandler.cpp:9-24` (SendNameChange)
-///
 /// Sends WIZ_NAME_CHANGE (0x6E) with NameChangeShowDialog (1).
 fn lua_send_name_change(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -3599,9 +3422,6 @@ fn lua_send_name_change(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// SendClanNameChange(uid) -> void
-///
-/// C++ Reference: `NameChangeHandler.cpp:28-43` (SendClanNameChange)
-///
 /// Sends WIZ_NAME_CHANGE (0x6E) with ClanNameChange (16) + ShowDialog (1).
 fn lua_send_clan_name_change(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -3613,9 +3433,6 @@ fn lua_send_clan_name_change(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// SendTagNameChangePanel(uid) -> void
-///
-/// C++ Reference: `TagChange.cpp:34-40` (SendTagNameChangePanel)
-///
 /// Sends WIZ_EXT_HOOK (0xE9) with TagInfo (0xD1) + Open (0).
 fn lua_send_tag_name_change_panel(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -3624,9 +3441,6 @@ fn lua_send_tag_name_change_panel(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// ZoneChangeParty(uid, zone_id, x, z) -> void
-///
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:533-556` (ZoneChangeParty)
-///
 /// Teleport all party members to a zone. If not in a party, teleport self.
 fn lua_zone_change_party(lua: &Lua, (uid, zone_id, x, z): (i32, u16, f32, f32)) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -3657,9 +3471,6 @@ fn lua_zone_change_party(lua: &Lua, (uid, zone_id, x, z): (i32, u16, f32, f32)) 
 }
 
 /// ZoneChangeClan(uid, zone_id, x, z) -> void
-///
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:566-596` (ZoneChangeClan)
-///
 /// Teleport all online clan members to a zone.
 fn lua_zone_change_clan(lua: &Lua, (uid, zone_id, x, z): (i32, u16, f32, f32)) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -3691,10 +3502,7 @@ fn lua_zone_change_clan(lua: &Lua, (uid, zone_id, x, z): (i32, u16, f32, f32)) -
 }
 
 /// PromoteKnight(uid, flag) -> void
-///
-/// C++ Reference: `QuestHandler.cpp:734-740` (PromoteClan)
 /// C++ alias: `PromoteKnight` = `PromoteClan` (lua_bindings.cpp:427)
-///
 /// Promote the player's clan to the given grade (flag).
 /// C++ cape logic: flag==1 → cape=-1 (training), otherwise cape=0.
 fn lua_promote_knight(lua: &Lua, args: LuaMultiValue) -> LuaResult<()> {
@@ -3715,7 +3523,6 @@ fn lua_promote_knight(lua: &Lua, args: LuaMultiValue) -> LuaResult<()> {
         return Ok(());
     }
 
-    // C++ Reference: cape = (nFlag == 1) ? -1 : 0
     let cape: i16 = if flag == 1 { -1 } else { 0 };
 
     w.update_knights(knights_id, |k| {
@@ -3724,11 +3531,9 @@ fn lua_promote_knight(lua: &Lua, args: LuaMultiValue) -> LuaResult<()> {
     });
 
     // Broadcast KNIGHTS_UPDATE to all online clan members
-    // C++ Reference: pClan->SendUpdate() in Knights.cpp
     broadcast_knights_update_from_world(&w, knights_id);
 
     // Persist flag+cape to DB (fire-and-forget)
-    // C++ Reference: Knights.cpp:917-919 — KNIGHTS_UPDATE_GRADE DB request
     if let Some(pool) = w.db_pool() {
         let pool = pool.clone();
         let kid = knights_id as i16;
@@ -3749,7 +3554,6 @@ fn lua_promote_knight(lua: &Lua, args: LuaMultiValue) -> LuaResult<()> {
 
 /// Build and broadcast a KNIGHTS_UPDATE packet for the given clan
 /// to all its online members, using only the WorldState (no session needed).
-///
 /// This mirrors `send_knights_update` in knights.rs but works from Lua context.
 fn broadcast_knights_update_from_world(w: &crate::world::WorldState, clan_id: u16) {
     use ko_protocol::{Opcode, Packet};
@@ -3780,8 +3584,6 @@ fn broadcast_knights_update_from_world(w: &crate::world::WorldState, clan_id: u1
 // ═══════════════════════════════════════════════════════════════════════
 
 /// hasManner(uid, amount) -> bool
-///
-/// C++ Reference: `lua_bindings.cpp` — checks manner_point >= amount.
 fn lua_has_manner(lua: &Lua, (uid, amount): (i32, u32)) -> LuaResult<bool> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -3795,8 +3597,6 @@ fn lua_has_manner(lua: &Lua, (uid, amount): (i32, u32)) -> LuaResult<bool> {
 }
 
 /// CheckWarVictory(uid) -> u8
-///
-/// C++ Reference: `lua_bindings.cpp` — returns battle_state.victory.
 fn lua_check_war_victory(lua: &Lua, uid: i32) -> LuaResult<u8> {
     let w = get_world(lua)?;
     let _sid = uid as SessionId;
@@ -3804,8 +3604,6 @@ fn lua_check_war_victory(lua: &Lua, uid: i32) -> LuaResult<u8> {
 }
 
 /// GetPVPMonumentNation(uid) -> u8
-///
-/// C++ Reference: `lua_bindings.cpp` — returns PVP monument nation for the player's zone.
 fn lua_get_pvp_monument_nation(lua: &Lua, uid: i32) -> LuaResult<u8> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -3814,8 +3612,6 @@ fn lua_get_pvp_monument_nation(lua: &Lua, uid: i32) -> LuaResult<u8> {
 }
 
 /// CheckMiddleStatueCapture(uid) -> i32
-///
-/// C++ Reference: `lua_bindings.cpp` — returns 1 if middle statue nation matches player's nation.
 fn lua_check_middle_statue_capture(lua: &Lua, uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -3828,16 +3624,12 @@ fn lua_check_middle_statue_capture(lua: &Lua, uid: i32) -> LuaResult<i32> {
 }
 
 /// GetRebirthLevel(uid) -> u8
-///
-/// C++ Reference: `lua_bindings.cpp` — returns rebirth level from session.
 fn lua_get_rebirth_level(lua: &Lua, uid: i32) -> LuaResult<u8> {
     let w = get_world(lua)?;
     Ok(w.get_rebirth_level(uid as SessionId))
 }
 
 /// KingsInspectorList(uid) -> ()
-///
-/// C++ Reference: `lua_bindings.cpp` — sends WizReport packet with subcode 18 (KingsInspector).
 fn lua_kings_inspector_list(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -3848,16 +3640,12 @@ fn lua_kings_inspector_list(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// GetMaxExchange(uid, exchange_id) -> u16
-///
-/// C++ Reference: `lua_bindings.cpp` — returns max exchange capacity for the given exchange.
 fn lua_get_max_exchange(lua: &Lua, (uid, exchange_id): (i32, i32)) -> LuaResult<u16> {
     let w = get_world(lua)?;
     Ok(w.get_max_exchange_capacity(uid as SessionId, exchange_id))
 }
 
 /// isCswWinnerNembers(uid) -> bool
-///
-/// C++ Reference: `CastleSiegeWar.cpp` — checks if player's clan/alliance matches CSW master
 /// knights. If so, zone-changes them to Delos Castellan. Always returns false.
 fn lua_is_csw_winner_members(lua: &Lua, uid: i32) -> LuaResult<bool> {
     use crate::world::ZONE_DELOS_CASTELLAN;
@@ -3923,10 +3711,8 @@ fn lua_is_csw_winner_members(lua: &Lua, uid: i32) -> LuaResult<bool> {
 const CSW_DEATHMATCH_MIN_LEVEL: u8 = 35;
 
 /// CheckCastleSiegeWarDeathmachRegister(uid) -> u16
-///
 /// Validate and register a player for the CSW deathmatch.
 /// Quest script `31719_aron.lua` calls this (EVENT 103).
-///
 /// Return codes:
 /// - 1 = success (Lua will deduct gold)
 /// - 2 = CSW not active
@@ -3976,10 +3762,8 @@ fn lua_csw_deathmatch_register(lua: &Lua, uid: i32) -> LuaResult<u16> {
 }
 
 /// CheckCastleSiegeWarDeathmacthCancelRegister(uid) -> u16
-///
 /// Cancel a player's CSW deathmatch registration.
 /// Quest script `31719_aron.lua` calls this (EVENT 105).
-///
 /// Return codes:
 /// - 1 = success (registration cancelled)
 /// - 2 = CSW not active
@@ -4013,8 +3797,6 @@ fn lua_csw_deathmatch_cancel_register(lua: &Lua, uid: i32) -> LuaResult<u16> {
 }
 
 /// SendNpcKillID(uid, npc_id) -> ()
-///
-/// C++ Reference: `lua_bindings.cpp` — kills NPCs matching proto_id in the player's zone.
 fn lua_send_npc_kill_id(lua: &Lua, (uid, npc_id): (i32, u32)) -> LuaResult<()> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -4027,9 +3809,6 @@ fn lua_send_npc_kill_id(lua: &Lua, (uid, npc_id): (i32, u32)) -> LuaResult<()> {
 }
 
 /// CycleSpawn(uid) -> ()
-///
-/// C++ Reference: `NpcEventSystem.cpp:23-37` — `CUser::ChangePosition()`
-///
 /// Looks up the user's target NPC (via `event_nid`) and, if it has
 /// `special_type == 7` (NpcSpecialTypeCycleSpawn) and `trap_number` in 1..=4,
 /// broadcasts NPC_OUT to make it disappear from nearby players.
@@ -4081,8 +3860,6 @@ fn lua_cycle_spawn(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// MoveMiddleStatue(uid) -> ()
-///
-/// C++ Reference: `lua_bindings.cpp` — warps player to their nation's camp near the middle statue.
 /// Karus → Dodo camp, El Morad → Laon camp, with random offset.
 fn lua_move_middle_statue(lua: &Lua, uid: i32) -> LuaResult<()> {
     use crate::world::{
@@ -4128,8 +3905,6 @@ fn lua_move_middle_statue(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// SendNationTransfer(uid) -> ()
-///
-/// C++ Reference: `lua_bindings.cpp` — checks for nation transfer item, sends open dialog or error.
 fn lua_send_nation_transfer(lua: &Lua, uid: i32) -> LuaResult<()> {
     const ITEM_NATION_TRANSFER: u32 = 810_096_000;
 
@@ -4163,8 +3938,6 @@ fn lua_send_nation_transfer(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// RobAllItemParty(uid, item_id, count) -> bool
-///
-/// C++ Reference: `lua_bindings.cpp` — removes item from all party members.
 fn lua_rob_all_item_party(lua: &Lua, (uid, item_id, count): (i32, u32, u16)) -> LuaResult<bool> {
     let w = get_world(lua)?;
     Ok(w.rob_all_item_party(uid as SessionId, item_id, count))
@@ -4175,8 +3948,6 @@ fn lua_rob_all_item_party(lua: &Lua, (uid, item_id, count): (i32, u32, u16)) -> 
 // ═══════════════════════════════════════════════════════════════════════
 
 /// ShowBulletinBoard(uid) -> ()
-///
-/// C++ Reference: `NewRankingSystem.cpp:1047-1150` — nation-filtered ranking board display.
 /// Sends WIZ_BATTLE_EVENT sub-opcode 13 with king entry + top-10 clans + top-10 players.
 fn lua_show_bulletin_board(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -4193,7 +3964,6 @@ fn lua_show_bulletin_board(lua: &Lua, uid: i32) -> LuaResult<()> {
     pkt.write_u8(count); // placeholder — backpatched below
 
     // ── KING ENTRY (index 1000) ─────────────────────────────────────
-    // C++ Reference: NewRankingSystem.cpp:1068-1089
     pkt.write_u16(1000);
     let king_name = w
         .get_king_system(nation)
@@ -4229,7 +3999,6 @@ fn lua_show_bulletin_board(lua: &Lua, uid: i32) -> LuaResult<()> {
     }
 
     // ── TOP 10 CLANS (index 1201+) ──────────────────────────────────
-    // C++ Reference: NewRankingSystem.cpp:1091-1120
     let top_clans = w.get_top_knights_by_nation(nation, 10);
     for (i, (clan_id, _name, _mv)) in top_clans.iter().enumerate() {
         if let Some(clan) = w.get_knights(*clan_id) {
@@ -4246,7 +4015,6 @@ fn lua_show_bulletin_board(lua: &Lua, uid: i32) -> LuaResult<()> {
     }
 
     // ── TOP 10 PLAYERS (index 1101+) ─────────────────────────────────
-    // C++ Reference: NewRankingSystem.cpp:1122-1150
     let personal_ranks = w.get_bot_personal_rank();
     let mut player_count = 0u16;
     for row in &personal_ranks {
@@ -4306,8 +4074,6 @@ fn lua_show_bulletin_board(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// SendVisibe(uid, offset1, offset2) -> ()
-///
-/// C++ Reference: `XGuard.cpp:3491` — GM-only hook visibility toggle.
 /// Version-gated: only for `__VERSION < 2369`. Modern clients don't use this.
 fn lua_send_visibe(lua: &Lua, _args: LuaMultiValue) -> LuaResult<()> {
     // C++ has `#if(__VERSION < 2369)` compile-time guard.
@@ -4318,8 +4084,6 @@ fn lua_send_visibe(lua: &Lua, _args: LuaMultiValue) -> LuaResult<()> {
 }
 
 /// GiveSwitchPremium(uid, premium_type, days) -> ()
-///
-/// C++ Reference: `PremiumSystem.cpp:273-304` — add/extend premium with switch tracking.
 /// Extends from stored time (not current time) for existing entries.
 /// Only sends SendPremiumInfo when switchPremiumCount > 2.
 fn lua_give_switch_premium(lua: &Lua, (uid, premium_type, days): (i32, u8, u16)) -> LuaResult<()> {
@@ -4342,7 +4106,6 @@ fn lua_give_switch_premium(lua: &Lua, (uid, premium_type, days): (i32, u8, u16))
             return;
         }
 
-        // C++ Reference: m_PremiumMap.GetSize() > PREMIUM_TOTAL
         // PREMIUM_TOTAL = 6 in globals.h, but C++ checks > (not >=)
         if h.premium_map.len() > 6 && !h.premium_map.contains_key(&premium_type) {
             return;
@@ -4372,7 +4135,6 @@ fn lua_give_switch_premium(lua: &Lua, (uid, premium_type, days): (i32, u8, u16))
         should_send_info = h.switch_premium_count > 2;
     });
 
-    // C++ Reference: PremiumSystem.cpp:302-303
     // if (m_switchPremiumCount > 2) SendPremiumInfo();
     if should_send_info {
         let pkt = build_premium_info_for_lua(&w, sid, now);
@@ -4383,8 +4145,6 @@ fn lua_give_switch_premium(lua: &Lua, (uid, premium_type, days): (i32, u8, u16))
 }
 
 /// GiveClanPremium(uid, premium_type, days) -> ()
-///
-/// C++ Reference: `PremiumSystem.cpp:306-345` — give premium to entire clan (leader only).
 /// Updates knights premium time/type and sends clan premium packet to all online members.
 fn lua_give_clan_premium(lua: &Lua, (uid, _premium_type, days): (i32, u8, u32)) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -4422,7 +4182,6 @@ fn lua_give_clan_premium(lua: &Lua, (uid, _premium_type, days): (i32, u8, u32)) 
         .unwrap_or_default()
         .as_secs() as u32;
 
-    // C++ Reference: PremiumSystem.cpp:315-317
     // int remtime = pKnights->sPremiumTime > UNIXTIME ? pKnights->sPremiumTime - UNIXTIME : 0;
     // pKnights->sPremiumTime = (UNIXTIME + 24*60*60*sPremiumDay) + remtime;
     // pKnights->sPremiumInUse = CLAN_PREMIUM;
@@ -4458,14 +4217,10 @@ fn lua_give_clan_premium(lua: &Lua, (uid, _premium_type, days): (i32, u8, u32)) 
 }
 
 /// GivePremiumItem(uid, premium_type) -> ()
-///
-/// C++ Reference: `PremiumSystem.cpp:74-79` — sends DB request for premium bonus items via letter.
 /// C++ calls `g_pMain->AddDatabaseRequest(result, this)` which routes to
 /// `ReqLetterGivePremiumItem` in `LetterHandler.cpp:387-414`.
-///
 /// That function looks up `m_ItemPremiumGiftArray` (PREMIUM_GIFT_ITEM table) by
 /// premium_type and for each matching gift creates a system letter with the item attached.
-///
 /// Since the PREMIUM_GIFT_ITEM table has no meaningful data in our reference DB,
 /// this function looks up the premium gift items from WorldState and creates
 /// system letters via `create_system_letter()`. If no gift data is loaded, it logs
@@ -4570,9 +4325,6 @@ fn lua_give_premium_item(lua: &Lua, (uid, premium_type): (i32, u8)) -> LuaResult
 }
 
 /// SpawnEventSystem(uid, npc_id, is_monster, zone, x, y, z) -> ()
-///
-/// C++ Reference: `NpcEventSystem.cpp:3` — spawns event NPC/monster at coordinates.
-///
 /// Calls `WorldState::spawn_event_npc()` to allocate a runtime NPC from a template,
 /// register it in the zone region grid, initialize HP/AI, and broadcast NPC_IN.
 /// The C++ side passes `is_monster` as 0 (NPC) or 1 (monster) and converts to bool
@@ -4632,8 +4384,6 @@ fn lua_spawn_event_system(lua: &Lua, args: LuaMultiValue) -> LuaResult<()> {
 }
 
 /// NpcEventSystem(uid, selling_group) -> ()
-///
-/// C++ Reference: `NpcEventSystem.cpp:39` — sets NPC selling group, sends WIZ_TRADE_NPC.
 fn lua_npc_event_system(lua: &Lua, (uid, selling_group): (i32, u32)) -> LuaResult<()> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -4656,8 +4406,6 @@ fn lua_npc_event_system(lua: &Lua, (uid, selling_group): (i32, u32)) -> LuaResul
 }
 
 /// KillNpcEvent(uid) -> ()
-///
-/// C++ Reference: `NpcEventSystem.cpp:12` — kills user's event NPC, clears event_nid.
 fn lua_kill_npc_event(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -4676,8 +4424,6 @@ fn lua_kill_npc_event(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// SendRepurchaseMsg(uid) -> ()
-///
-/// C++ Reference: `NPCHandler.cpp:2039` — builds repurchase item list packet.
 fn lua_send_repurchase_msg(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -4722,8 +4468,6 @@ fn lua_send_repurchase_msg(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// DrakiOutZone(uid) -> ()
-///
-/// C++ Reference: `DrakiTowerSystem.cpp:412` — sends Draki tower exit packet.
 fn lua_draki_out_zone(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -4749,9 +4493,6 @@ fn lua_draki_out_zone(lua: &Lua, uid: i32) -> LuaResult<()> {
     Ok(())
 }
 
-/// DrakiTowerNpcOut(uid) -> ()
-///
-/// C++ Reference: `DrakiTowerSystem.cpp:376` — kills all non-monster NPCs in user's
 /// Draki Tower room (same zone + event_room, NPC not monster, not dead).
 fn lua_draki_tower_npc_out(lua: &Lua, uid: i32) -> LuaResult<()> {
     use crate::handler::draki_tower::ZONE_DRAKI_TOWER;
@@ -4772,8 +4513,6 @@ fn lua_draki_tower_npc_out(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// GenieExchange(uid, item_id, hours) -> ()
-///
-/// C++ Reference: `GenieHandler.cpp:285` — removes item, extends genie companion time.
 fn lua_genie_exchange(lua: &Lua, (uid, item_id, hours): (i32, u32, u32)) -> LuaResult<()> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -4813,8 +4552,6 @@ fn lua_genie_exchange(lua: &Lua, (uid, item_id, hours): (i32, u32, u32)) -> LuaR
 }
 
 /// DelosCasttellanZoneOut(uid) -> ()
-///
-/// C++ Reference: `CastleSiegeWar.cpp:4` — ejects non-CSW-winner users from ZONE_DELOS_CASTELLAN.
 fn lua_delos_castellan_zone_out(lua: &Lua, _uid: i32) -> LuaResult<()> {
     use crate::world::{ZONE_DELOS_CASTELLAN, ZONE_MORADON};
 
@@ -4876,16 +4613,12 @@ fn lua_delos_castellan_zone_out(lua: &Lua, _uid: i32) -> LuaResult<()> {
 }
 
 /// CheckBeefEventLogin(uid) -> i32
-///
-/// C++ Reference: `BeefEventNew.cpp:243` — returns 1 if beef event active+farming+winner set.
 fn lua_check_beef_event_login(lua: &Lua, _uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
     Ok(if w.is_beef_event_farming() { 1 } else { 0 })
 }
 
 /// CheckMonsterChallengeTime(uid) -> i32
-///
-/// C++ Reference: `EventSigningSystem.cpp:372` — checks if FT is open and level in range.
 fn lua_check_monster_challenge_time(lua: &Lua, uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -4898,40 +4631,30 @@ fn lua_check_monster_challenge_time(lua: &Lua, uid: i32) -> LuaResult<i32> {
 }
 
 /// CheckMonsterChallengeUserCount(uid) -> i32
-///
-/// C++ Reference: `EventSigningSystem.cpp:379` — returns FT signed-up user count.
 fn lua_check_monster_challenge_user_count(lua: &Lua, _uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
     Ok(w.get_ft_user_count() as i32)
 }
 
 /// CheckUnderTheCastleOpen(uid) -> i32
-///
-/// C++ Reference: `EventSigningSystem.cpp:384` — returns 1 if Under The Castle is active.
 fn lua_check_under_castle_open(lua: &Lua, _uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
     Ok(if w.is_under_castle_active() { 1 } else { 0 })
 }
 
 /// CheckUnderTheCastleUserCount(uid) -> i32
-///
-/// C++ Reference: `EventSigningSystem.cpp:389` — returns UTC participant count.
 fn lua_check_under_castle_user_count(lua: &Lua, _uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
     Ok(w.get_under_castle_user_count() as i32)
 }
 
 /// CheckJuraidMountainTime(uid) -> i32
-///
-/// C++ Reference: `EventSigningSystem.cpp:395` — returns 1 if Juraid join phase is open.
 fn lua_check_juraid_mountain_time(lua: &Lua, _uid: i32) -> LuaResult<i32> {
     let w = get_world(lua)?;
     Ok(if w.is_juraid_join_open() { 1 } else { 0 })
 }
 
 /// GetUserDailyOp(uid, op_type) -> i32
-///
-/// C++ Reference: `UserDailyOpSystem.cpp:3` — checks/sets daily operation timestamp.
 fn lua_get_user_daily_op(lua: &Lua, (uid, op_type): (i32, u8)) -> LuaResult<i32> {
     let w = get_world(lua)?;
     let sid = uid as SessionId;
@@ -4951,8 +4674,6 @@ fn lua_get_user_daily_op(lua: &Lua, (uid, op_type): (i32, u8)) -> LuaResult<i32>
 // ═══════════════════════════════════════════════════════════════════════
 
 /// EventSoccerMember(uid, team, x, z) -> ()
-///
-/// C++ Reference: `SoccerSystem.cpp:3-67` — adds player to soccer event team.
 /// team: 1=Blue, 2=Red. Max 11 per team, 22 total. Neutral zone only.
 /// C++ calls ZoneChange(GetZoneID(), x, z) to teleport player, then
 /// StateChangeServerDirect(11, TeamColours) which broadcasts to region.
@@ -4999,7 +4720,6 @@ fn lua_event_soccer_member(lua: &Lua, (uid, team, x, z): (i32, u8, f32, f32)) ->
         w.send_to_session_owned(sid, pkt);
 
         // Fix #4 (HIGH): Teleport player to soccer field
-        // C++ Reference: SoccerSystem.cpp:63 — ZoneChange(GetZoneID(), x, z)
         let mut zone_pkt = Packet::new(Opcode::WizZoneChange as u8);
         zone_pkt.write_u8(2); // ZoneChangeSuccess sub-opcode
         zone_pkt.write_u16(zone_id);
@@ -5015,7 +4735,6 @@ fn lua_event_soccer_member(lua: &Lua, (uid, team, x, z): (i32, u8, f32, f32)) ->
         });
 
         // Fix #3 (CRITICAL): Broadcast StateChange to region, not zone
-        // C++ Reference: SoccerSystem.cpp:64 — StateChangeServerDirect(11, TeamColours)
         // StateChangeServerDirect builds WIZ_STATE_CHANGE and calls SendToRegion(&result)
         let mut state_pkt = Packet::new(Opcode::WizStateChange as u8);
         state_pkt.write_u32(sid as u32); // C++ uses uint32(GetSocketID())
@@ -5039,8 +4758,6 @@ fn lua_event_soccer_member(lua: &Lua, (uid, team, x, z): (i32, u8, f32, f32)) ->
 }
 
 /// EventSoccerStard(uid) -> ()
-///
-/// C++ Reference: `SoccerSystem.cpp:69-93` — starts the soccer match timer.
 /// Validates both teams have players, sets m_SoccerTime=600, m_SoccerActive=true.
 fn lua_event_soccer_stard(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -5067,11 +4784,8 @@ fn lua_event_soccer_stard(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// JoinEvent(uid) -> i32
-///
-/// C++ Reference: `EventSigningSystem.cpp:82-213` — join Juraid Mountain event.
 /// Lua wrapper hardcodes event type to TEMPLE_EVENT_JURAD_MOUNTAIN (100).
 /// Returns 1 on success, 0 on failure.
-///
 /// C++ checks: isEventUser, zone prison, active event match, level limits, loyalty, coins.
 fn lua_join_event(lua: &Lua, uid: i32) -> LuaResult<i32> {
     const MIN_LEVEL_JURAID: u8 = 35;
@@ -5093,7 +4807,6 @@ fn lua_join_event(lua: &Lua, uid: i32) -> LuaResult<i32> {
         return Ok(0);
     }
 
-    // C++ Reference: EventSigningSystem.cpp:87
     // if (isEventUser() || GetZoneID() == ZONE_PRISON || isInTempleEventZone())
     use crate::world::types::{ZONE_BDW, ZONE_CHAOS, ZONE_JURAID};
 
@@ -5119,7 +4832,6 @@ fn lua_join_event(lua: &Lua, uid: i32) -> LuaResult<i32> {
         return Ok(0);
     }
 
-    // C++ Reference: EventSigningSystem.cpp:108-113
     // Level check (min level for Juraid)
     if level < MIN_LEVEL_JURAID {
         let mut pkt = Packet::new(Opcode::WizEvent as u8);
@@ -5158,8 +4870,6 @@ fn lua_join_event(lua: &Lua, uid: i32) -> LuaResult<i32> {
 }
 
 /// DrakiRiftChange(uid, stage, sub_stage) -> ()
-///
-/// C++ Reference: `DrakiTowerSystem.cpp:100-145` — progresses player through
 /// Draki Tower stages. Sends timer display packets. Spawns monsters for stage.
 fn lua_draki_rift_change(lua: &Lua, (uid, stage, sub_stage): (i32, u16, u16)) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -5224,8 +4934,6 @@ fn lua_draki_rift_change(lua: &Lua, (uid, stage, sub_stage): (i32, u16, u16)) ->
 }
 
 /// ClanNts(uid) -> ()
-///
-/// C++ Reference: `ClanNtsHandler.cpp:5-150` — clan-wide nation transfer.
 /// Requires: clan leader, NTS item (900144023), all members offline, no kings,
 /// no cross-clan chars. Heavy DB validation — logged stub.
 fn lua_clan_nts(lua: &Lua, uid: i32) -> LuaResult<()> {
@@ -5252,8 +4960,6 @@ fn lua_clan_nts(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// PerkUseItem(uid, item_id, item_count, perk_points) -> i32
-///
-/// C++ Reference: `PerksHandler.cpp:112-139` — consumes item, adds perk points.
 /// Returns 1 on success, 0 on failure.
 fn lua_perk_use_item(
     lua: &Lua,
@@ -5292,8 +4998,6 @@ fn lua_perk_use_item(
 }
 
 /// RunMiningExchange(uid, ore_type) — exchange ore at mining NPC.
-///
-/// C++ Reference: `CUser::MiningExchange()` in MiningExchange.cpp:289-406
 /// Filters mining_exchange table by ore_type + NPC 31511, builds weighted
 /// random array, selects reward item, removes origin ore, gives reward.
 fn lua_run_mining_exchange(lua: &Lua, (uid, ore_type): (i32, i32)) -> LuaResult<()> {
@@ -5408,12 +5112,9 @@ fn lua_run_mining_exchange(lua: &Lua, (uid, ore_type): (i32, i32)) -> LuaResult<
 // Lua runtime errors.
 // ═══════════════════════════════════════════════════════════════════════
 
-/// MonsterStoneQuestJoin(uid, questId) — register for Monster Stone event quest.
-///
 /// Sets quest state to "ongoing" (1) for the given quest_id, marking
 /// the player as participating in the Monster Stone quest. The actual
 /// Monster Stone event entry happens through WIZ_EVENT (item activation).
-///
 /// Not in C++ source — custom private server feature.
 /// Used by 42+ quest scripts (Bros, Sace, Forkwain, Hwargo, councilor, etc.)
 fn lua_monster_stone_quest_join(lua: &Lua, (uid, quest_id): (i32, i32)) -> LuaResult<()> {
@@ -5434,7 +5135,6 @@ fn lua_monster_stone_quest_join(lua: &Lua, (uid, quest_id): (i32, i32)) -> LuaRe
 }
 
 /// GiveCash(uid, amount) — gives Knight Cash to a player
-///
 /// Not in C++ source — custom private server feature.
 /// Used by 23523_shield.lua (gold/loyalty/item → KC exchange NPC).
 fn lua_give_cash(lua: &Lua, (uid, amount): (i32, u32)) -> LuaResult<()> {
@@ -5447,7 +5147,6 @@ fn lua_give_cash(lua: &Lua, (uid, amount): (i32, u32)) -> LuaResult<()> {
     });
 
     // Send CASHCHANGE packet to client
-    // C++ Reference: UserGoldSystem.cpp:169-177 — CashGain()
     if let Some((kc, tl)) = w.with_session(sid, |h| (h.knight_cash, h.tl_balance)) {
         let pkt = crate::handler::knight_cash::build_cashchange_packet(kc, tl);
         w.send_to_session_owned(sid, pkt);
@@ -5482,11 +5181,9 @@ fn lua_give_cash(lua: &Lua, (uid, amount): (i32, u32)) -> LuaResult<()> {
 }
 
 /// RequestPersonalRankReward(uid) -> i32 (0=success, 2=already claimed)
-///
 /// Checks daily operation type 3 (DAILY_USER_PERSONAL_RANK_REWARD) cooldown.
 /// If 24h+ since last claim: marks as claimed, returns 0 (success).
 /// If still on cooldown: returns 2 (already claimed today).
-///
 /// C++ daily op reference: `UserDailyOpSystem.cpp:3-45`
 /// Used by charel (11610), delaga (21610), Chaos (31526) NPC scripts.
 fn lua_request_personal_rank_reward(lua: &Lua, uid: i32) -> LuaResult<i32> {
@@ -5511,11 +5208,9 @@ fn lua_request_personal_rank_reward(lua: &Lua, uid: i32) -> LuaResult<i32> {
 }
 
 /// RequestReward(uid) -> i32 (0=success, 2=already claimed)
-///
 /// Checks daily operation type 2 (DAILY_USER_RANK_REWARD) cooldown.
 /// If 24h+ since last claim: marks as claimed, returns 0 (success).
 /// If still on cooldown: returns 2 (already claimed today).
-///
 /// C++ daily op reference: `UserDailyOpSystem.cpp:3-45`
 /// Used by charel (11610), delaga (21610), Chaos (31526) NPC scripts.
 fn lua_request_reward(lua: &Lua, uid: i32) -> LuaResult<i32> {
@@ -5540,22 +5235,17 @@ fn lua_request_reward(lua: &Lua, uid: i32) -> LuaResult<i32> {
 }
 
 /// OpenSkill(uid, skillId) — promotes beginner class to novice.
-///
-/// C++ Reference: `GMCommandsHandler.cpp:2545-2579` — HandleOpenSkill calls
 /// `PromoteUserNovice()`. The `skillId` parameter is the Lua event dispatch
 /// number (60, 70, 72…), NOT an actual skill ID to unlock.
-///
 /// Used by SkillOpener.lua (NPC 20035) — class promotion NPC.
 fn lua_open_skill(lua: &Lua, (uid, _skill_id): (i32, i32)) -> LuaResult<()> {
     lua_promote_user_novice(lua, uid)
 }
 
 /// SendGenderChange(uid) — opens the gender change appearance UI on the client.
-///
 /// Custom private server feature (not in original C++).
 /// Equivalent to `SelectMsg(UID, 24, -1, -1, NPC)` — flag 24 tells the client
 /// to open the gender/face/hair customization picker.
-///
 /// Used by `1881_NTSJOB.lua` (EVENT=500) as a shortcut to open the gender UI.
 fn lua_send_gender_change_ui(lua: &Lua, uid: i32) -> LuaResult<()> {
     let w = get_world(lua)?;
@@ -5590,7 +5280,6 @@ fn lua_send_gender_change_ui(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// OpenTradeNpc(uid) — opens the NPC's buy/sell shop for the current event NPC.
-///
 /// Looks up the NPC's `i_selling_group` from the template and sends
 /// `WIZ_TRADE_NPC` to the client, exactly like clicking a MERCHANT NPC.
 /// Used by dialog_builder v4 for NPC dialog SHOP actions.
@@ -5625,7 +5314,6 @@ fn lua_open_trade_npc(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// SendWarpList(uid) — sends the warp list for the player's current zone.
-///
 /// Sends `WIZ_WARP_LIST` with the player's zone ID so the client shows
 /// the warp destination selection UI. Used by dialog_builder v4 for WARP actions.
 fn lua_send_warp_list(lua: &Lua, uid: i32) -> LuaResult<()> {
@@ -5650,7 +5338,6 @@ fn lua_send_warp_list(lua: &Lua, uid: i32) -> LuaResult<()> {
 }
 
 /// OpenShoppingMall(uid, sub_type) — opens the shopping mall / premium shop UI.
-///
 /// Sends `WIZ_SHOPPING_MALL` with the specified sub-type.
 /// Sub-types: 1=premium list, 0=default. Used by dialog_builder v4 for MALL actions.
 fn lua_open_shopping_mall(lua: &Lua, (uid, sub_type): (i32, i32)) -> LuaResult<()> {
@@ -5666,7 +5353,6 @@ fn lua_open_shopping_mall(lua: &Lua, (uid, sub_type): (i32, i32)) -> LuaResult<(
 }
 
 /// RebirthBas(uid) — shows the rebirth NPC menu.
-///
 /// Custom private server feature (not in original C++).
 /// Replaces the commented-out `SelectMsg(UID, 3, 974, 8082, NPC, 4481, 101, 8265, 301, 3019, 203)`
 /// in 19005_Mackin.lua. Shows the rebirth menu with 3 options:
@@ -8788,7 +8474,6 @@ mod tests {
 
     /// Verify all newly added B6 original-name aliases are registered.
     ///
-    /// C++ Reference: `lua_bindings.cpp` MAKE_LUA_METHOD lines 53-54, 164-167.
     #[test]
     fn test_sprint385_b6_remaining_aliases_registered() {
         let lua = Lua::new();
@@ -8811,7 +8496,6 @@ mod tests {
 
     /// GetMonsterChallengeTime must return same value as CheckMonsterChallengeTime.
     ///
-    /// C++ Reference: `lua_bindings.cpp:429` — `_LUA_WRAPPER_USER_FUNCTION(CheckMonsterChallengeTime, GetMonsterChallengeTime)`
     #[test]
     fn test_sprint385_get_monster_challenge_time_matches_check() {
         let world = Arc::new(WorldState::new());
@@ -8834,7 +8518,6 @@ mod tests {
 
     /// GetMonsterChallengeUserCount must return same value as CheckMonsterChallengeUserCount.
     ///
-    /// C++ Reference: `lua_bindings.cpp:430` — `_LUA_WRAPPER_USER_FUNCTION(CheckMonsterChallengeUserCount, GetMonsterChallengeUserCount)`
     #[test]
     fn test_sprint385_get_monster_challenge_user_count_matches_check() {
         let world = Arc::new(WorldState::new());
@@ -8857,7 +8540,6 @@ mod tests {
 
     /// GetUnderTheCastleUserCount must return same value as CheckUnderTheCastleUserCount.
     ///
-    /// C++ Reference: `lua_bindings.cpp:432` — `_LUA_WRAPPER_USER_FUNCTION(CheckUnderTheCastleUserCount, GetUnderTheCastleUserCount)`
     #[test]
     fn test_sprint385_get_under_castle_user_count_matches_check() {
         let world = Arc::new(WorldState::new());
@@ -8880,7 +8562,6 @@ mod tests {
 
     /// GetClanGrade must return same value as CheckClanGrade.
     ///
-    /// C++ Reference: `lua_bindings.cpp:418` — `_LUA_WRAPPER_USER_FUNCTION(CheckClanGrade, GetClanGrade)`
     #[test]
     fn test_sprint385_get_clan_grade_matches_check() {
         let (lua, _world) = setup_lua_world();
@@ -8894,7 +8575,6 @@ mod tests {
 
     /// GetClanPoint must return same value as CheckClanPoint.
     ///
-    /// C++ Reference: `lua_bindings.cpp:419` — `_LUA_WRAPPER_USER_FUNCTION(CheckClanPoint, GetClanPoint)`
     #[test]
     fn test_sprint385_get_clan_point_matches_check() {
         let (lua, _world) = setup_lua_world();

@@ -269,7 +269,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Save flash time/count/type for a character.
     ///
-    /// C++ Reference: `DBAgent.cpp` — UpdateUser saves flash_time, flash_count, flash_type
     pub async fn save_flash(
         &self,
         char_id: &str,
@@ -292,7 +291,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Save bind point (respawn location) for a character.
     ///
-    /// C++ Reference: `DBAgent.cpp` — UpdateUser saves bind, bind_px, bind_pz
     pub async fn save_bind(
         &self,
         char_id: &str,
@@ -384,7 +382,6 @@ impl<'a> CharacterRepository<'a> {
     /// Save stat points, skill points, and free points to DB.
     ///
     /// Called after WIZ_POINT_CHANGE or WIZ_SKILLPT_CHANGE.
-    /// C++ Reference: `UserSkillStatPointSystem.cpp` — stat/skill allocation saves.
     pub async fn save_stat_points(
         &self,
         params: &SaveStatPointsParams<'_>,
@@ -425,7 +422,6 @@ impl<'a> CharacterRepository<'a> {
     /// and free stat points.  Max HP/MP are not stored — they are recalculated
     /// from the coefficient table at load time.
     ///
-    /// C++ Reference: `CUser::LevelChange()` — saves updated level data.
     pub async fn save_level_exp(&self, params: &SaveLevelExpParams<'_>) -> Result<(), sqlx::Error> {
         sqlx::query(
             "UPDATE userdata SET level = $2, exp = $3, hp = $4, mp = $5, \
@@ -445,7 +441,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Save nation, race, and class change for a character (ClanNts).
     ///
-    /// C++ Reference: `CDBAgent::SaveClanNationTransferUser(name, nation, race, class)`
     pub async fn save_nation_transfer_char(
         &self,
         char_name: &str,
@@ -468,7 +463,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Save class and race change to DB.
     ///
-    /// C++ Reference: `GenderJobChangeHandler.cpp` — updates `m_sClass` and `m_bRace`.
     pub async fn save_class_change(
         &self,
         char_id: &str,
@@ -489,7 +483,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Save rebirth stats and level after rebirth change/reset.
     ///
-    /// C++ Reference: `NPCHandler.cpp:301-410` — REB_STAT_CHANGE / REB_STAT_RESET
     #[allow(clippy::too_many_arguments)]
     pub async fn save_rebirth(
         &self,
@@ -533,7 +526,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Load all warehouse items for an account.
     ///
-    /// C++ Reference: `CUser::m_sWarehouseArray` — loaded from DB on WAREHOUSE_OPEN.
     pub async fn load_warehouse_items(
         &self,
         account_id: &str,
@@ -548,7 +540,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Load warehouse coins (inn gold) for an account.
     ///
-    /// C++ Reference: `CUser::GetInnCoins()` / `m_iBank`
     pub async fn load_warehouse_coins(&self, account_id: &str) -> Result<i32, sqlx::Error> {
         let result = sqlx::query_as::<_, WarehouseCoins>(
             "SELECT * FROM user_warehouse_coins WHERE str_account_id = $1",
@@ -586,7 +577,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Rename a character across all relevant tables (transactional).
     ///
-    /// C++ Reference: `CDBAgent::UpdateCharacterName` / `CHANGE_NEW_ID` stored proc.
     ///
     /// Uses a clone-and-swap approach to avoid FK constraint violations:
     /// 1. Insert a new userdata row with the new name (copied from old)
@@ -748,7 +738,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Load non-expired trash items for repurchase.
     ///
-    /// C++ Reference: `CDBAgent::LoadTrashItemList()` — called via
     /// `LOAD_TRASH_ITEMLIST` stored procedure on character login.
     /// Filters out items whose `delete_time` has passed.
     pub async fn load_trash_items(
@@ -769,7 +758,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Insert a trash item for repurchase.
     ///
-    /// C++ Reference: `ItemHandler.cpp:2536-2556` — when selling a non-countable
     /// item, a `_DELETED_ITEM` is created and persisted via `WIZ_DB_SAVE_USER`.
     pub async fn insert_trash_item(
         &self,
@@ -795,7 +783,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Delete a single trash item by its DB id (after successful buyback).
     ///
-    /// C++ Reference: `CUser::RepurchaseGiveIDBack()` — removes from map after buyback.
     pub async fn delete_trash_item(&self, id: i64) -> Result<bool, sqlx::Error> {
         let result = sqlx::query("DELETE FROM trash_item_list WHERE id = $1")
             .bind(id)
@@ -806,7 +793,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Clear all trash items for a character.
     ///
-    /// C++ Reference: `CUser::ResetRepurchaseData()` — clears the display list.
     /// We also provide a full DB clear for logout/cleanup.
     pub async fn clear_trash_items(&self, char_id: &str) -> Result<u64, sqlx::Error> {
         let result = sqlx::query("DELETE FROM trash_item_list WHERE str_user_id = $1")
@@ -837,7 +823,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Load VIP warehouse metadata for an account.
     ///
-    /// C++ Reference: `CDBAgent::LoadVIPStorage` — loads password, expiry, password_request.
     pub async fn load_vip_warehouse(
         &self,
         account_id: &str,
@@ -852,7 +837,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Load VIP warehouse items for an account.
     ///
-    /// C++ Reference: `CUser::m_sVIPWarehouseArray[VIPWAREHOUSE_MAX]`
     pub async fn load_vip_warehouse_items(
         &self,
         account_id: &str,
@@ -916,7 +900,6 @@ impl<'a> CharacterRepository<'a> {
     /// Apply starting equipment for a new character from CREATE_NEW_CHAR_SET data.
     ///
     /// Inserts all non-empty item slots into user_items.
-    /// C++ Reference: `LOAD_NEW_CHAR_SET` stored procedure
     pub async fn apply_starting_equipment(
         &self,
         char_id: &str,
@@ -951,7 +934,6 @@ impl<'a> CharacterRepository<'a> {
     /// Apply starting stats for a new character from CREATE_NEW_CHAR_VALUE data.
     ///
     /// Updates level, exp, stat points, skill points, and gold.
-    /// C++ Reference: `LOAD_NEW_CHAR_VALUE` stored procedure
     pub async fn apply_starting_stats(
         &self,
         char_id: &str,
@@ -987,7 +969,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Reset loyalty_monthly to 0 for all users.
     ///
-    /// C++ Reference: `DBAgent.cpp:2455-2463` — `RESET_LOYALTY_MONTHLY` stored proc.
     pub async fn reset_loyalty_monthly(&self) -> Result<u64, sqlx::Error> {
         let result = sqlx::query("UPDATE userdata SET loyalty_monthly = 0")
             .execute(self.pool)
@@ -997,7 +978,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Update a character's authority level.
     ///
-    /// C++ Reference: `CUser::HandleChangeGM` in `ChatHandler.cpp:2266` — sets `m_bAuthority`.
     pub async fn update_authority(
         &self,
         char_name: &str,
@@ -1013,7 +993,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Update a character's tag name and colour.
     ///
-    /// C++ Reference: `TagChange.cpp:49-53` — persists to `userdata.tagname` + `tagname_rgb`.
     pub async fn update_tagname(
         &self,
         char_id: &str,
@@ -1031,7 +1010,6 @@ impl<'a> CharacterRepository<'a> {
 
     /// Update the mute_status column for a character.
     ///
-    /// C++ Reference: `DBAgent.cpp:1672-1680` — `UserAuthorityUpdate(MUTE)`
     ///
     /// - `mute_status = -1` → permanently muted
     /// - `mute_status = 0` → not muted
@@ -1063,8 +1041,6 @@ pub struct SaveWarehouseItemParams<'a> {
 }
 
 /// Parameters for inserting a trash item (repurchase candidate).
-///
-/// C++ Reference: `_DELETED_ITEM` fields stored in `TRASH_ITEMLIST`.
 pub struct InsertTrashItemParams<'a> {
     pub char_id: &'a str,
     pub item_id: i32,

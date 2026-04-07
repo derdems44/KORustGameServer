@@ -1,56 +1,35 @@
 //! Canonical magic process opcode and skill moral constants.
-//!
 //! All WIZ_MAGIC_PROCESS sub-opcodes and SkillMoral values live here.
 //! Every module that sends/receives magic packets should import from
 //! this module rather than defining its own copies.
-//!
-//! C++ Reference: `MagicProcess.h` — `enum MagicOpcode`, `enum SkillMoral`
 
 // ── MagicOpcode constants ───────────────────────────────────────────────
 
 /// Phase 1: Cast animation — broadcast to region.
-///
-/// C++ Reference: `packets.h:560` — `MAGIC_CASTING = 1`
 pub const MAGIC_CASTING: u8 = 1;
 
 /// Phase 2: Projectile in flight (archer skills).
-///
-/// C++ Reference: `packets.h:561` — `MAGIC_FLYING = 2`
 pub const MAGIC_FLYING: u8 = 2;
 
 /// Phase 3: Effect applied (damage, heal, buff).
-///
-/// C++ Reference: `packets.h:562` — `MAGIC_EFFECTING = 3`
 pub const MAGIC_EFFECTING: u8 = 3;
 
 /// Skill failed — sent only to caster.
-///
-/// C++ Reference: `packets.h:563` — `MAGIC_FAIL = 4`
 pub const MAGIC_FAIL: u8 = 4;
 
 /// Buff duration expired — sent with buff type in sData[3].
-///
-/// C++ Reference: `packets.h:564` — `MAGIC_DURATION_EXPIRED = 5`
 pub const MAGIC_DURATION_EXPIRED: u8 = 5;
 
 /// Client requests buff removal.
-///
-/// C++ Reference: `packets.h:565` — `MAGIC_CANCEL = 6`
 pub const MAGIC_CANCEL: u8 = 6;
 
 /// Cancel transformation.
-///
-/// C++ Reference: `packets.h:566` — `MAGIC_CANCEL_TRANSFORMATION = 7`
 pub const MAGIC_CANCEL_TRANSFORMATION: u8 = 7;
 
 /// Extend type 4 buff duration.
-///
-/// C++ Reference: `packets.h:567` — `MAGIC_TYPE4_EXTEND = 8`
 pub const MAGIC_TYPE4_EXTEND: u8 = 8;
 
 /// Second cancel opcode — identical behavior to MAGIC_CANCEL.
-///
-/// C++ Reference: `packets.h:572` — `MAGIC_CANCEL2 = 13`
 pub const MAGIC_CANCEL2: u8 = 13;
 
 // ── SkillMoral constants ────────────────────────────────────────────────
@@ -94,91 +73,57 @@ pub const MORAL_SELF_AREA: i16 = 13;
 // ── Skill fail message constants ────────────────────────────────────────
 
 /// Sent as data[3] when a skill attack deals 0 damage — client shows "skill missed".
-///
-/// C++ Reference: `packets.h:580` — `SKILLMAGIC_FAIL_ATTACKZERO = -104`
 pub const SKILLMAGIC_FAIL_ATTACKZERO: i32 = -104;
 
 /// Sent as data[3] when skill has no effect — client shows "<skill name> failed".
-///
-/// C++ Reference: `packets.h:579` — `SKILLMAGIC_FAIL_NOEFFECT = -103`
 pub const SKILLMAGIC_FAIL_NOEFFECT: i32 = -103;
 
 // ── Transformation type constants ───────────────────────────────────────
-// C++ Reference: Unit.h — enum TransformationType
 
 /// Monster transformation (e.g. transform scrolls).
-///
-/// C++ Reference: `Unit::TransformationType::TransformationMonster`
 pub const TRANSFORMATION_MONSTER: u8 = 1;
 
 /// NPC transformation (non-combat disguise).
-///
-/// C++ Reference: `Unit::TransformationType::TransformationNPC`
 pub const TRANSFORMATION_NPC: u8 = 2;
 
 /// Siege transformation (war vehicle).
-///
-/// C++ Reference: `Unit::TransformationType::TransformationSiege`
 pub const TRANSFORMATION_SIEGE: u8 = 3;
 
 // ── Abnormal type constants ─────────────────────────────────────────────
-// C++ Reference: `GameDefine.h:1395-1407`
 
 /// Invisible (GM stealth).
-///
-/// C++ Reference: `GameDefine.h:1395` — `ABNORMAL_INVISIBLE = 0`
 pub const ABNORMAL_INVISIBLE: u32 = 0;
 
 /// Normal appearance (visible, not blinking).
-///
-/// C++ Reference: `GameDefine.h:1397` — `ABNORMAL_NORMAL = 1`
 pub const ABNORMAL_NORMAL: u32 = 1;
 
 /// Giant / enlarged (Bezoar scroll).
-///
-/// C++ Reference: `GameDefine.h:1398` — `ABNORMAL_GIANT = 2`
 pub const ABNORMAL_GIANT: u32 = 2;
 
 /// Dwarf / shrunk (Rice cake / Minimize scroll).
-///
-/// C++ Reference: `GameDefine.h:1399` — `ABNORMAL_DWARF = 3`
 pub const ABNORMAL_DWARF: u32 = 3;
 
 /// Blinking (Type 9 invisibility expiring).
-///
-/// C++ Reference: `GameDefine.h:1400` — `ABNORMAL_BLINKING = 4`
 pub const ABNORMAL_BLINKING: u32 = 4;
 
 /// Giant applied to target (Maximize Scroll).
-///
-/// C++ Reference: `GameDefine.h:1401` — `ABNORMAL_GIANT_TARGET = 6`
 pub const ABNORMAL_GIANT_TARGET: u32 = 6;
 
 /// Chaos/dungeon-defence normal (non-blinking form for special zones).
-///
-/// C++ Reference: `GameDefine.h:1402` — `ABNORMAL_CHAOS_NORMAL = 7`
 pub const ABNORMAL_CHAOS_NORMAL: u32 = 7;
 
 // ── User status type constants (SendUserStatusUpdate) ─────────────────
 
 /// Status cured (clear DOT/poison/speed debuff).
-///
-/// C++ Reference: `Define.h:551` — `USER_STATUS_CURE = 0`
 pub const USER_STATUS_CURE: u8 = 0;
 
 /// Damage over time active.
-///
-/// C++ Reference: `Define.h:553` — `USER_STATUS_DOT = 1`
 pub const USER_STATUS_DOT: u8 = 1;
 
 /// Poison active.
-///
-/// C++ Reference: `Define.h:554` — `USER_STATUS_POISON = 2`
 pub const USER_STATUS_POISON: u8 = 2;
 
 /// Speed debuff active.
-///
-/// C++ Reference: `Define.h:555` — `USER_STATUS_SPEED = 3`
 pub const USER_STATUS_SPEED: u8 = 3;
 
 #[cfg(test)]

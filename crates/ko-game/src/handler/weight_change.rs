@@ -1,7 +1,4 @@
 //! WIZ_WEIGHT_CHANGE (0x54) handler — send current weight to client.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/ItemHandler.cpp:462-469`
-//!
 //! Response (WIZ_WEIGHT_CHANGE):
 //! ```text
 //! [u16 item_weight]

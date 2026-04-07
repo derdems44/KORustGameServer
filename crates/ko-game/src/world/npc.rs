@@ -2,7 +2,6 @@
 
 use super::*;
 
-/// C++ Reference: `globals.h:107` — `NPC_BOSS = 3`
 const NPC_BOSS: u8 = 3;
 
 impl WorldState {
@@ -18,7 +17,6 @@ impl WorldState {
     }
     /// Update an NPC template's group (nation) and optionally PID (model).
     ///
-    /// C++ Reference: `CGameServerDlg::NpcUpdate()` in `GameServerDlg.cpp:1262-1279`
     ///
     /// This modifies the shared template data so that future NPC respawns
     /// use the updated nation/model. If `group > 0`, sets the group field.
@@ -47,7 +45,6 @@ impl WorldState {
     }
     /// Check if a player is within NPC interaction range.
     ///
-    /// C++ Reference: `Unit::isInRange(pNPC, MAX_NPC_INTERACTION_RANGE)` — used
     /// before all NPC interactions (shop, warehouse, quest, repair, upgrade).
     ///
     /// Returns `true` if the NPC exists and the player is within range,
@@ -72,7 +69,6 @@ impl WorldState {
     }
     /// Find the first NPC instance in the given zone whose proto_id matches.
     ///
-    /// C++ Reference: `CGameServerDlg::FindNpcInZone(npcId, zoneId)` in `GameServerDlg.cpp`
     ///
     /// Used by KrowazGate to locate gate NPCs by their template ID within a zone.
     pub fn find_npc_in_zone(&self, proto_id: u16, zone_id: u16) -> Option<Arc<NpcInstance>> {
@@ -83,7 +79,6 @@ impl WorldState {
     }
     /// Find all NPC instances in the given zone whose proto_id matches.
     ///
-    /// C++ Reference: iteration over `m_arNpcArray` with proto_id filter
     /// in `UserObjectSystem.cpp:213-225` — `LogLeverBuringLog`
     ///
     /// Used by Wood lever events to toggle all matching gate NPCs.
@@ -116,7 +111,6 @@ impl WorldState {
     }
     /// Record damage dealt to an NPC by a player.
     ///
-    /// C++ Reference: `CNpc::m_sMaxDamageUserid` — tracks per-player damage
     /// so loot rights go to the highest damage dealer, not the last-hitter.
     pub fn record_npc_damage(&self, nid: NpcId, sid: SessionId, damage: i32) {
         let inner = self.npc_damage.entry(nid).or_default();
@@ -142,7 +136,6 @@ impl WorldState {
     }
     /// Get all damage entries for an NPC, returning `Vec<(SessionId, i32)>`.
     ///
-    /// C++ Reference: `CNpc::m_DamagedUserList` — used for damage-weighted
     /// XP/NP distribution on NPC death.
     pub fn get_npc_damage_entries(&self, nid: NpcId) -> Vec<(SessionId, i32)> {
         self.npc_damage
@@ -152,7 +145,6 @@ impl WorldState {
     }
     /// Check if a specific player has dealt damage to an NPC.
     ///
-    /// C++ Reference: `CNpc::IsDamagedUserList()` — used for TENDER aggro check.
     /// Returns true if the player is in the NPC's damage tracking map.
     pub fn npc_damage_contains(&self, nid: NpcId, sid: SessionId) -> bool {
         self.npc_damage
@@ -162,7 +154,6 @@ impl WorldState {
     }
     /// Notify an NPC that it was damaged by a player (reactive aggro switch).
     ///
-    /// C++ Reference: `CNpc::ChangeTarget()` in `Npc.cpp:1701-1808`
     ///
     /// When a player damages an NPC that is in Standing/Moving state, the NPC
     /// immediately switches to Attacking state with the attacker as target.
@@ -178,7 +169,6 @@ impl WorldState {
 
         if let Some(mut ai) = self.npc_ai.get_mut(&nid) {
             // Only switch target if NPC is in a non-combat state
-            // C++ Reference: `Npc.cpp:1773-1776`
             //   if (GetNpcState() == NPC_STANDING || NPC_MOVING || NPC_SLEEPING)
             match ai.state {
                 NpcState::Standing | NpcState::Moving | NpcState::Sleeping => {
@@ -188,13 +178,11 @@ impl WorldState {
                 }
                 _ => {
                     // Already in combat — consider switching target based on threat.
-                    // C++ Reference: `CNpc::ChangeTarget()` in `Npc.cpp:1731-1758`
                     //   Random-weighted comparison between current and new attacker.
                     self.maybe_switch_target(&mut ai, nid, attacker_sid);
                 }
             }
 
-            // C++ Reference: `Npc.cpp:1806-1807`
             //   if (m_bHasFriends || GetType() == NPC_BOSS)
             //     FindFriend(GetType() == NPC_BOSS ? MonSearchAny : MonSearchSameFamily);
             if ai.has_friends {
@@ -222,14 +210,13 @@ impl WorldState {
 
     /// Alert nearby NPCs to join combat when a pack NPC or boss is attacked.
     ///
-    /// C++ Reference: `CNpc::FindFriend()` in `Npc.cpp:1522-1561`
-    /// and `CNpc::FindFriendRegion()` in `Npc.cpp:1576-1650`
+    /// and `CNpc::FindFriendRegion()`
     ///
     /// For bosses (`npc_type == NPC_BOSS`), uses `MonSearchAny` — alerts ANY nearby
     /// NPC regardless of family type. For regular pack NPCs, uses `MonSearchSameFamily`
     /// — only alerts NPCs with matching `family_type` that also have `has_friends`.
     ///
-    /// Search range uses `tracing_range` from the NPC template (C++ `m_byTracingRange`).
+    /// Search range uses `tracing_range` from the NPC template
     /// Iterates NPCs in the same 3x3 region grid. Each eligible friend NPC gets its
     /// target set to the caller's target and transitions to Attacking state.
     fn find_friends(&self, caller_nid: NpcId, is_boss: bool) {
@@ -240,7 +227,6 @@ impl WorldState {
                 None => return,
             };
 
-            // C++ Reference: `Npc.cpp:1527-1528`
             //   if (m_bySearchRange == 0 || (type != SameFamily && hasTarget())) return 0;
             // For SameFamily search, we proceed even if we already have a target.
             // For Any search (boss), skip if we already had a target but that's handled
@@ -260,7 +246,6 @@ impl WorldState {
                 None => return,
             };
 
-            // C++: `if (m_bySearchRange == 0) return 0;`
             if tmpl.search_range == 0 {
                 return;
             }
@@ -298,7 +283,6 @@ impl WorldState {
             }
 
             // Must be alive (not Dead state) and not already fighting
-            // C++ Reference: `Npc.cpp:1604,1620`
             //   if (pNpc->hasTarget() && pNpc->GetNpcState() == NPC_FIGHTING) continue;
             if friend_ai.state == NpcState::Dead {
                 continue;
@@ -308,8 +292,6 @@ impl WorldState {
             }
 
             // Distance check using tracing_range
-            // C++ Reference: `Npc.cpp:1584` — fSearchRange = m_byTracingRange
-            // C++ `GetDistanceSqrt` returns actual sqrt distance.
             let dx = friend_ai.cur_x - cur_x;
             let dz = friend_ai.cur_z - cur_z;
             let dist = (dx * dx + dz * dz).sqrt();
@@ -319,10 +301,8 @@ impl WorldState {
 
             if is_boss {
                 // MonSearchAny: alert any NPC in range
-                // C++ Reference: `Npc.cpp:1602-1613`
             } else {
                 // MonSearchSameFamily: only same-family NPCs with has_friends
-                // C++ Reference: `Npc.cpp:1616-1630`
                 //   if (pNpc->m_bHasFriends && pNpc->m_proto->m_byFamilyType == m_proto->m_byFamilyType)
                 if !friend_ai.has_friends || friend_ai.family_type != family_type {
                     continue;
@@ -347,7 +327,6 @@ impl WorldState {
         }
 
         // Now activate all collected friends.
-        // C++ Reference: `Npc.cpp:1607-1613,1623-1629`
         //   pNpc->m_Target.id = m_Target.id;
         //   pNpc->NpcStrategy(NPC_ATTACK_SHOUT);
         for friend_nid in friends_to_activate {
@@ -368,14 +347,13 @@ impl WorldState {
 
     /// Evaluate whether the NPC should switch its current target to a new attacker.
     ///
-    /// C++ Reference: `CNpc::ChangeTarget()` in `Npc.cpp:1731-1758`
     ///
-    /// Uses a random roll (0-100 inclusive, matching C++ `myrand(0,100)`) to decide:
+    /// Uses a random roll (0-100 inclusive, matching `myrand(0,100)`) to decide:
     /// - [0,50): compare how much damage each player deals TO the NPC — switch if new
-    ///   attacker dealt more cumulative damage (approximation of C++ `GetDamage(this)`)
+    ///   attacker dealt more cumulative damage (approximation of `GetDamage(this)`)
     /// - [50,80): compare distance — switch if new attacker is closer
     /// - [80,95): compare NPC's outgoing damage to each player — switch if NPC would
-    ///   hurt the new target more (C++ `GetDamage(pUser)`, approximated via AC)
+    ///   hurt the new target more (`GetDamage(pUser)`, approximated via AC)
     /// - [95,100]: no comparison — unconditionally switch (C++ falls through to set target)
     fn maybe_switch_target(&self, ai: &mut NpcAiState, nid: NpcId, attacker_sid: SessionId) {
         use rand::Rng;
@@ -489,7 +467,6 @@ impl WorldState {
     }
     /// Update the `gate_open` field on an NpcInstance (replaces the Arc).
     ///
-    /// C++ Reference: `CNpc::m_byGateOpen` — gate state needs to be on the
     /// instance so NPC_INOUT packets include the correct gate state when new
     /// clients enter the region.
     pub fn update_npc_gate_open(&self, nid: NpcId, gate_open: u8) {
@@ -509,7 +486,6 @@ impl WorldState {
     ///
     /// Used for soccer ball NPC teleportation (goal reset, out-of-bounds reset).
     ///
-    /// C++ Reference: `CNpc::SendInOut(INOUT_OUT, ...)` + `SendInOut(INOUT_IN, x, z)`
     pub fn update_npc_position(&self, nid: NpcId, new_x: f32, new_z: f32) {
         let updated = self.npc_instances.get(&nid).map(|old| {
             let new_rx = crate::zone::calc_region(new_x);
@@ -535,7 +511,6 @@ impl WorldState {
     }
     /// Toggle a gate NPC's open/close state and broadcast to nearby players.
     ///
-    /// C++ Reference: `Npc.cpp:412-433` — `CNpc::SendGateFlag(uint8 bFlag)`
     ///
     /// Updates `NpcInstance.gate_open`, then broadcasts a `WIZ_OBJECT_EVENT`
     /// packet to the NPC's 3x3 region. For `NPC_OBJECT_WOOD` (54) and
@@ -570,13 +545,11 @@ impl WorldState {
         };
 
         // NPC_OBJECT_WOOD and NPC_ROLLINGSTONE: only update state, no broadcast
-        // C++ Reference: `Npc.cpp:426-428`
         if tmpl.npc_type == NPC_OBJECT_WOOD || tmpl.npc_type == NPC_ROLLINGSTONE {
             return;
         }
 
         // Resolve object_type from zone's object event table (using proto_id as key)
-        // C++ Reference: `Npc.cpp:416-419`
         //   _OBJECT_EVENT* pObjectEvent = GetMap()->GetObjectEvent(GetProtoID());
         //   if (pObjectEvent) objectType = (uint8)pObjectEvent->sType;
         let object_type = self
@@ -585,7 +558,6 @@ impl WorldState {
             .unwrap_or(OBJECT_FLAG_LEVER);
 
         // Build WIZ_OBJECT_EVENT packet
-        // C++ Reference: `Npc.cpp:431-432`
         //   result << uint8(1) << uint32(GetID()) << m_byGateOpen;
         let mut pkt = Packet::new(Opcode::WizObjectEvent as u8);
         pkt.write_u8(object_type);
@@ -607,7 +579,6 @@ impl WorldState {
 
     /// Broadcast Juraid bridge gate opening to players in the zone.
     ///
-    /// C++ Reference: `TempleEventBridgeCheck()` in EventMainSystem.cpp:332-382
     /// and `HandleJuraidGateOpen()` in NpcThread.cpp:1250-1281.
     ///
     /// For each room, finds bridge NPCs by trap_number, sets `gate_open = 2`,
@@ -695,7 +666,6 @@ impl WorldState {
 
     /// Spawn an event NPC/monster at the specified position.
     ///
-    /// C++ Reference: `CGameServerDlg::SpawnEventNpc()` in NpcThread.cpp:623-800
     ///
     /// Allocates a new runtime NPC ID, creates an NpcInstance, registers it in
     /// the zone region grid, initializes HP, and broadcasts NPC_IN to nearby
@@ -717,7 +687,6 @@ impl WorldState {
 
     /// Extended event NPC spawn with event room and summon type.
     ///
-    /// C++ Reference: `CGameServerDlg::SpawnEventNpc()` — full signature with
     /// `nEventRoom` and `nSummonSpecialID` parameters.
     #[allow(clippy::too_many_arguments)]
     pub fn spawn_event_npc_ex(
@@ -793,7 +762,6 @@ impl WorldState {
 
             // Initialize AI state for monsters with search range
             if is_monster && tmpl.search_range > 0 {
-                // C++ Reference: `Npc.cpp:4690-4706` — act_type 3/4 with zone exclusion
                 let has_friends = matches!(tmpl.act_type, 3 | 4)
                     && !matches!(
                         zone_id,
@@ -847,7 +815,6 @@ impl WorldState {
             }
 
             // Guard event NPCs also need AI (e.g. castle siege guards)
-            // C++ Reference: `Npc.h:397-409` — guards/guard towers always search
             if !is_monster && is_guard_npc_type(tmpl.npc_type) && !self.npc_ai.contains_key(&nid) {
                 self.npc_ai.insert(
                     nid,
@@ -914,7 +881,6 @@ impl WorldState {
     }
     /// Set duration (auto-death timer) on a spawned NPC.
     ///
-    /// C++ Reference: `CNpc::m_sDuration` — set in `_AddNPC()` at spawn time.
     /// After `duration_secs` elapses, the NPC AI tick will automatically kill it.
     ///
     /// `tick_now_ms` should be the current tick counter for spawned_at_ms.
@@ -926,7 +892,6 @@ impl WorldState {
     }
     /// Kill/remove an NPC by runtime ID.
     ///
-    /// C++ Reference: `CGameServerDlg::KillNpc()` in GameServerDlg.cpp:1186-1255
     ///
     /// Sets HP to 0, broadcasts death packet, removes from region grid.
     pub fn kill_npc(&self, nid: NpcId) {
@@ -939,7 +904,6 @@ impl WorldState {
         self.update_npc_hp(nid, 0);
 
         // Broadcast WIZ_DEAD for the NPC
-        // C++ Reference: Npc.cpp:1292 — sends uint32(GetID())
         let mut death_pkt = Packet::new(Opcode::WizDead as u8);
         death_pkt.write_u32(nid);
         self.broadcast_to_3x3(
@@ -980,8 +944,6 @@ impl WorldState {
 
     /// Despawn all event NPCs in a zone that belong to a specific event room.
     ///
-    /// C++ Reference: `TempleMonsterStoneResetNpcs(roomid, zoneid)` in
-    /// `MonsterStoneSystem.cpp:441-466` — iterates zone NPC array, kills
     /// those matching `GetEventRoom() == roomid + 1`.
     ///
     /// `event_room` is 1-based (room_id + 1).
@@ -1009,7 +971,6 @@ impl WorldState {
     /// Replaces any existing slot with the same `skill_id`, up to a max
     /// of 4 slots per NPC (matches `MAX_TYPE3_REPEAT`).
     ///
-    /// C++ Reference: `Unit::m_durationalSkills[]` — shared with players.
     pub fn add_npc_dot(&self, npc_id: NpcId, slot: NpcDotSlot) {
         let mut entry = self.npc_dots.entry(npc_id).or_default();
         // Replace existing DOT from same skill
@@ -1077,7 +1038,6 @@ impl WorldState {
 
     /// Apply a Type4 buff/debuff to an NPC. Overwrites any existing buff of the same type.
     ///
-    /// C++ Reference: `Unit::AddType4Buff()` in `Unit.cpp:2128`
     pub fn apply_npc_buff(&self, npc_id: NpcId, entry: NpcBuffEntry) {
         let mut map = self.npc_buffs.entry(npc_id).or_default();
         map.insert(entry.buff_type, entry);
@@ -1085,7 +1045,6 @@ impl WorldState {
 
     /// Remove a specific buff type from an NPC.
     ///
-    /// C++ Reference: `CMagicProcess::RemoveType4Buff()` in `MagicProcess.cpp:1031`
     pub fn remove_npc_buff(&self, npc_id: NpcId, buff_type: i32) -> bool {
         if let Some(mut map) = self.npc_buffs.get_mut(&npc_id) {
             let removed = map.remove(&buff_type).is_some();
@@ -1101,7 +1060,6 @@ impl WorldState {
 
     /// Remove all buffs/debuffs from an NPC (e.g., on death).
     ///
-    /// C++ Reference: NPC death clears buff map.
     pub fn clear_npc_buffs(&self, npc_id: NpcId) {
         self.npc_buffs.remove(&npc_id);
     }
@@ -1129,7 +1087,6 @@ impl WorldState {
     /// Returns a list of `(npc_id, buff_type)` for each expired buff,
     /// so the caller can log or take further action.
     ///
-    /// C++ Reference: `CNpc::Type4Duration()` in `Npc.cpp:7172-7182`
     /// C++ removes one expired buff per tick (break after first removal).
     /// We remove all expired buffs per tick for simplicity and correctness.
     pub fn process_npc_buff_tick(&self) -> Vec<(NpcId, i32)> {
@@ -1168,7 +1125,6 @@ impl WorldState {
 
     /// Look up a farm bot by its ID.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ArtificialIntelligenceArray.GetData(id)`
     pub fn get_bot_farm(&self, id: i32) -> Option<BotHandlerFarmRow> {
         self.bot_farm_data.get(&id).map(|r| r.clone())
     }
@@ -1178,7 +1134,6 @@ impl WorldState {
     }
     /// Look up a merchant bot template by its index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ArtificialMerchantArray.GetData(index)`
     pub fn get_bot_merchant_template(&self, index: i16) -> Option<BotHandlerMerchantRow> {
         self.bot_merchant_templates.get(&index).map(|r| r.clone())
     }
@@ -1188,7 +1143,6 @@ impl WorldState {
     }
     /// Look up a pre-configured merchant stall by index.
     ///
-    /// C++ Reference: `_BOT_SAVE_DATA` used in merchant bot spawning
     pub fn get_bot_merchant_data(&self, index: i32) -> Option<BotMerchantDataRow> {
         self.bot_merchant_data.get(&index).map(|r| r.clone())
     }
@@ -1206,7 +1160,6 @@ impl WorldState {
     }
     /// Get all farm bots in a specific zone.
     ///
-    /// C++ Reference: Bot spawning filters by zone in `CBot::Initialize()`
     pub fn get_bots_in_zone(&self, zone_id: i16) -> Vec<BotHandlerFarmRow> {
         self.bot_farm_data
             .iter()
@@ -1235,7 +1188,6 @@ impl WorldState {
 
     /// Look up a user's personal rank by uppercase character name.
     ///
-    /// C++ Reference: `m_UserKarusPersonalRankMap` / `m_UserElmoPersonalRankMap`
     /// Returns 0 if not ranked.
     pub fn get_user_personal_rank(&self, char_name: &str) -> u8 {
         let upper = char_name.to_uppercase();
@@ -1244,7 +1196,6 @@ impl WorldState {
 
     /// Look up a user's knights rank by uppercase character name.
     ///
-    /// C++ Reference: `m_UserKarusKnightsRankMap` / `m_UserElmoKnightsRankMap`
     /// Returns 0 if not ranked.
     pub fn get_user_knights_rank(&self, char_name: &str) -> u8 {
         let upper = char_name.to_uppercase();
@@ -1253,7 +1204,6 @@ impl WorldState {
 
     /// Apply loaded user ranks to all online sessions.
     ///
-    /// C++ Reference: `LoadUserRankings()` lines 608-662 — iterates rank maps
     /// and sets `m_bPersonalRank` / `m_bKnightsRank` on each online user.
     pub fn apply_user_ranks_to_sessions(&self) {
         let personal = self.user_personal_rank.read();
@@ -1274,7 +1224,6 @@ impl WorldState {
 
     /// Apply loaded user ranks to all bot instances.
     ///
-    /// C++ Reference: `LoadUserRankings()` lines 636-662 — iterates bot rank maps.
     pub fn apply_user_ranks_to_bots(&self) {
         let personal = self.bot_personal_rank.read();
         let knights_r = self.bot_knights_rank.read();
@@ -1334,28 +1283,24 @@ impl WorldState {
 
     /// Allocate a new unique BotId.
     ///
-    /// C++ Reference: Bot slot IDs assigned from the free-slot pool above MAX_USER.
     pub fn alloc_bot_id(&self) -> BotId {
         self.next_bot_id.fetch_add(1, Ordering::Relaxed)
     }
 
     /// Insert (or replace) a runtime bot instance.
     ///
-    /// C++ Reference: `CGameServerDlg::m_sMapBotListArray` insert.
     pub fn insert_bot(&self, bot: BotInstance) {
         self.bots.insert(bot.id, bot);
     }
 
     /// Remove a runtime bot by ID, returning it if present.
     ///
-    /// C++ Reference: `CGameServerDlg::RemoveMapBotList()`
     pub fn remove_bot(&self, id: BotId) -> Option<BotInstance> {
         self.bots.remove(&id).map(|(_, b)| b)
     }
 
     /// Get a snapshot of a runtime bot by ID.
     ///
-    /// C++ Reference: `CGameServerDlg::GetBotPtr()`
     pub fn get_bot(&self, id: BotId) -> Option<BotInstance> {
         self.bots.get(&id).map(|b| b.clone())
     }
@@ -1367,7 +1312,6 @@ impl WorldState {
 
     /// Returns all runtime bots in a specific zone.
     ///
-    /// C++ Reference: `m_sMapBotListArray` iterating and filtering by zone.
     pub fn get_bots_in_zone_live(&self, zone_id: u16) -> Vec<BotInstance> {
         self.bots
             .iter()
@@ -1380,7 +1324,6 @@ impl WorldState {
     ///
     /// Returns a list of BotIds that should be despawned.
     ///
-    /// C++ Reference: Expiry check inside the game-server bot event loop.
     pub fn collect_expired_bot_ids(&self, now_unix: u64) -> Vec<BotId> {
         self.bots
             .iter()
@@ -1420,7 +1363,6 @@ impl WorldState {
     /// Uses `tokio::spawn` for async broadcasts since this may be called
     /// from synchronous Lua binding context.
     ///
-    /// C++ Reference: `CGameServerDlg::KillNpc()` in `GameServerDlg.cpp:1186`
     pub(crate) fn kill_npc_by_runtime_id(&self, nid: NpcId) {
         let instance = match self.get_npc_instance(nid) {
             Some(i) => i,
@@ -1466,7 +1408,6 @@ impl WorldState {
 
     /// Kill all NPCs in a zone that match a given proto_id.
     ///
-    /// C++ Reference: `CGameServerDlg::KillNpc()` with `sNid < NPC_BAND` branch
     pub(crate) fn kill_npc_by_proto_id(&self, proto_id: u16, zone_id: u16) {
         let matching_nids: Vec<NpcId> = self
             .npc_instances
@@ -1485,7 +1426,6 @@ impl WorldState {
 
     /// Kill all non-monster NPCs in a given zone.
     ///
-    /// C++ Reference: `DrakiTowerNpcOut` — kills event NPCs in Draki Tower.
     pub(crate) fn kill_non_monster_npcs_in_zone(&self, zone_id: u16) {
         let matching_nids: Vec<NpcId> = self
             .npc_instances
@@ -1513,7 +1453,6 @@ impl WorldState {
     /// can be called from both sync and async contexts. The lock is
     /// uncontended at startup / in tests so this always succeeds.
     ///
-    /// C++ Reference: `CGameServerDlg::AddNpcUnit()` — always registers in zone.
     #[cfg(test)]
     pub(crate) fn insert_npc_instance(&self, instance: crate::npc::NpcInstance) {
         let nid = instance.nid;
@@ -1537,7 +1476,6 @@ impl WorldState {
 
     /// Set the selling group on a live NPC instance (changes what items the NPC sells).
     ///
-    /// C++ Reference: `CUser::NpcEventSystem()` in `NpcEventSystem.cpp:39`
     ///   Sets `pNpc->m_iSellingGroup = m_iSellingGroup` and sends WIZ_TRADE_NPC.
     ///
     /// Since our NPC instances are immutable Arc, we replace the instance with
@@ -1555,7 +1493,6 @@ impl WorldState {
 
     /// Spawn random boss monsters at startup.
     ///
-    /// C++ Reference: `CGameServerDlg::RandomBossSystemLoad()` in `BossHandler.cpp:25-45`
     ///
     /// For each stage in `monster_boss_random_stages`, finds matching candidates
     /// from `monster_boss_random_spawn` and picks one at random to spawn.
@@ -2753,7 +2690,6 @@ mod tests {
     #[test]
     fn test_find_friends_boss_does_not_need_has_friends() {
         // Bosses trigger MonSearchAny even without has_friends flag.
-        // C++ Reference: `Npc.cpp:1806` — `GetType() == NPC_BOSS`
         let world = WorldState::new();
         let boss_nid: NpcId = 7000;
         let friend_nid: NpcId = 7001;
@@ -3807,7 +3743,6 @@ mod tests {
     #[test]
     fn test_send_gate_flag_packet_format() {
         // Verify the wire format of the gate flag broadcast packet
-        // C++ Reference: `Npc.cpp:421-432`
         //   Packet result(WIZ_OBJECT_EVENT, objectType);
         //   result << uint8(1) << uint32(GetID()) << m_byGateOpen;
         let mut pkt = ko_protocol::Packet::new(ko_protocol::Opcode::WizObjectEvent as u8);
@@ -3868,8 +3803,6 @@ mod tests {
 
     /// Verify MAX_NPC_RANGE_SQ matches C++ MAX_NPC_RANGE = pow(11.0f, 2.0f) = 121.0.
     ///
-    /// C++ Reference: `Unit.h:14` — `#define MAX_NPC_RANGE (121.0f)`
-    /// C++ `isInRange()` uses GetDistance() which returns dx²+dz² (no sqrt).
     #[test]
     fn test_npc_range_constant_matches_cpp() {
         use crate::npc::NpcInstance;
@@ -4439,7 +4372,6 @@ mod tests {
     /// Juraid bridge trap_number formula: Karus = bridge_idx+1, Elmorad = bridge_idx+4.
     #[test]
     fn test_juraid_bridge_trap_number_formula() {
-        // C++ Reference: `EventMainSystem.cpp:332-382`
         // Karus bridges: trap_number = bridge_idx + 1 → (1, 2, 3)
         // Elmorad bridges: trap_number = bridge_idx + 4 → (4, 5, 6)
         for bridge_idx in 0i16..3 {
@@ -4486,7 +4418,6 @@ mod tests {
     /// Event NPC AI: act_type 1-4 → not aggressive (TENDER), 5+ → aggressive (ATROCITY).
     #[test]
     fn test_event_npc_ai_aggressive_by_act_type() {
-        // C++ Reference: `is_aggressive = !matches!(tmpl.act_type, 1..=4)`
         for act_type in 1..=4u8 {
             let is_aggressive = !matches!(act_type, 1..=4);
             assert!(!is_aggressive, "act_type {} should be non-aggressive (TENDER)", act_type);

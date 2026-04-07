@@ -1,25 +1,16 @@
 //! WIZ_TERRAIN_EFFECTS (0x83) — terrain effect notification (server→client only).
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/EventTrapSystem.cpp:164-292`
-//!                `CUser::OreadsZoneTerrainEvent()`
-//!
 //! The server evaluates the player's position in ZONE_BATTLE6 (Oreads) during
 //! nation battle and sends a terrain type to the client. The client uses this
 //! to display visual effects and apply combat modifiers.
-//!
 //! ## Terrain Types
-//!
 //! | Value | Name  | Effect                                         |
 //! |-------|-------|------------------------------------------------|
 //! | 0     | None  | No terrain effect (clear previous)             |
 //! | 1     | Hay   | Boosts fire magic, weakens ice and lightning    |
 //! | 2     | Swamp | Boosts all magic, decreases movement speed      |
 //! | 3     | Water | Weakens fire magic, boosts ice and lightning    |
-//!
 //! ## Wire format (Server→Client)
-//!
 //! `[u8 0x01] [u8 terrain_type]`
-//!
 //! No client→server handling is needed for this opcode.
 
 use ko_protocol::{Opcode, Packet};
@@ -36,11 +27,7 @@ pub const TERRAIN_SWAMP: u8 = 2;
 pub const TERRAIN_WATER: u8 = 3;
 
 /// Build a WIZ_TERRAIN_EFFECTS packet to send to the client.
-///
-/// C++ Reference: `EventTrapSystem.cpp:288-290`
-///
 /// Wire: `[u8 0x01] [u8 terrain_type]`
-///
 /// # Arguments
 /// * `terrain_type` — One of `TERRAIN_NONE`, `TERRAIN_HAY`, `TERRAIN_SWAMP`, `TERRAIN_WATER`.
 pub fn build_terrain_effects_packet(terrain_type: u8) -> Packet {
@@ -51,14 +38,10 @@ pub fn build_terrain_effects_packet(terrain_type: u8) -> Packet {
 }
 
 /// Evaluate terrain type based on player position in ZONE_BATTLE6 (Oreads).
-///
-/// C++ Reference: `EventTrapSystem.cpp:246-291` — `CUser::OreadsZoneTerrainEvent()`
-///
 /// Returns `TERRAIN_NONE` if:
 /// - Zone is not ZONE_BATTLE6
 /// - Nation battle is not active
 /// - Player is a GM
-///
 /// Otherwise checks rectangular terrain zones:
 /// - HAY (1): 5 areas — boosts fire, weakens ice/lightning
 /// - Swamp (2): 1 area — boosts all magic, slows movement
@@ -70,7 +53,6 @@ pub fn evaluate_terrain(
     pos_x: f32,
     pos_z: f32,
 ) -> u8 {
-    // C++ Reference: EventTrapSystem.cpp:246-254
     // if (g_pMain->m_byBattleOpen != NATION_BATTLE || GetZoneID() != ZONE_BATTLE6 || isGM())
     if !is_nation_battle || zone_id != ZONE_BATTLE6 || is_gm {
         return TERRAIN_NONE;
@@ -81,7 +63,6 @@ pub fn evaluate_terrain(
         (x_min..=x_max).contains(&pos_x) && (z_min..=z_max).contains(&pos_z)
     };
 
-    // C++ Reference: EventTrapSystem.cpp:259-268 — HAY terrain (5 rectangular areas)
     if in_rect(531.0, 713.0, 447.0, 690.0)    // Area 1
         || in_rect(375.0, 527.0, 392.0, 612.0) // Area 2
         || in_rect(285.0, 423.0, 344.0, 569.0) // Area 3
@@ -91,12 +72,10 @@ pub fn evaluate_terrain(
         return TERRAIN_HAY;
     }
 
-    // C++ Reference: EventTrapSystem.cpp:271-276 — Swamp terrain (1 area)
     if in_rect(619.0, 984.0, 714.0, 970.0) {
         return TERRAIN_SWAMP;
     }
 
-    // C++ Reference: EventTrapSystem.cpp:279-284 — Water/Ice terrain (1 area)
     if in_rect(138.0, 373.0, 62.0, 306.0) {
         return TERRAIN_WATER;
     }

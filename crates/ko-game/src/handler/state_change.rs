@@ -1,20 +1,12 @@
 //! WIZ_STATE_CHANGE (0x29) handler — sit/stand, emotes, visibility.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:2865-3007`
-//!
 //! ## Request (C->S)
-//!
 //! | Offset | Type   | Description |
 //! |--------|--------|-------------|
 //! | 0      | u8     | bType (1=sit/stand, 2=party, 3=view, 4=emotion, 5=abnormal, 7=invisibility) |
 //! | 1      | u32le  | nBuff (meaning depends on bType) |
-//!
 //! ## Broadcast to nearby players
-//!
 //! `[u32 socket_id] [u8 bType] [u32 nBuff]`
-//!
 //! ## State Constants
-//!
 //! - `USER_STANDING` (0x01): player is standing
 //! - `USER_SITDOWN` (0x02): player is sitting
 //! - `USER_DEAD` (0x03): player is dead
@@ -32,9 +24,6 @@ use crate::state_change_constants::STATE_CHANGE_GM_VISIBILITY;
 use crate::world::{USER_MONUMENT, USER_SITDOWN, USER_STANDING};
 
 /// Handle WIZ_STATE_CHANGE from the client.
-///
-/// C++ Reference: `User.cpp:2865-2932` (CUser::StateChange)
-///
 /// Validates the type/buff combination, updates server-side state, and
 /// broadcasts the change to the 3x3 region grid.
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
@@ -46,7 +35,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let sid = session.session_id();
 
     // Dead players cannot change state
-    // C++ Reference: User.cpp:2867-2868
     if world.is_player_dead(sid) {
         return Ok(());
     }
@@ -67,7 +55,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         // Type 2: Party need — pass through
         2 => {}
         // Type 3: Abnormal/view — GM only (buff 1, 2, 3, or 5)
-        // C++ Reference: User.cpp:2957-2960 — if GM, auto-toggle visibility first
         3 => {
             let (is_gm, current_abnormal) = world
                 .with_session(sid, |h| {
@@ -143,12 +130,10 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
         }
         // Type 4: Emotions
-        // C++ Reference: User.cpp:2895-2915
         4 => {
             match buff {
                 1..=3 | 11..=13 => {
                     // Greeting (1-3) and Provoke (11-13) — captains cannot use these
-                    // C++ Reference: User.cpp:2904 — `if (GetFame() == COMMAND_CAPTAIN) return;`
                     let is_captain = world
                         .get_character_info(sid)
                         .map(|ch| ch.fame == COMMAND_CAPTAIN)
@@ -159,7 +144,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                 }
                 14 | 15 => {} // spacebar animations — always allowed
                 _ => {
-                    // C++ Reference: User.cpp:2911-2915 — default case logs but does NOT reject.
                     // Unknown emotion buff values proceed to broadcast.
                     tracing::trace!(
                         "[sid={}] State change Type 4: unknown emotion buff {}",
@@ -170,7 +154,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
         }
         // Type 5: GM visibility toggle — GM only, with duplicate-state guard
-        // C++ Reference: User.cpp:2918-2920
         //   `if ((buff == 0 && m_bAbnormalType == 0) || (buff == 1 && m_bAbnormalType == 1) || (!isGM())) return;`
         5 => {
             let (is_gm, current_abnormal) = world
@@ -192,7 +175,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
         }
         // Types 6, 7, 8, 11: Server-internal only — reject from client packets.
-        // C++ Reference: User.cpp:2925-2928 — `StateChange()` has `default: return;`
         // These types are ONLY set via `StateChangeServerDirect()` (server-side calls).
         //   6 = party leader flag (set by party system)
         //   7 = invisibility (set by magic system)
@@ -203,7 +185,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         _ => return Ok(()),
     }
 
-    // C++ Reference: User.cpp:2876-2879 — reset training state on ANY state change
     // (happens before the switch/case, applies to all bType values)
     // m_iTotalTrainingExp = 0; m_iTotalTrainingTime = 0; m_lastTrainingTime = 0;
     world.update_session(sid, |h| {
@@ -212,7 +193,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     });
 
     // Update server-side state for Type 1 (sit/stand)
-    // C++ Reference: User.cpp:2946-2948 (StateChangeServerDirect case 1)
     if b_type == 1 {
         world.update_res_hp_type(sid, buff);
 
@@ -223,7 +203,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Update server-side state for Type 2 (party need flag)
-    // C++ Reference: User.cpp:2950-2952 — `m_bNeedParty = buff`
     if b_type == 2 {
         world.update_session(sid, |h| {
             h.need_party = buff;
@@ -231,7 +210,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Update server-side state for Type 3 (abnormal/transformation — GM only)
-    // C++ Reference: User.cpp:2957-2960
     //   If GM, force visibility before transformation to prevent desync.
     //   m_nOldAbnormalType = m_bAbnormalType;
     //   m_bAbnormalType = nBuff;
@@ -243,7 +221,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Update server-side state for Type 5 (GM visibility toggle)
-    // C++ Reference: User.cpp:2966-2972 (StateChangeServerDirect case 5)
     //   m_bAbnormalType = nBuff;
     //   nBuff == 0 ? GmInOut(INOUT_OUT) : GmInOut(INOUT_IN);
     if b_type == STATE_CHANGE_GM_VISIBILITY {
@@ -256,7 +233,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     // and are set directly by party.rs and event system handlers, not through this path.
 
     // Build broadcast packet: [u32 socket_id][u8 bType][u32 nBuff]
-    // C++ Reference: User.cpp:3000-3001
     // v2600 PCAP: no S2C state_change in sniffer because single-player session.
     // Client needs to receive its OWN state_change back for sit/stand to take effect.
     let mut bcast = Packet::new(Opcode::WizStateChange as u8);
@@ -277,7 +253,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         );
 
         // For Type 5: broadcast GmInOut to make GM appear/disappear to other players
-        // C++ Reference: RegionHandler.cpp:48-55 (CUser::GmInOut)
         //   GmGetInOut builds WIZ_USER_INOUT with GetUserInfo
         //   SendToRegion sends to 3x3 grid (excluding self)
         if b_type == STATE_CHANGE_GM_VISIBILITY {
@@ -614,7 +589,6 @@ mod tests {
     // ── Sprint 278: StateChange Type 2/3 Tests ─────────────────────────
 
     /// Test Type 2 need_party server state tracking.
-    /// C++ Reference: User.cpp:2950-2952 — `m_bNeedParty = buff`
     #[test]
     fn test_state_change_type2_need_party_state() {
         use crate::world::{Position, WorldState};
@@ -647,7 +621,6 @@ mod tests {
     }
 
     /// Test Type 3 GM transformation updates abnormal_type and old_abnormal_type.
-    /// C++ Reference: User.cpp:2957-2960
     #[test]
     fn test_state_change_type3_gm_abnormal_tracking() {
         use crate::world::{Position, WorldState};
@@ -686,7 +659,6 @@ mod tests {
     }
 
     /// Verify GM visibility auto-toggle constant values.
-    /// C++ Reference: User.cpp:2959 — StateChangeServerDirect(5, 1)
     #[test]
     fn test_gm_visibility_auto_toggle_constants() {
         // Type 5 = GM visibility, buff 1 = visible
@@ -700,7 +672,6 @@ mod tests {
 
     #[test]
     fn test_team_colour_enum_values() {
-        // C++ Reference: User.h:103-110 — TeamColour enum
         let none: u8 = 0;
         let blue: u8 = 1;
         let red: u8 = 2;
@@ -733,7 +704,6 @@ mod tests {
 
     #[test]
     fn test_clan_notice_chat_type_value() {
-        // C++ Reference: packets.h — CLAN_NOTICE = 24
         assert_eq!(24u8, 24);
     }
 
@@ -741,7 +711,6 @@ mod tests {
 
     #[test]
     fn test_server_internal_types_rejected() {
-        // C++ Reference: User.cpp:2925-2928 — StateChange() `default: return;`
         // Types 6, 7, 8, 11 should ONLY be set via StateChangeServerDirect
         // (server-side calls from party, magic, quest, and event systems).
         // Client packets with these types must be rejected.

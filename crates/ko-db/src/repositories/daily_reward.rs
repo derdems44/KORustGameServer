@@ -1,6 +1,4 @@
 //! Daily reward repository — daily login reward items and user progress.
-//!
-//! C++ Reference: `DBAgent.cpp:5827-6024`
 //! Binary Reference: `HandleDailyRewardGive`, `HandleDailyCumRewardGive`
 
 use crate::models::daily_reward::{DailyReward, DailyRewardCumulative, DailyRewardUserRow};
@@ -37,7 +35,6 @@ impl<'a> DailyRewardRepository<'a> {
 
     /// Load user daily reward progress (up to 25 rows).
     ///
-    /// C++ Reference: `LoadDailyRewardUser()` — creates default rows if none exist.
     pub async fn load_user_progress(
         &self,
         user_id: &str,
@@ -79,7 +76,6 @@ impl<'a> DailyRewardRepository<'a> {
 
     /// Update a single day's claim status with month tracking.
     ///
-    /// C++ Reference: `UpdateDailyRewardUser()` — sets type and day arrays.
     pub async fn update_user_day(
         &self,
         user_id: &str,

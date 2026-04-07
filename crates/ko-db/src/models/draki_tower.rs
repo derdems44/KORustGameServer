@@ -1,11 +1,7 @@
 //! Draki Tower instance dungeon models.
-//!
-//! C++ Reference: `DrakiTowerSystem.cpp`, MSSQL tables `DRAKI_TOWER_STAGES`,
 //!                `DRAKI_MONSTER_LIST`, `USER_DRAKI_TOWER_DATA`, `DRAKI_TOWER_RIFT_RANK`
 
 /// A row from the `draki_tower_stages` table -- defines dungeon/sub-stage structure.
-///
-/// C++ Reference: `DRAKI_ROOM_LIST` struct, `m_DrakiRoomListArray`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DrakiTowerStageRow {
     /// Primary key (1-41).
@@ -19,8 +15,6 @@ pub struct DrakiTowerStageRow {
 }
 
 /// A row from the `draki_monster_list` table -- monsters to spawn per stage.
-///
-/// C++ Reference: `DRAKI_MONSTER_LIST` struct, `m_DrakiMonsterListArray`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DrakiMonsterListRow {
     /// Primary key (1-166).
@@ -40,8 +34,6 @@ pub struct DrakiMonsterListRow {
 }
 
 /// A row from the `user_draki_tower_data` table -- per-user progress.
-///
-/// C++ Reference: `CUser::m_bDrakiStage`, `m_iDrakiTime`, `m_bDrakiEnteranceLimit`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserDrakiTowerDataRow {
     /// Character name (primary key).
@@ -59,8 +51,6 @@ pub struct UserDrakiTowerDataRow {
 }
 
 /// A row from the `draki_tower_rift_rank` table -- ranking leaderboard.
-///
-/// C++ Reference: `DRAKI_TOWER_RIFT_RANK` table
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DrakiTowerRiftRankRow {
     /// Auto-increment index.

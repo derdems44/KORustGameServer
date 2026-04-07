@@ -1,19 +1,13 @@
 //! Combat durability system — item wear-out from attacking and defending.
-//!
-//! C++ Reference: `CUser::ItemWoreOut` in `User.cpp:3523-3639`
-//!
 //! When a player attacks, their weapon slots (RIGHTHAND, LEFTHAND) lose
 //! `rand(2..=5)` durability. When a player takes damage, their armour
 //! slots (HEAD, BREAST, LEG, GLOVE, FOOT) lose `rand(2..=5)` durability.
-//!
 //! Special modes:
 //! - `REPAIR_ALL`: restore full durability on all 7 combat slots
 //! - `ACID_ALL`: reduce armour durability by an exact amount (magic)
 //! - `UTC_ATTACK` / `UTC_DEFENCE`: reduce by an exact amount (under castle)
-//!
 //! Visual thresholds: when durability crosses 70% or 30% boundaries,
 //! `UserLookChange` is broadcast so nearby players see the worn equipment.
-//!
 //! When durability reaches 0, the item is considered broken:
 //! - `SendDurability(slot, 0)` notifies the client
 //! - `set_user_ability` recalculates stats (broken items contribute nothing)
@@ -37,7 +31,7 @@ const GLOVE: u8 = crate::inventory_constants::GLOVE as u8;
 const FOOT: u8 = crate::inventory_constants::FOOT as u8;
 const SLOT_MAX: u8 = crate::inventory_constants::SLOT_MAX as u8;
 
-/// Item slot type: left-hand shield (C++ `ItemSlot1HLeftHand = 2`).
+/// Item slot type: left-hand shield
 const ITEM_SLOT_1H_LEFT_HAND: i32 = 2;
 
 // ── Durability wear-out type constants (C++ GameDefine.h:1265-1270) ───────
@@ -65,13 +59,11 @@ const REPAIR_SLOTS: &[u8] = &[RIGHTHAND, LEFTHAND, HEAD, BREAST, LEG, GLOVE, FOO
 impl WorldState {
     /// Reduce (or repair) durability on a player's equipment slots.
     ///
-    /// C++ Reference: `CUser::ItemWoreOut(int type, int damage)` in `User.cpp:3523-3639`
     ///
     /// `wore_type` determines which slots are affected.
     /// `damage` is only used for `ACID_ALL`, `UTC_ATTACK`, and `UTC_DEFENCE` (exact amount);
     /// for `ATTACK` and `DEFENCE`, `rand(2..=5)` is used instead.
     pub fn item_wore_out(&self, sid: SessionId, wore_type: i32, damage: i32) {
-        // C++ Reference: User.cpp:3531-3536
         let worerate = match wore_type {
             WORE_TYPE_ACID_ALL | WORE_TYPE_UTC_ATTACK | WORE_TYPE_UTC_DEFENCE => damage,
             _ => {
@@ -116,14 +108,12 @@ impl WorldState {
                 None => continue,
             };
 
-            // C++ Reference: User.cpp:3588-3598
             // Skip if item is already broken (durability <= 0) and not repairing
             if item_slot.durability <= 0 && wore_type != WORE_TYPE_REPAIR_ALL {
                 continue;
             }
 
             // For ATTACK/UTC_ATTACK: skip shields in weapon slots
-            // C++ Reference: User.cpp:3593-3597
             if matches!(wore_type, WORE_TYPE_ATTACK | WORE_TYPE_UTC_ATTACK)
                 && (slot == LEFTHAND || slot == RIGHTHAND)
                 && item_template.slot.unwrap_or(-1) == ITEM_SLOT_1H_LEFT_HAND
@@ -164,7 +154,6 @@ impl WorldState {
                 }
             });
 
-            // C++ Reference: User.cpp:3620-3625 — item broken
             if new_dur <= 0 {
                 self.send_durability(sid, slot, 0);
                 any_broken = true;
@@ -174,7 +163,6 @@ impl WorldState {
             // Send durability update for non-broken items
             self.send_durability(sid, slot, new_dur as u16);
 
-            // C++ Reference: User.cpp:3630-3637 — visual threshold check
             let cur_percent = ((new_dur as f64 / max_dur) * 100.0) as i32;
 
             // Check if we crossed a 5% boundary
@@ -188,7 +176,6 @@ impl WorldState {
             }
         }
 
-        // C++ Reference: User.cpp:3622-3624 — broken item: recalc stats + refresh UI
         if any_broken {
             self.set_user_ability(sid);
             self.send_item_move_refresh(sid);
@@ -200,7 +187,6 @@ impl WorldState {
 
     /// Send WIZ_DURATION packet to notify client of durability change.
     ///
-    /// C++ Reference: `CUser::SendDurability` in `User.cpp:3641-3649`
     ///
     /// Packet format: `[opcode=0x38] [u8 slot] [u16 durability]`
     fn send_durability(&self, sid: SessionId, slot: u8, durability: u16) {
@@ -212,7 +198,6 @@ impl WorldState {
 
     /// Send WIZ_USERLOOK_CHANGE to nearby players when equipment appearance changes.
     ///
-    /// C++ Reference: `CUser::UserLookChange` in `User.cpp:3156-3168`
     ///
     /// `pos` and `event_room` are pre-fetched by the caller to avoid per-slot
     /// DashMap reads inside a loop.
@@ -258,7 +243,6 @@ impl WorldState {
 
     /// Send WIZ_ITEM_MOVE(1,1) to refresh the client's equipment display.
     ///
-    /// C++ Reference: `CUser::SendItemMove(1, 1)` in `User.cpp:3624`
     ///
     /// This tells the client to re-read its equipment stats, typically
     /// called when an item breaks (durability reaches 0).

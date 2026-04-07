@@ -1,31 +1,28 @@
 //! Canonical inventory slot and size constants.
-//!
 //! All inventory-related magic numbers live here. Every module that needs
 //! equipment slot indices or inventory/warehouse sizes should import from
 //! this module rather than defining its own copies.
-//!
-//! C++ Reference: `shared/globals.h:256-341`
 
 // ── Inventory sizes ──────────────────────────────────────────────────────
 
-/// Number of equipment slots (C++ `SLOT_MAX = 14`).
+/// Number of equipment slots
 pub const SLOT_MAX: usize = 14;
 
-/// Number of inventory bag slots (C++ `HAVE_MAX = 28`).
+/// Number of inventory bag slots
 pub const HAVE_MAX: usize = 28;
 
-/// Number of cospre slot positions (C++ `COSP_MAX = 11`).
+/// Number of cospre slot positions
 /// Note: v2600 CBAG3 uses slot 53 (=INVENTORY_MBAG) which overlaps with magic bag start.
 /// The overlap is handled specially in MyInfo Phase 4 and item_move handler.
 pub const COSP_MAX: usize = 11;
 
-/// Start of cospre slots in the item array (C++ `INVENTORY_COSP = SLOT_MAX + HAVE_MAX = 42`).
+/// Start of cospre slots in the item array
 pub const INVENTORY_COSP: usize = SLOT_MAX + HAVE_MAX;
 
-/// Start of magic bag 1 region (C++ `INVENTORY_MBAG = INVENTORY_COSP + COSP_MAX = 53`).
+/// Start of magic bag 1 region
 pub const INVENTORY_MBAG: usize = INVENTORY_COSP + COSP_MAX;
 
-/// Number of magic bag slots per bag (C++ `MBAG_MAX = 12`).
+/// Number of magic bag slots per bag
 pub const MBAG_MAX: usize = 12;
 
 /// Number of magic bags — v2600 has 3 (C++ v2525 had 2).
@@ -35,19 +32,17 @@ pub const MBAG_COUNT: usize = 3;
 pub const KNIGHT_ROYALE_MAX: usize = 7;
 
 /// Total inventory size — **sniffer verified: orijinal sunucu 96 item gönderiyor.**
-///
 /// Layout: equip(14) + bag(28) + cospre(11) + mbag(3×12=36) + knight_royale(7) = 96.
 /// Sniffer session 45, seq 10: LZF decompress → 96 items × 19 bytes + header + footer.
 pub const INVENTORY_TOTAL: usize = INVENTORY_MBAG + MBAG_MAX * MBAG_COUNT + KNIGHT_ROYALE_MAX;
 
-/// Maximum warehouse slots (C++ `WAREHOUSE_MAX = 192`, 8 pages * 24).
+/// Maximum warehouse slots (`WAREHOUSE_MAX = 192`, 8 pages * 24).
 pub const WAREHOUSE_MAX: usize = 192;
 
-/// Items per warehouse/bank page/tab (C++ `24 items per page`).
+/// Items per warehouse/bank page/tab
 pub const ITEMS_PER_PAGE: usize = 24;
 
-/// Maximum gold cap (C++ `COIN_MAX = 2,100,000,000`).
-///
+/// Maximum gold cap
 /// Type is u32 to match the `gold` field in CharacterInfo. Callers that need
 /// overflow-safe arithmetic should cast to u64 before comparison.
 pub const COIN_MAX: u32 = 2_100_000_000;
@@ -56,65 +51,63 @@ pub const COIN_MAX: u32 = 2_100_000_000;
 
 // ── Equipment slot indices ───────────────────────────────────────────────
 
-/// Right earring slot (C++ `RIGHTEAR = 0`).
+/// Right earring slot
 pub const RIGHTEAR: usize = 0;
 
-/// Helmet slot (C++ `HEAD = 1`).
+/// Helmet slot
 pub const HEAD: usize = 1;
 
-/// Left earring slot (C++ `LEFTEAR = 2`).
+/// Left earring slot
 pub const LEFTEAR: usize = 2;
 
-/// Necklace slot (C++ `NECK = 3`).
+/// Necklace slot
 pub const NECK: usize = 3;
 
-/// Chest armour slot (C++ `BREAST = 4`).
+/// Chest armour slot
 pub const BREAST: usize = 4;
 
-/// Shoulder / pauldron slot (C++ `SHOULDER = 5`).
+/// Shoulder / pauldron slot
 pub const SHOULDER: usize = 5;
 
-/// Right-hand weapon slot (C++ `RIGHTHAND = 6`).
+/// Right-hand weapon slot
 pub const RIGHTHAND: usize = 6;
 
-/// Belt slot (C++ `WAIST = 7`).
+/// Belt slot
 pub const WAIST: usize = 7;
 
-/// Left-hand / shield slot (C++ `LEFTHAND = 8`).
+/// Left-hand / shield slot
 pub const LEFTHAND: usize = 8;
 
-/// Right ring slot (C++ `RIGHTRING = 9`).
+/// Right ring slot
 pub const RIGHTRING: usize = 9;
 
-/// Leg armour slot (C++ `LEG = 10`).
+/// Leg armour slot
 pub const LEG: usize = 10;
 
-/// Left ring slot (C++ `LEFTRING = 11`).
+/// Left ring slot
 pub const LEFTRING: usize = 11;
 
-/// Glove slot (C++ `GLOVE = 12`).
+/// Glove slot
 pub const GLOVE: usize = 12;
 
-/// Boot slot (C++ `FOOT = 13`).
+/// Boot slot
 pub const FOOT: usize = 13;
 
 // ── Item kind constants ────────────────────────────────────────────────
 
-/// Unique / non-stackable item kind (C++ `m_bKind == 255`).
-///
+/// Unique / non-stackable item kind
 /// Items with this kind cannot stack, cannot merge into occupied slots,
 /// and always move as single units. Used in trade, merchant, warehouse,
 /// and NPC shop validation.
 pub const ITEM_KIND_UNIQUE: i32 = 255;
 
-/// Pet item kind (C++ `isPetItem()` → `m_bKind == 151`).
+/// Pet item kind (`isPetItem()` → `m_bKind == 151`).
 pub const ITEM_KIND_PET: i32 = 151;
 
-/// Cospre (costume) item kind (C++ `m_bKind == 252`).
+/// Cospre (costume) item kind
 pub const ITEM_KIND_COSPRE: i32 = 252;
 
 // ── Weapon kind constants ──────────────────────────────────────────────
-// C++ Reference: `GameDefine.h:1224-1245`
 
 pub const WEAPON_KIND_DAGGER: i32 = 11;
 pub const WEAPON_KIND_1H_SWORD: i32 = 21;
@@ -125,7 +118,7 @@ pub const WEAPON_KIND_1H_CLUB: i32 = 41;
 pub const WEAPON_KIND_2H_CLUB: i32 = 42;
 pub const WEAPON_KIND_1H_SPEAR: i32 = 51;
 pub const WEAPON_KIND_2H_SPEAR: i32 = 52;
-/// Shield kind (C++ `ITEM_CLASS_SHIELD = 60`).
+/// Shield kind
 pub const WEAPON_KIND_SHIELD: i32 = 60;
 pub const WEAPON_KIND_BOW: i32 = 70;
 pub const WEAPON_KIND_CROSSBOW: i32 = 71;

@@ -1,12 +1,8 @@
 //! Offline merchant tick system.
-//!
-//! C++ Reference: `User.cpp:1174-1192` — offline check inside `CUser::Update()`
-//!
 //! Runs every 10 seconds, checking all offline sessions.  When a session's
 //! `offline_next_check` has elapsed, the remaining minutes counter is
 //! decremented.  When it reaches 0 the session is disconnected and the
 //! merchant is closed.
-//!
 //! The C++ server ticks each user at ~100 ms but the offline check only fires
 //! every 60 seconds (via `m_bOfflineCheck`).  We replicate that by storing the
 //! next-check instant on the session handle and polling at a coarser 10-second
@@ -21,13 +17,11 @@ use tracing::{debug, info};
 use crate::world::WorldState;
 
 /// Tick interval for the offline merchant background task (seconds).
-///
 /// We poll at 10 s; actual per-session decrement happens based on the
 /// `offline_next_check` instant stored on each session handle (60 s cadence).
 const OFFLINE_TICK_INTERVAL_SECS: u64 = 10;
 
 /// Start the offline merchant background task.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
 pub fn start_offline_merchant_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -40,7 +34,6 @@ pub fn start_offline_merchant_task(world: Arc<WorldState>) -> tokio::task::JoinH
 }
 
 /// Process one offline merchant tick.
-///
 /// Collects expired sessions from `WorldState::tick_offline_merchants()` and
 /// performs the cleanup sequence for each: deactivate offline status, close the
 /// merchant, broadcast MERCHANT_CLOSE, broadcast USER_INOUT_OUT, remove from
@@ -58,9 +51,6 @@ async fn process_offline_tick(world: &WorldState) {
 }
 
 /// Full cleanup for an expired or forcefully closed offline merchant session.
-///
-/// C++ Reference: `CUser::goDisconnect()` — closes socket, triggers cleanup.
-///
 /// This replicates the essential parts of `ClientSession::cleanup()` but
 /// operates purely through the `WorldState` since there is no live TCP session
 /// for an offline merchant.
@@ -299,13 +289,11 @@ mod tests {
 
     #[test]
     fn test_offline_default_minutes_value() {
-        // C++ Reference: default offline time is ~23 hours (1400 minutes)
         assert_eq!(OFFLINE_DEFAULT_MINUTES, 1400);
     }
 
     #[test]
     fn test_offline_check_interval_value() {
-        // C++ Reference: offline check fires every 60 seconds
         assert_eq!(OFFLINE_CHECK_INTERVAL_SECS, 60);
     }
 

@@ -1,30 +1,20 @@
 //! WIZ_REQ_NPCIN (0x1D) handler — respond with NPC info for requested IDs.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:2108-2189`
-//!
 //! When the client receives a NPC region list (WIZ_NPC_REGION), it requests
 //! detailed info for each NPC it doesn't know about via this opcode.
-//!
 //! ## Request (Client -> Server)
-//!
 //! | Type  | Description                  |
 //! |-------|------------------------------|
 //! | u16le | Requested NPC count          |
 //! | u32le | NPC ID (repeated count×)     |
-//!
 //! ## Response (Server -> Client) — compressed if > 500 bytes
-//!
 //! | Type  | Description                  |
 //! |-------|------------------------------|
 //! | u16le | Actual NPC count returned    |
-//!
 //! Per NPC:
-//!
 //! | Type  | Description                  |
 //! |-------|------------------------------|
 //! | u32le | NPC ID                       |
 //! | ...   | GetNpcInfo data (variable)   |
-//!
 //! Note: GetNpcInfo is 43 bytes for default/type-191 NPCs, but variable-length
 //! for type-15 NPCs (barracks/pets include string fields). The compression
 //! wrapper computes the uncompressed size dynamically, so variable-length
@@ -82,7 +72,7 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             continue;
         }
 
-        // Dead NPC check — C++ Reference: User.cpp:2160 `pNpc->isDead()`
+        // Dead NPC check
         if world.is_npc_dead(npc_id) {
             continue;
         }

@@ -1,22 +1,14 @@
 //! Kurian SP (Stamina Points) regeneration tick system.
-//!
-//! C++ Reference: `UserDurationSkillSystem.cpp` — `CUser::HPTimeChangeStamina()`
-//!
 //! Runs every 2 seconds (`PLAYER_STAMINA_INTERVAL`), iterating all in-game
 //! sessions and applying SP regen for Kurian class players only.
-//!
 //! ## Regen Rules (from C++)
-//!
 //! - **Beginner Kurian (class type 13)**: +5 SP per tick
 //! - **Novice Kurian (class type 14)**: +7 SP per tick
 //! - **Master Kurian (class type 15)**: +7 SP per tick
 //! - No sitting/standing modifier (unlike HP/MP regen)
 //! - Dead players do not regenerate SP
-//!
 //! ## WIZ_KURIAN_SP_CHANGE Packet (S->C)
-//!
 //! Opcode: `WizKurianSpChange` (0x9B)
-//!
 //! Normal SP update format:
 //! ```text
 //! [u8 type=1] [u8 subtype=1] [u8 max_sp] [u8 current_sp]
@@ -31,12 +23,9 @@ use crate::handler::stats::is_kurian_class;
 use crate::world::{RegenData, WorldState, USER_DEAD};
 
 /// SP regen tick interval in seconds.
-///
-/// C++ Reference: `PLAYER_STAMINA_INTERVAL = 2`
 const SP_REGEN_INTERVAL_SECS: u64 = 2;
 
 /// Start the SP regen background task.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
 pub fn start_sp_regen_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -57,12 +46,9 @@ fn process_sp_regen_tick(world: &WorldState) {
 }
 
 /// Get SP regen amount per tick for a given class and skill investment.
-///
-/// C++ Reference: `CUser::SpTimeChange()` in `UserDurationSkillSystem.cpp`
 /// - Class type 13 (Beginner): +5
 /// - Class type 14 (Novice): +7
 /// - Class type 15 (Master): +7 base, +1 per PRO_SKILL4 sub-skill (up to +5)
-///
 /// `pro_skill4` is `skill_points[8]` — the PRO_SKILL4 investment count.
 /// C++ checks `CheckSkillPoint(PRO_SKILL4, 1..5, 23)`, which means each
 /// sub-skill invested (1 through 5) adds +1 SP regen.  The effective bonus
@@ -110,9 +96,6 @@ fn process_session_sp_regen(world: &WorldState, rd: &RegenData) {
 }
 
 /// Build a WIZ_KURIAN_SP_CHANGE (0x9B) normal update packet.
-///
-/// C++ Reference: Kurian SP change notification.
-///
 /// Wire format: `[u8 type=1] [u8 subtype=1] [u8 max_sp] [u8 current_sp]`
 pub fn build_sp_change_packet(max_sp: u8, current_sp: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizKurianSpChange as u8);
@@ -124,9 +107,6 @@ pub fn build_sp_change_packet(max_sp: u8, current_sp: u8) -> Packet {
 }
 
 /// Build a WIZ_KURIAN_SP_CHANGE (0x9B) devil absorption packet.
-///
-/// C++ Reference: Devil transformation SP drain.
-///
 /// Wire format: `[u8 type=2] [u8 subtype=1] [i32 sp_damage]`
 pub fn build_sp_absorption_packet(sp_damage: i32) -> Packet {
     let mut pkt = Packet::new(Opcode::WizKurianSpChange as u8);

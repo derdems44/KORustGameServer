@@ -1,6 +1,4 @@
 //! Friend list model — maps to `friend_list` table.
-//!
-//! C++ Reference: `FRIEND_LIST` table in MSSQL.
 
 /// A single friend entry in the friend list.
 #[derive(Debug, Clone, sqlx::FromRow)]

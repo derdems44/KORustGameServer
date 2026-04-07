@@ -1,10 +1,5 @@
 //! WIZ_CHAT (0x10), WIZ_CHAT_TARGET (0x35), and WIZ_NATION_CHAT (0x19) handlers.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/ChatHandler.cpp`
-//! C++ Reference: `KOOriginalGameServer/GameServer/ChatRoomHandler.cpp`
-//!
-//! ## Chat Types (C++ `ChatType` enum in `packets.h:285-311`)
-//!
+//! ## Chat Types (`ChatType` enum in `packets.h:285-311`)
 //! | Type | Name              | Routing                          |
 //! |------|-------------------|----------------------------------|
 //! | 1    | GENERAL_CHAT      | 3x3 region (nearby players)      |
@@ -23,24 +18,18 @@
 //! | 22   | COMMAND_PM_CHAT   | Commander: private message        |
 //! | 33   | CHATROM_CHAT      | Chat room members                |
 //! | 34   | NOAH_KNIGHTS_CHAT | All players level ≤ 50            |
-//!
 //! ## Client -> Server (WIZ_CHAT 0x10)
-//!
 //! ```text
 //! [u8 chat_type] [u16 msg_len] [bytes message]
 //! ```
-//!
 //! ## Server -> Client (WIZ_CHAT 0x10) — ChatPacket::Construct
-//!
 //! ```text
 //! [u8 chat_type] [u8 nation] [u32 sender_id]
 //! [u8 sender_name_len] [bytes sender_name]    (SByte string)
 //! [u16 message_len] [bytes message]           (DByte string)
 //! [i8 personal_rank] [u8 authority] [u8 system_msg]
 //! ```
-//!
 //! ## WIZ_CHAT_TARGET (0x35) — Private message target resolution
-//!
 //! Client -> Server: `[u8 type=1] [u16 name_len] [bytes name]`
 //! Server -> Client: `[u8 type=1] [i16 result] [name + rank + sysmsg if found] [u8 1]`
 
@@ -54,9 +43,7 @@ use crate::session::{ClientSession, SessionState};
 use crate::world::types::ZONE_PRISON;
 use crate::world::MAX_CHAT_ROOM_USERS;
 
-/// Chat type constants from C++ `ChatType` enum.
-///
-/// C++ Reference: `KOOriginalGameServer/shared/packets.h:285-311`
+/// Chat type constants from `ChatType` enum.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChatType {
@@ -78,21 +65,17 @@ pub enum ChatType {
     WarSystem = 8,
     /// Permanent chat banner — displayed persistently to all players.
     ///
-    /// C++ Reference: `packets.h:293` — `PERMANENT_CHAT = 9`
     Permanent = 9,
     /// End permanent chat banner — clears the persistent display.
     ///
-    /// C++ Reference: `packets.h:294` — `END_PERMANENT_CHAT = 10`
     EndPermanent = 10,
     /// Monument notice — broadcast capture announcement to zone.
     ///
-    /// C++ Reference: `packets.h:295` — `MONUMENT_NOTICE = 11`
     MonumentNotice = 11,
     /// GM chat — output-only type when GM uses general chat.
     Gm = 12,
     /// Command chat — commander/captain broadcast to same nation.
     ///
-    /// C++ Reference: `ChatHandler.cpp:488-494` — `GetFame() == COMMAND_CAPTAIN`
     Command = 13,
     /// Merchant chat — broadcast to 3x3 region.
     Merchant = 14,
@@ -100,37 +83,29 @@ pub enum ChatType {
     Alliance = 15,
     /// Seeking party chat — broadcast to class-matched players in zone.
     ///
-    /// C++ Reference: `ChatHandler.cpp:516-522` — `m_bNeedParty == 2`
     SeekingParty = 19,
     /// Command PM — private message from commander/captain.
     ///
-    /// C++ Reference: `ChatHandler.cpp:421-432` — `GetFame() == COMMAND_CAPTAIN`
     CommandPm = 22,
     /// Chat room message — send to chat room members.
     ChatRoom = 33,
     /// Clan notice — leader updates clan notice text.
     ///
-    /// C++ Reference: `ChatHandler.cpp:471-481` — `isInClan() && isClanLeader()`
     ClanNotice = 24,
     /// Krowaz notice — special event notification.
     ///
-    /// C++ Reference: `packets.h:305` — `KROWAZ_NOTICE = 25`
     KrowazNotice = 25,
     /// Death notice — PvP kill announcement.
     ///
-    /// C++ Reference: `packets.h:306` — `DEATH_NOTICE = 26`
     DeathNotice = 26,
     /// Chaos Stone enemy notice — red text, middle of screen.
     ///
-    /// C++ Reference: `packets.h:307` — `CHAOS_STONE_ENEMY_NOTICE = 27`
     ChaosStoneEnemyNotice = 27,
     /// Chaos Stone notice — stone status notification.
     ///
-    /// C++ Reference: `packets.h:308` — `CHAOS_STONE_NOTICE = 28`
     ChaosStoneNotice = 28,
     /// Noah Knights chat — broadcast to all players level ≤ 50.
     ///
-    /// C++ Reference: `ChatHandler.cpp:523-528` — `GetLevel() > 50 → break`
     NoahKnights = 34,
 }
 
@@ -171,8 +146,6 @@ impl ChatType {
 const MAX_CHAT_LENGTH: usize = 128;
 
 /// Returns the authority color for chat messages.
-///
-/// C++ Reference: `UserInfoSystem.cpp:254-259` — `m_bAuthorityColor`
 /// - GM → 20
 /// - King (rank == 1) → 22
 /// - Others → 1
@@ -187,9 +160,6 @@ fn get_authority_color(is_gm: bool, rank: u8) -> u8 {
 }
 
 /// Build the server->client chat packet.
-///
-/// C++ Reference: `ChatPacket::Construct` in `ChatHandler.h:8-23`
-///
 /// Wire format:
 /// ```text
 /// WIZ_CHAT (0x10)
@@ -253,9 +223,6 @@ pub fn build_chat_packet_raw(
 }
 
 /// Build the server->client chat room chat packet.
-///
-/// C++ Reference: `CUser::ChatRoomChat` in `ChatRoomHandler.cpp:215-227`
-///
 /// Wire format:
 /// ```text
 /// WIZ_CHAT (0x10)
@@ -275,7 +242,6 @@ fn build_chatroom_chat_packet(
 ) -> Packet {
     let mut pkt = Packet::new(Opcode::WizChat as u8);
     pkt.write_u8(ChatType::ChatRoom as u8);
-    // C++: result.DByte(); result << uint8(0) << uint32(senderID) << name << message << zoneID;
     // DByte mode means strings use u16 length prefix from here on
     pkt.write_u8(0);
     pkt.write_u32(sender_id as u32);
@@ -286,9 +252,6 @@ fn build_chatroom_chat_packet(
 }
 
 /// GM PM rate limit: 10 minutes when switching to a different GM.
-///
-/// C++ Reference: `CUser::gmsendpmcheck` in `ChatHandler.cpp:252-263`
-///
 /// Returns `true` if the PM is allowed, `false` if rate-limited.
 /// Same GM can always be PM'd; switching GMs requires a 10-minute cooldown.
 const GM_PM_COOLDOWN_SECS: u64 = 600; // 10 * MINUTE
@@ -314,8 +277,6 @@ fn gm_send_pm_check(world: &crate::world::WorldState, sender_sid: u16, target_gm
 }
 
 /// Handle WIZ_CHAT (0x10) — main chat handler.
-///
-/// C++ Reference: `CUser::Chat` in `ChatHandler.cpp:265-541`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         tracing::debug!(
@@ -343,7 +304,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Read seeking party class filter byte (only for SEEKING_PARTY_CHAT)
-    // C++ Reference: ChatHandler.cpp:318-319 — `if (type == SEEKING_PARTY_CHAT) pkt >> seekingPartyOptions`
     let seeking_party_options = if type_byte == ChatType::SeekingParty as u8 {
         reader.read_u8().unwrap_or(0)
     } else {
@@ -363,7 +323,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     // BEFORE reading/processing the message or GM commands.
 
     // Chat flood check — strict 300ms minimum between messages.
-    // C++ Reference: `ChatHandler.cpp:267` — `UNIXTIME2 - m_tLastChatUseTime < 300`
     {
         const CHAT_DELAY_MS: u64 = 300;
         let allowed = std::cell::Cell::new(false);
@@ -380,7 +339,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Check if the player is muted — silently drop their chat messages
-    // C++ Reference: ChatHandler.cpp:279 — `isMuted() || (GetZoneID() == ZONE_PRISON && !isGM())`
     {
         let is_muted = world.with_session(sid, |h| h.is_muted).unwrap_or(false);
         if is_muted {
@@ -389,7 +347,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Prison zone chat block + mute level check — single DashMap read for both
-    // C++ Reference: ChatHandler.cpp:279 — prison check, ChatHandler.cpp:282-283 — mute level
     {
         let (is_gm, zone_id, player_level) = world.with_session(sid, |h| {
             let ch = h.character.as_ref();
@@ -415,7 +372,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Process GM chat commands (messages starting with "+" or "/")
-    // C++ Reference: ChatHandler.cpp:305 — `if (isGM() && ProcessChatCommand(chatstr))`
     // "/" prefix added for convenience (C++ only uses "+", but many GMs expect "/" too)
     if (message.starts_with('+') || message.starts_with('/'))
         && message.len() > 1
@@ -434,19 +390,15 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let nation = char_info.nation;
     let authority = char_info.authority;
     let rank = char_info.rank;
-    // C++ Reference: ChatHandler.cpp — isGM() || isGMUser()
     // authority 0 = AUTHORITY_GAME_MASTER, authority 2 = AUTHORITY_GM_USER
     let is_gm = authority == 0 || authority == 2;
 
-    // C++ Reference: User.cpp — GetLoyaltySymbolRank()
     let personal_rank = world.get_loyalty_symbol_rank(sid);
-    // C++ Reference: UserInfoSystem.cpp:254-259 — GetAuthorityColor()
     // C++ isGM() checks ONLY authority==0, not isGMUser()==2
     // GM(auth==0)=20, King(rank==1)=22, others=1
     let system_msg = get_authority_color(authority == 0, rank);
 
     // Determine output chat type
-    // C++: if (type == GENERAL_CHAT && isGM()) bOutType = GM_CHAT;
     let chat_type = ChatType::from_u8(type_byte);
     let out_type = match chat_type {
         Some(ChatType::General) if is_gm => ChatType::Gm as u8,
@@ -495,7 +447,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             };
 
             // GM PM rate limiting — prevent spamming different GMs
-            // C++ Reference: ChatHandler.cpp:381-383 — `gmsendpmcheck()`
             let target_is_gm = target_info.authority == 0 || target_info.authority == 2;
             if target_is_gm && !gm_send_pm_check(&world, sid, target_sid) {
                 return Ok(());
@@ -506,7 +457,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ChatType::Party) => {
             // Send to all party members.
-            // C++ Reference: ChatHandler.cpp:433-438 — Send_PartyMember
             if let Some(party_id) = world.get_party_id(sid) {
                 world.send_to_party(party_id, &broadcast);
             }
@@ -519,7 +469,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ChatType::Shout) => {
             // Broadcast to zone with MP + gold requirements
-            // C++ Reference: ChatHandler.cpp:442-455 — MP check + level<35 gold cost
             let mp_cost = char_info.max_mp / 5;
             if char_info.mp < mp_cost {
                 return Ok(());
@@ -533,7 +482,7 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                 }
                 world.gold_lose(sid, SHOUT_COIN_REQUIREMENT);
             }
-            // Deduct MP — C++ Reference: ChatHandler.cpp:455 — MSpChange(-(m_MaxMp / 5))
+            // Deduct MP
             world.update_character_stats(sid, |ch| {
                 ch.mp = (ch.mp - mp_cost).max(0);
             });
@@ -542,7 +491,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                     crate::systems::regen::build_mp_change_packet(ch_after.max_mp, ch_after.mp);
                 world.send_to_session_owned(sid, pkt);
             }
-            // C++ Reference: ChatHandler.cpp:456 — SendToRegion (3x3 region, not zone-wide)
             if let Some((pos, event_room)) = world.with_session(sid, |h| (h.position, h.event_room)) {
                 world.broadcast_to_3x3(
                     pos.zone_id,
@@ -557,7 +505,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ChatType::Knights) => {
             // Send to all online members of the player's clan.
-            // C++ Reference: ChatHandler.cpp:460-469 — Send_KnightsMember
             if char_info.knights_id > 0 {
                 world.send_to_knights_members(char_info.knights_id, Arc::new(broadcast), None);
             }
@@ -577,13 +524,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ChatType::Merchant) => {
             // Must be in merchant mode to use merchant chat
-            // C++ Reference: ChatHandler.cpp:495-498 — `if (isMerchanting()) SendToRegion`
             if !world.is_merchanting(sid) {
                 return Ok(());
             }
 
             // Broadcast to 3x3 region (merchant advertising)
-            // C++ Reference: ChatHandler.cpp:402-403 — merchant chat + wind notice
             if let Some((pos, event_room)) = world.with_session(sid, |h| (h.position, h.event_room)) {
                 world.broadcast_to_3x3(
                     pos.zone_id,
@@ -595,7 +540,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                 );
 
                 // Send merchant wind notice to all players in zone.
-                // C++ Reference: CUser::ClientMerchantWindNotice in User.cpp:4863-4873
                 world.send_merchant_wind_notice(
                     pos.zone_id,
                     &sender_name,
@@ -608,11 +552,9 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ChatType::Alliance) => {
             // Send to all online members of the player's alliance.
-            // C++ Reference: ChatHandler.cpp:499-511 — Send_KnightsAlliance
             if char_info.knights_id > 0 {
                 if let Some(knights) = world.get_knights(char_info.knights_id) {
                     // Block alliance chat during pending alliance request
-                    // C++ Reference: ChatHandler.cpp:505 — `pKnights->isAnyAllianceRequest()`
                     if knights.alliance_req > 0 {
                         return Ok(());
                     }
@@ -625,8 +567,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ChatType::Command) => {
             // Commander/captain chat — broadcast to same nation.
-            // C++ Reference: ChatHandler.cpp:488-494 — `GetFame() == COMMAND_CAPTAIN`
-            // C++ Reference: FundamentalMethods.cpp:5-16 — Send_CommandChat
             if char_info.fame != COMMAND_CAPTAIN {
                 return Ok(());
             }
@@ -635,8 +575,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ChatType::SeekingParty) => {
             // Seeking party chat — broadcast to class-matched players in same zone.
-            // C++ Reference: ChatHandler.cpp:516-522 — `m_bNeedParty == 2`
-            // C++ Reference: FundamentalMethods.cpp:392-421 — Send_Zone_Matched_Class
             let need_party = world.with_session(sid, |h| h.party_type).unwrap_or(0);
             if need_party != 2 {
                 return Ok(());
@@ -658,7 +596,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ChatType::CommandPm) => {
             // Commander PM — private message from commander/captain.
-            // C++ Reference: ChatHandler.cpp:421-432 — `GetFame() != COMMAND_CAPTAIN → return`
             if char_info.fame != COMMAND_CAPTAIN {
                 return Ok(());
             }
@@ -674,7 +611,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ChatType::ChatRoom) => {
             // Send to all members of the player's chat room.
-            // C++ Reference: ChatHandler.cpp:529-531 — ChatRoomChat
             let room_index = world.get_chat_room_index(sid);
             if room_index > 0 {
                 let zone_id = world.get_position(sid).map(|p| p.zone_id).unwrap_or(0);
@@ -685,7 +621,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ChatType::ClanNotice) => {
             // Clan notice — leader updates clan notice text.
-            // C++ Reference: ChatHandler.cpp:471-481 — `isInClan() && isClanLeader()`
             let clan_id = char_info.knights_id;
             if clan_id == 0 || !world.is_session_clan_leader(sid) {
                 return Ok(());
@@ -715,8 +650,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ChatType::NoahKnights) => {
             // Noah Knights (newbie) chat — broadcast to all players level ≤ 50.
-            // C++ Reference: ChatHandler.cpp:523-528 — sender must also be ≤ 50
-            // C++ Reference: FundamentalMethods.cpp:787-799 — Send_Noah_Knights
             if char_info.level > 50 {
                 return Ok(());
             }
@@ -747,21 +680,14 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle WIZ_CHAT_TARGET (0x35) — private message target resolution.
-///
-/// C++ Reference: `CUser::ChatTargetSelect` in `ChatHandler.cpp:543-628`
-///
 /// ## Type 1: Find target by name
-///
 /// Client: `[u8 type=1] [u16 name_len] [bytes target_name]`
 /// Server: `[u8 type=1] [i16 result] [opt: name + rank + sysmsg] [u8 1]`
-///
 /// Result values:
 /// - 0: target not found or same as self
 /// - 1: target found and available
 /// - -1: target is blocking private messages
-///
 /// ## Type 2: Toggle PM blocking
-///
 /// Client: `[u8 type=2] [u8 block_flag]`
 /// (No server response — just toggles the flag)
 pub async fn handle_chat_target(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
@@ -808,8 +734,6 @@ pub async fn handle_chat_target(session: &mut ClientSession, pkt: Packet) -> any
                 // Target found — get their info
                 if let Some(target_info) = world.get_character_info(target) {
                     // Check if target is blocking private messages
-                    // C++ Reference: ChatHandler.cpp:584 — `pUser->isBlockingPrivateChat()`
-                    // C++ Reference: ChatHandler.cpp:584-597 — pUser->GetLoyaltySymbolRank()
                     let target_rank = world.get_loyalty_symbol_rank(target);
                     let target_is_gm = target_info.authority == 0 || target_info.authority == 2;
                     // C++ ChatHandler.cpp:562 — systemmsg is 20 if target isGM(), else 0
@@ -823,7 +747,6 @@ pub async fn handle_chat_target(session: &mut ClientSession, pkt: Packet) -> any
                         result_pkt.write_u8(target_sys_msg);
                     } else {
                         // GM PM rate limiting — 10min cooldown when switching GMs
-                        // C++ Reference: ChatHandler.cpp:591 — `gmsendpmcheck()`
                         if target_is_gm && !gm_send_pm_check(&world, sid, target) {
                             result_pkt.write_i16(0); // treat as not found
                         } else {
@@ -852,7 +775,6 @@ pub async fn handle_chat_target(session: &mut ClientSession, pkt: Packet) -> any
         session.send_packet(&result_pkt).await?;
     } else if sub_type == 3 {
         // Chat room message (type 3) — read and discard
-        // C++: pkt.SByte(); pkt >> sSubType >> sMessage;
         let _sub_sub_type = reader.read_u8();
         debug!(
             "[{}] WIZ_CHAT_TARGET type 3 (chatroom target)",
@@ -860,7 +782,6 @@ pub async fn handle_chat_target(session: &mut ClientSession, pkt: Packet) -> any
         );
     } else {
         // Type 2 / other: toggle PM blocking
-        // C++: m_bBlockPrivateChat = pkt.read<bool>();
         let block = reader.read_u8().unwrap_or(0);
         world.set_block_private_chat(sid, block != 0);
         debug!(
@@ -874,8 +795,6 @@ pub async fn handle_chat_target(session: &mut ClientSession, pkt: Packet) -> any
 }
 
 /// Chat room sub-opcodes used by WIZ_NATION_CHAT (0x19).
-///
-/// C++ Reference: `ChatRoomHandler.cpp:3-15`
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChatRoomOpcode {
@@ -909,14 +828,9 @@ impl ChatRoomOpcode {
 }
 
 /// Outer opcode for chat room manual commands.
-///
-/// C++ Reference: `CHATROOM_MANUEL = 0x0B` in `ChatRoomHandler.cpp:14`
 const CHATROOM_MANUEL: u8 = 0x0B;
 
 /// Handle WIZ_NATION_CHAT (0x19) — chat room system.
-///
-/// C++ Reference: `CUser::ChatRoomHandle` in `ChatRoomHandler.cpp:17-49`
-///
 /// Wire format:
 /// ```text
 /// [u8 opcode=0x0B] [u8 sub_opcode] [... sub-opcode-specific data]
@@ -933,7 +847,6 @@ pub async fn handle_nation_chat(session: &mut ClientSession, pkt: Packet) -> any
         None => return Ok(()),
     };
 
-    // C++: if (OpCode != CHATROOM_MANUEL) return;
     if opcode != CHATROOM_MANUEL {
         debug!(
             "[{}] WIZ_NATION_CHAT: unexpected outer opcode 0x{:02X}, expected 0x0B",
@@ -967,9 +880,6 @@ pub async fn handle_nation_chat(session: &mut ClientSession, pkt: Packet) -> any
 }
 
 /// Handle CHATROOM_LIST (0x04) — list all chat rooms.
-///
-/// C++ Reference: `CUser::ChatRoomList` in `ChatRoomHandler.cpp:51-80`
-///
 /// Response wire format:
 /// ```text
 /// WIZ_NATION_CHAT (0x19)
@@ -987,7 +897,6 @@ async fn chatroom_list(session: &mut ClientSession) -> anyhow::Result<()> {
     pkt.write_u8(ChatRoomOpcode::List as u8);
     pkt.write_u16(rooms.len() as u16);
 
-    // C++: result.DByte() — strings from here use u16 length prefix
     for (index, name, has_password, room_nation, current, max) in &rooms {
         pkt.write_u16(*index);
         pkt.write_string(name);
@@ -1002,23 +911,18 @@ async fn chatroom_list(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle CHATROOM_CREATE (0x05) — create a new chat room.
-///
-/// C++ Reference: `CUser::ChatRoomCreate` in `ChatRoomHandler.cpp:82-155`
-///
 /// Client wire format:
 /// ```text
 /// [u16 name_len] [bytes name] [u8 has_password]
 /// [if has_password: u16 pw_len] [bytes password]
 /// [u16 max_users]
 /// ```
-///
 /// Success response:
 /// ```text
 /// WIZ_NATION_CHAT [u8 0x0B] [u8 0x05] [u8 1] [u16 room_index]
 ///   [u16 name_len] [bytes name] [u8 is_admin]
 ///   [u16 current_users] [u16 max_users] [u32 0]
 /// ```
-///
 /// Failure response:
 /// ```text
 /// WIZ_NATION_CHAT [u8 0x0B] [u8 0x05] [u8 0]
@@ -1085,7 +989,6 @@ async fn chatroom_create(
     world.set_chat_room_index(sid, room_index);
 
     // Build success response
-    // C++: result << uint8(0x05) << uint8(1) << uint16(room_index) << room_name
     //      << uint8(isAdmin) << current_users << max_users << uint32(0);
     let mut pkt = Packet::new(Opcode::WizNationChat as u8);
     pkt.write_u8(CHATROOM_MANUEL);
@@ -1111,11 +1014,7 @@ async fn send_chatroom_create_fail(session: &mut ClientSession) -> anyhow::Resul
 }
 
 /// Handle CHATROOM_JOIN (0x06) — join an existing chat room.
-///
-/// C++ Reference: `CUser::ChatRoomJoin` in `ChatRoomHandler.cpp:157-193`
-///
 /// Client: `[u16 room_id] [u8 has_password] [u16 pw_len] [bytes password]`
-///
 /// Result codes:
 /// - 0: success
 /// - 1: already in room
@@ -1187,11 +1086,7 @@ async fn chatroom_join(
 }
 
 /// Handle CHATROOM_LEAVE (0x07) — leave a chat room.
-///
-/// C++ Reference: `CUser::ChatRoomLeave` in `ChatRoomHandler.cpp:195-213`
-///
 /// Client: `[u16 room_id]`
-///
 /// If the leaver is the administrator, the entire room is deleted.
 async fn chatroom_leave(
     session: &mut ClientSession,
@@ -1213,7 +1108,6 @@ async fn chatroom_leave(
     let player_name = char_info.name.clone();
 
     // Check if the user is admin — if so, delete the room entirely
-    // C++ Reference: if (pRoom->isAdministrator(GetName()) == 2) delete room
     let is_admin = world
         .get_chat_room(room_id)
         .map(|r| r.is_administrator(&player_name) == 2)
@@ -1243,9 +1137,6 @@ async fn chatroom_leave(
 }
 
 /// Handle CHATROOM_ADMIN (0x0C) — get room admin info / member list.
-///
-/// C++ Reference: `CUser::ChatRoomAdmin` in `ChatRoomHandler.cpp:229-256`
-///
 /// Response wire format:
 /// ```text
 /// WIZ_NATION_CHAT [0x0B] [0x0C] [u8 0] [u16 sub_opcode]
@@ -1298,11 +1189,7 @@ async fn chatroom_admin(
 }
 
 /// Handle CHATROOM_MEMBEROPTION (0x0B) — kick a member from the room.
-///
-/// C++ Reference: `CUser::ChatRoomMemberoption` in `ChatRoomHandler.cpp:258-291`
-///
 /// Client: `[u8 sub_opcode=1] [u16 target_member_id]`
-///
 /// If sub_opcode == 1, kick the target user from the room.
 async fn chatroom_member_option(
     session: &mut ClientSession,
@@ -1378,7 +1265,7 @@ mod tests {
     use std::sync::Arc;
 
     /// Test that `build_chat_packet` produces the exact byte layout
-    /// matching C++ `ChatPacket::Construct`.
+    /// matching `ChatPacket::Construct`.
     #[test]
     fn test_build_chat_packet_wire_format() {
         let pkt = build_chat_packet(
@@ -2091,7 +1978,6 @@ mod tests {
     // ── Sprint 279: Chat flood protection ───────────────────────────────
 
     /// Test chat flood delay matches C++ 300ms constant.
-    /// C++ Reference: ChatHandler.cpp:267 — `UNIXTIME2 - m_tLastChatUseTime < 300`
     #[test]
     fn test_chat_flood_delay_300ms() {
         // CHAT_DELAY_MS is defined locally in the handler as 300
@@ -2126,7 +2012,6 @@ mod tests {
 
     // ── Sprint 315: GM_USER authority check ──────────────────────────
 
-    /// C++ Reference: ChatHandler.cpp — `isGM() || isGMUser()`
     /// Authority 0 = AUTHORITY_GAME_MASTER, Authority 2 = AUTHORITY_GM_USER
     /// Both should be treated as GM for chat type determination.
     #[test]
@@ -2146,7 +2031,6 @@ mod tests {
 
     // ── Sprint 318: Alliance chat blocks during alliance request ────
 
-    /// C++ Reference: ChatHandler.cpp:505 — `pKnights->isAnyAllianceRequest()`
     /// When alliance_req > 0, alliance chat should be silently blocked.
     #[test]
     fn test_alliance_req_blocks_chat() {
@@ -2279,7 +2163,6 @@ mod tests {
     /// GM detection: authority 0 (GAME_MASTER) and 2 (GM_USER) are GM.
     #[test]
     fn test_gm_pm_target_is_gm_check() {
-        // C++ Reference: ChatHandler.cpp:591 — target->isGM() || target->isGMUser()
         let check = |auth: u8| auth == 0 || auth == 2;
         assert!(check(0), "authority 0 = GM");
         assert!(!check(1), "authority 1 = player");
@@ -2290,7 +2173,6 @@ mod tests {
     /// system_msg should be 20 for GM targets in chat_target response.
     #[test]
     fn test_gm_pm_system_msg_20() {
-        // C++ Reference: ChatHandler.cpp:597 — ChatPacket::Construct sets system_msg=20 for GM
         let target_is_gm = true;
         let system_msg: u8 = if target_is_gm { 20 } else { 0 };
         assert_eq!(system_msg, 20);
@@ -2303,7 +2185,6 @@ mod tests {
     // ── Sprint 361: get_authority_color tests ─────────────────────────────
 
     /// GM authority color should be 20.
-    /// C++ Reference: UserInfoSystem.cpp:254-255
     #[test]
     fn test_authority_color_gm() {
         assert_eq!(super::get_authority_color(true, 0), 20);
@@ -2312,14 +2193,12 @@ mod tests {
     }
 
     /// King (rank==1) authority color should be 22.
-    /// C++ Reference: UserInfoSystem.cpp:256-257
     #[test]
     fn test_authority_color_king() {
         assert_eq!(super::get_authority_color(false, 1), 22);
     }
 
     /// Normal player authority color should be 1.
-    /// C++ Reference: UserInfoSystem.cpp:258-259
     #[test]
     fn test_authority_color_normal() {
         assert_eq!(super::get_authority_color(false, 0), 1);

@@ -1,6 +1,4 @@
 //! Achievement repository — database access for achievement reference and user progress tables.
-//!
-//! C++ Reference:
 //! - `LoadServerData.h` — `CAchieveMainSet`, `CAchieveWarSet`, etc.
 //! - `DBAgent.cpp:3842` — `UpdateAchieveData()`, `LoadAchieveData()`
 
@@ -25,7 +23,6 @@ impl<'a> AchieveRepository<'a> {
 
     /// Load all achievement main definitions.
     ///
-    /// C++ Reference: `CAchieveMainSet` — loads from `ACHIEVE_MAIN` table.
     pub async fn load_achieve_main(&self) -> Result<Vec<AchieveMainRow>, sqlx::Error> {
         sqlx::query_as::<_, AchieveMainRow>("SELECT * FROM achieve_main ORDER BY s_index")
             .fetch_all(self.pool)
@@ -34,7 +31,6 @@ impl<'a> AchieveRepository<'a> {
 
     /// Load all war-type achievements.
     ///
-    /// C++ Reference: `CAchieveWarSet` — loads from `ACHIEVE_WAR` table.
     pub async fn load_achieve_war(&self) -> Result<Vec<AchieveWarRow>, sqlx::Error> {
         sqlx::query_as::<_, AchieveWarRow>("SELECT * FROM achieve_war ORDER BY s_index")
             .fetch_all(self.pool)
@@ -43,7 +39,6 @@ impl<'a> AchieveRepository<'a> {
 
     /// Load all normal-type achievements.
     ///
-    /// C++ Reference: `CAchieveNormalSet` — loads from `ACHIEVE_NORMAL` table.
     pub async fn load_achieve_normal(&self) -> Result<Vec<AchieveNormalRow>, sqlx::Error> {
         sqlx::query_as::<_, AchieveNormalRow>("SELECT * FROM achieve_normal ORDER BY s_index")
             .fetch_all(self.pool)
@@ -52,7 +47,6 @@ impl<'a> AchieveRepository<'a> {
 
     /// Load all monster-kill achievements.
     ///
-    /// C++ Reference: `CAchieveMonsterSet` — loads from `ACHIEVE_MON` table.
     pub async fn load_achieve_monster(&self) -> Result<Vec<AchieveMonsterRow>, sqlx::Error> {
         sqlx::query_as::<_, AchieveMonsterRow>("SELECT * FROM achieve_monster ORDER BY s_index")
             .fetch_all(self.pool)
@@ -61,7 +55,6 @@ impl<'a> AchieveRepository<'a> {
 
     /// Load all composite (requirement-based) achievements.
     ///
-    /// C++ Reference: `CAchieveComSet` — loads from `ACHIEVE_COM` table.
     pub async fn load_achieve_com(&self) -> Result<Vec<AchieveComRow>, sqlx::Error> {
         sqlx::query_as::<_, AchieveComRow>("SELECT * FROM achieve_com ORDER BY s_index")
             .fetch_all(self.pool)
@@ -70,7 +63,6 @@ impl<'a> AchieveRepository<'a> {
 
     /// Load all achievement title bonuses.
     ///
-    /// C++ Reference: `CAchieveTitleSet` — loads from `ACHIEVE_TITLE` table.
     pub async fn load_achieve_title(&self) -> Result<Vec<AchieveTitleRow>, sqlx::Error> {
         sqlx::query_as::<_, AchieveTitleRow>("SELECT * FROM achieve_title ORDER BY s_index")
             .fetch_all(self.pool)
@@ -81,7 +73,6 @@ impl<'a> AchieveRepository<'a> {
 
     /// Load all achievement progress for a character.
     ///
-    /// C++ Reference: `CDBAgent::LoadAchieveData()` — deserializes binary blob.
     pub async fn load_user_achieves(
         &self,
         char_name: &str,
@@ -96,7 +87,6 @@ impl<'a> AchieveRepository<'a> {
 
     /// Load achievement summary for a character.
     ///
-    /// C++ Reference: `CDBAgent::LoadAchieveData()` — summary fields from binary blob.
     pub async fn load_user_achieve_summary(
         &self,
         char_name: &str,
@@ -169,7 +159,6 @@ impl<'a> AchieveRepository<'a> {
 
     /// Save or update achievement summary for a character.
     ///
-    /// C++ Reference: `CDBAgent::UpdateAchieveData()` — serializes to binary blob.
     #[allow(clippy::too_many_arguments)]
     pub async fn save_user_achieve_summary(
         &self,

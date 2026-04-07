@@ -1,9 +1,5 @@
 //! Under The Castle (Castellan Dungeon) event handler.
-//!
-//! C++ Reference: `UnderTheCastleSystem.cpp` (457 LOC)
-//!
 //! ## Event Lifecycle
-//!
 //! 1. **Activation**: Event scheduler sets `is_active = true`, `is_summon = false`,
 //!    `start_time = 180 * 60` (3 hours countdown).
 //! 2. **Monster Spawn**: On next timer tick with `is_summon == false`,
@@ -13,17 +9,12 @@
 //!    packet is broadcast to the zone (cutscene trigger).
 //! 4. **Event End**: When `start_time == 0`, all monsters are killed,
 //!    players are kicked to Moradon, state is reset.
-//!
 //! ## Entry Validation
-//!
 //! Only CSW-winning clan members (and their allies) may enter zone 86.
 //! Minimum level: 70.
-//!
 //! ## Monster Death Processing
-//!
 //! Each boss death triggers a WIZ_UTC_MOVIE packet with a specific movie_id.
 //! Some bosses also trigger rewards and gate openings.
-//!
 //! | Proto ID | Name                       | Movie ID | Gate | Reward |
 //! |----------|----------------------------|----------|------|--------|
 //! | 9501     | Emperor Mammoth I          | 7        |      |        |
@@ -46,23 +37,16 @@ use ko_protocol::Packet;
 pub use crate::world::types::ZONE_UNDER_CASTLE;
 
 /// WIZ_UTC_MOVIE opcode value (0x92).
-///
-/// C++ Reference: `packets.h:154` — `#define WIZ_UTC_MOVIE 0x92`
 pub const WIZ_UTC_MOVIE: u8 = 0x92;
 
 /// Minimum level to enter Under The Castle.
-///
-/// C++ Reference: `Define.h:254` — `#define MIN_LEVEL_UNDER_THE_CASTLE 70`
 pub const MIN_LEVEL_UNDER_CASTLE: u8 = 70;
 
 /// NPC type for fast-spawn UTC monsters.
-///
-/// C++ Reference: `globals.h:217` — `NPC_UTC_SPAWN_FAST = 214`
 pub const NPC_UTC_SPAWN_FAST: u16 = 214;
 
 // ── Monster Proto IDs ──────────────────────────────────────────────────
 
-/// C++ Reference: `Define.h:434-451`
 pub const MONSTER_EMPEROR_MAMMOTH_I: u16 = 9501;
 pub const MONSTER_EMPEROR_MAMMOTH_II: u16 = 9502;
 pub const MONSTER_EMPEROR_MAMMOTH_III: u16 = 9503;
@@ -83,51 +67,33 @@ pub const MONSTER_FLUWITON_ROOM_4_III: u16 = 9517;
 pub const MONSTER_FLUWITON_ROOM_4_VI: u16 = 9518;
 
 /// NPC ID for the exit portal spawned after final boss death.
-///
-/// C++ Reference: `UnderTheCastleSystem.cpp:429-430` — SpawnEventNpc(29197, ...)
 pub const UTC_EXIT_PORTAL_NPC: u16 = 29197;
 
 // ── UTC Reward Item IDs ──────────────────────────────────────────────
 
 /// Trophy of Flame — awarded in every room.
-///
-/// C++ Reference: `Define.h:356` — `#define TROPHY_OF_FLAME 800149000`
 pub const TROPHY_OF_FLAME: u32 = 800_149_000;
 
 /// Dented Ironmass — room 2 bonus reward.
-///
-/// C++ Reference: `Define.h:357` — `#define DENTED_IRONMASS 508147000`
 pub const DENTED_IRONMASS: u32 = 508_147_000;
 
 /// Petrified Weapon Shrapnel — room 3 bonus reward.
-///
-/// C++ Reference: `Define.h:358` — `#define PETRIFIED_WEAPON_SHRAPNEL 508149000`
 pub const PETRIFIED_WEAPON_SHRAPNEL: u32 = 508_149_000;
 
 /// Iron Powder of Chain — room 4 bonus reward.
-///
-/// C++ Reference: `Define.h:359` — `#define IRON_POWDER_OF_CHAIN 508151000`
 pub const IRON_POWDER_OF_CHAIN: u32 = 508_151_000;
 
 /// Plwitoon's Tear — room 5 bonus reward.
-///
-/// C++ Reference: `Define.h:360` — `#define PLWITOONS_TEAR 508152000`
 pub const PLWITOONS_TEAR: u32 = 508_152_000;
 
 /// Horn of Pluwitoon — room 5 bonus reward.
-///
-/// C++ Reference: `Define.h:361` — `#define HORN_OF_PLUWITOON 810479000`
 pub const HORN_OF_PLUWITOON: u32 = 810_479_000;
 
 // ── UTC Room Geometry ──────────────────────────────────────────────────
 
 /// Per-room center coordinates and range for determining nearby players.
-///
-/// C++ Reference: `GameServerDlg.cpp:2138-2269` — `SendItemUnderTheCastleRoomUsers()`
-///
 /// Each entry is `(center_x, center_z, range)` used by `isInRangeSlow()`.
 /// The boss kill position is always checked with range 15.
-///
 /// Room 1 & 2 share the same center: (121.0, 297.0, 80).
 /// Room 3: (520.0, 494.0, 115).
 /// Room 4: (642.0, 351.0, 100).
@@ -143,8 +109,6 @@ pub fn get_room_center(room: u8) -> Option<(f32, f32, f32)> {
 }
 
 /// Boss kill proximity range — players within 15 units of the boss death position.
-///
-/// C++ Reference: `isInRangeSlow(GetX, GetZ, 15)` in every room check.
 pub const UTC_BOSS_KILL_RANGE: f32 = 15.0;
 
 /// Calculate Euclidean distance between two 2D points.
@@ -153,29 +117,20 @@ fn distance_2d(x1: f32, z1: f32, x2: f32, z2: f32) -> f32 {
 }
 
 /// Check if a point is within range of a center (XZ plane).
-///
-/// C++ Reference: `CUser::isInRangeSlow(float x, float z, float range)`
 pub fn is_in_range_slow(px: f32, pz: f32, cx: f32, cz: f32, range: f32) -> bool {
     distance_2d(px, pz, cx, cz) <= range
 }
 
 /// Determine the reward items for a UTC room.
-///
-/// C++ Reference: `CGameServerDlg::SendItemUnderTheCastleRoomUsers()` in
-/// `GameServerDlg.cpp:2138-2269`
-///
 /// Returns: `(trophy_count, bonus_items)` where:
 /// - `trophy_count`: how many TROPHY_OF_FLAME to give (1 or 2 based on proximity).
 /// - `bonus_items`: additional room-specific items (each given with count=1).
-///
 /// # Logic per room:
-///
 /// - **Room 1**: Trophy of Flame only (1 or 2 based on proximity).
 /// - **Room 2**: Trophy of Flame (1 or 2) + Dented Ironmass.
 /// - **Room 3**: Trophy of Flame (1 or 2) + Petrified Weapon Shrapnel.
 /// - **Room 4**: Trophy of Flame (1 or 2) + Iron Powder of Chain.
 /// - **Room 5**: Trophy of Flame (1 or 2) + Plwitoon's Tear + Horn of Pluwitoon.
-///
 /// The trophy count is 2 if the player is in BOTH the room center range AND
 /// the boss kill range, or 1 if in either one (but not both).
 pub fn get_utc_room_reward_items(room: u8) -> Vec<u32> {
@@ -190,12 +145,9 @@ pub fn get_utc_room_reward_items(room: u8) -> Vec<u32> {
 }
 
 /// Calculate trophy count based on player proximity to room center and boss kill position.
-///
-/// C++ Reference: `SendItemUnderTheCastleRoomUsers()` — each room checks:
 /// - `isInRangeSlow(room_center_x, room_center_z, room_range)` AND `isInRangeSlow(GetX, GetZ, 15)` -> 2 trophies
 /// - `isInRangeSlow(room_center_x, room_center_z, room_range)` OR `isInRangeSlow(GetX, GetZ, 15)` -> 1 trophy
 /// - Neither -> 0 (not eligible for any reward)
-///
 /// Returns 0, 1, or 2.
 pub fn calculate_trophy_count(
     player_x: f32,
@@ -250,8 +202,6 @@ pub struct UtcSpawnEntry {
 // ── Under The Castle state ─────────────────────────────────────────────
 
 /// Under The Castle runtime event state.
-///
-/// C++ Reference: `_UNDER_THE_CASTLE` struct in `GameDefine.h:749-788`
 pub struct UnderTheCastleState {
     /// Whether the event is currently active.
     pub is_active: AtomicBool,
@@ -273,7 +223,6 @@ pub struct UnderTheCastleState {
     /// Gate NPC runtime IDs: [gate_0, gate_1, gate_2].
     /// Set to 0 when uninitialized. Killing a gate boss opens the corresponding gate.
     ///
-    /// C++ Reference: `_UNDER_THE_CASTLE_INFO::m_sUtcGateID[3]`
     pub gate_ids: RwLock<[u32; 3]>,
 }
 
@@ -294,7 +243,6 @@ impl UnderTheCastleState {
 
     /// Reset the UTC state (called on event end).
     ///
-    /// C++ Reference: `_UNDER_THE_CASTLE::Initialize()` in `GameDefine.h:769-787`
     pub fn reset(&self) {
         self.is_active.store(false, Ordering::Relaxed);
         self.is_summon.store(false, Ordering::Relaxed);
@@ -322,9 +270,6 @@ impl Default for UnderTheCastleState {
 // ── Event activation ───────────────────────────────────────────────────
 
 /// Activate the Under The Castle event.
-///
-/// C++ Reference: `ChatHandler.cpp:1262-1267`
-///
 /// Sets `start_time = duration_minutes * 60`, `start_move_time = start_time - 15`,
 /// marks as active, clears summon flag.
 pub fn activate_event(
@@ -354,8 +299,6 @@ pub fn activate_event(
 }
 
 /// Forcibly stop the Under The Castle event.
-///
-/// C++ Reference: `ChatHandler.cpp:1277` — sets StartTime=10 to force quick end
 pub fn force_stop_event(state: &UnderTheCastleState) {
     if !state.is_active.load(Ordering::Relaxed) {
         return;
@@ -382,10 +325,6 @@ pub enum UtcTickResult {
 }
 
 /// Run one tick of the Under The Castle timer.
-///
-/// C++ Reference: `CGameServerDlg::UnderTheCastleTimerProc()` in
-/// `UnderTheCastleSystem.cpp:240-284`
-///
 /// This should be called every second while the event is active.
 /// Also handles the 1-second decrement of `start_time` via
 /// `SingleOtherEventLocalTimer()` (EventMainTimer.cpp:322-323).
@@ -427,7 +366,6 @@ pub fn timer_tick(state: &UnderTheCastleState) -> UtcTickResult {
 // ── Entry validation ───────────────────────────────────────────────────
 
 /// Check if a player can enter the Under The Castle zone.
-///
 /// Requirements:
 /// - Event must be active
 /// - Player level must be >= MIN_LEVEL_UNDER_CASTLE (70)
@@ -486,9 +424,6 @@ pub struct UtcMonsterDeathResult {
 }
 
 /// Process a monster death in the Under The Castle zone.
-///
-/// C++ Reference: `CNpc::UnderTheCastleProcess()` in `UnderTheCastleSystem.cpp:294-456`
-///
 /// Returns the actions to take based on which monster died.
 pub fn on_monster_death(proto_id: u16, npc_type: u16) -> UtcMonsterDeathResult {
     let despawn_fast = npc_type == NPC_UTC_SPAWN_FAST;
@@ -525,8 +460,6 @@ pub fn on_monster_death(proto_id: u16, npc_type: u16) -> UtcMonsterDeathResult {
 }
 
 /// Remove a monster from the tracked monster list.
-///
-/// C++ Reference: `UnderTheCastleSystem.cpp:453-455`
 pub fn remove_from_monster_list(state: &UnderTheCastleState, npc_id: u32) {
     {
         let mut list = state.monster_list.write();
@@ -535,8 +468,6 @@ pub fn remove_from_monster_list(state: &UnderTheCastleState, npc_id: u32) {
 }
 
 /// Register a gate NPC ID for a given gate index (0-2).
-///
-/// C++ Reference: `NpcThread.cpp:780-785` — gate ID assignment during spawn
 pub fn set_gate_id(state: &UnderTheCastleState, gate_index: u8, npc_id: u32) {
     if gate_index > 2 {
         return;
@@ -557,10 +488,7 @@ pub fn get_gate_id(state: &UnderTheCastleState, gate_index: u8) -> u32 {
 // ── Packet builders ────────────────────────────────────────────────────
 
 /// Build a WIZ_UTC_MOVIE packet.
-///
-/// C++ Reference: `Packet result(WIZ_UTC_MOVIE, uint8(2));`
 ///                `result << uint8(1) << uint16(1) << uint32(movie_id);`
-///
 /// Format: `[0x92][u8:2][u8:1][u16:1][u32:movie_id]`
 pub fn build_utc_movie_packet(movie_id: u32) -> Packet {
     let mut pkt = Packet::new(WIZ_UTC_MOVIE);

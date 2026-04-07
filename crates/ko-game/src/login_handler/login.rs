@@ -1,30 +1,20 @@
 //! LS_LOGIN_REQ (0xF3) handler — account authentication for the launcher.
-//!
-//! C++ Reference: `KOOriginalGameServer/LoginServer/LoginSession.cpp:159-263`
-//!
 //! ## Request (Client → Server)
-//!
 //! | Offset | Type   | Description                        |
 //! |--------|--------|------------------------------------|
 //! | 0      | string | Account ID (u16le len + bytes)     |
 //! | N      | string | Password (u16le len + bytes)       |
-//!
 //! ## Response (Server → Client)
-//!
 //! | Offset | Type  | Description                          |
 //! |--------|-------|--------------------------------------|
 //! | 0      | u16le | Reserved (always 0)                  |
 //! | 2      | u8    | Result code                          |
-//!
 //! If `result == AUTH_SUCCESS (0x01)`:
-//!
 //! | Offset | Type  | Description                          |
 //! |--------|-------|--------------------------------------|
 //! | 3      | i16le | Premium hours (-1 = no premium)      |
 //! | 5      | string| Account ID echo                      |
-//!
 //! If `result == AUTH_IN_GAME (0x05)`:
-//!
 //! | Offset | Type  | Description                          |
 //! |--------|-------|--------------------------------------|
 //! | 3      | string| Connected server IP                  |
@@ -39,8 +29,6 @@ use crate::login_session::LoginSession;
 use crate::world::{MAX_ID_SIZE, MAX_PW_SIZE};
 
 /// Validate that account ID contains only allowed characters.
-///
-/// C++ Reference: `IOCPSocket2.cpp` — `string_is_valid()`
 /// Allowed: `a-z`, `A-Z`, `0-9`, `:`, `_`
 fn string_is_valid(s: &str) -> bool {
     s.bytes()
@@ -59,7 +47,6 @@ pub async fn handle(session: &mut LoginSession, pkt: Packet) -> anyhow::Result<(
     let mut reader = PacketReader::new(&pkt.data);
 
     // Read credentials
-    // C++ Reference: LoginSession.cpp:185 — validates length + string_is_valid()
     let account_id = match reader.read_string() {
         Some(s) if !s.is_empty() && s.len() <= MAX_ID_SIZE && string_is_valid(&s) => s,
         _ => {
@@ -121,7 +108,6 @@ pub async fn handle(session: &mut LoginSession, pkt: Packet) -> anyhow::Result<(
             }
 
             // Success — compute premium hours dynamically from account_premium table.
-            // C++ Reference: LoginSession.cpp:236 — `g_pMain->m_DBProcess.AccountPremium(account)`
             //   calls ACCOUNT_PREMIUM_V2 stored procedure which computes
             //   `(expiry_time - NOW) / 3600` and returns -1 if no premium.
             let premium_hours: i16 = {

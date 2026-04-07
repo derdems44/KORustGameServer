@@ -1,14 +1,10 @@
 //! Pet system models — maps to PostgreSQL pet tables.
-//!
-//! C++ Reference:
 //! - `shared/globals.h` — `PET_INFO`, `PET_DATA`, `PET_TRANSFORM` structs
 //! - `shared/database/PetStatsInfo.h` — DB loader for PET_STATS_INFO
 //! - `shared/database/PetDataInfo.h` — DB loader for PET_USER_DATA
 //! - `shared/database/PetTransformSet.h` — DB loader for PET_IMAGE_CHANGE
 
 /// Per-level pet stats from the `pet_stats_info` table.
-///
-/// C++ equivalent: `PET_INFO` (globals.h:598)
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PetStatsInfoRow {
     /// Pet level (1-60).
@@ -28,8 +24,6 @@ pub struct PetStatsInfoRow {
 }
 
 /// Per-character pet data from the `pet_user_data` table.
-///
-/// C++ equivalent: `PET_DATA` (globals.h:621)
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PetUserDataRow {
     /// Unique serial ID (matches the pet item's serial number).
@@ -55,8 +49,6 @@ pub struct PetUserDataRow {
 }
 
 /// Pet image transform recipe from the `pet_image_change` table.
-///
-/// C++ equivalent: `PET_TRANSFORM` (globals.h:609)
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PetImageChangeRow {
     /// Recipe index (primary key).

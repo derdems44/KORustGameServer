@@ -1,20 +1,14 @@
 //! Flash Time & Burning Time systems — timed XP/DC/War bonuses.
-//!
-//! C++ Reference:
 //! - `CharacterSelectionHandler.cpp:933-977` — `SetFlashTimeNote()`
 //! - `User.cpp:1020-1024` — `FlashUpdateTime()` (1-minute tick)
 //! - `User.cpp:1158-1172` — `BurningTime()` (hourly flame progression)
 //! - `UserLevelExperienceSystem.cpp:443-534` — `ExpFlash/DcFlash/WarFlash/SendFlashNotice`
 //! - `PremiumSystem.cpp:32` — flash reset on premium switch
-//!
 //! ## Flash System Overview
-//!
 //! Flash bonuses are earned per-kill with the BUFF_TYPE_FISHING (48) buff active.
 //! Each kill stacks +10% bonus (EXP/DC/WAR depending on premium type), up to 100%.
 //! The flash timer counts down in 1-minute intervals; when it hits 0 the bonus is removed.
-//!
 //! ## Burning / Flame System
-//!
 //! Flame level (0-3) increments once per hour while online. Each level adds
 //! multipliers from the BURNING_FEATURES table (XP, drop, NP, money bonuses).
 //! Flame level persists across short relogs (5-minute grace window in C++).
@@ -27,7 +21,7 @@ use crate::zone::SessionId;
 
 use crate::buff_constants::BUFF_TYPE_FISHING;
 
-/// Flash type constants matching C++ `m_flashtype` values.
+/// Flash type constants matching `m_flashtype` values.
 pub const FLASH_TYPE_NONE: u8 = 0;
 /// Flash type: EXP bonus (premium 11 or 7).
 pub const FLASH_TYPE_EXP: u8 = 1;
@@ -37,47 +31,30 @@ pub const FLASH_TYPE_DC: u8 = 2;
 pub const FLASH_TYPE_WAR: u8 = 3;
 
 /// Maximum flash stack count.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:954` — `if (m_flashcount > 10) m_flashcount = 10;`
 const MAX_FLASH_COUNT: u8 = 10;
 
 /// Maximum flash EXP/DC bonus percentage.
-///
-/// C++ Reference: `UserLevelExperienceSystem.cpp:445` — `if (m_FlashExpBonus >= 100) return;`
 const MAX_FLASH_EXP_DC_BONUS: u8 = 100;
 
 /// Maximum flash WAR bonus value.
-///
-/// C++ Reference: `UserLevelExperienceSystem.cpp:493` — `if (m_FlashWarBonus >= 10) return;`
 const MAX_FLASH_WAR_BONUS: u8 = 10;
 
 /// Flash check interval: 1 minute (60 seconds).
-///
-/// C++ Reference: `User.h:49` — `#define PLAYER_FLASH_INTERVAL (1 * MINUTE)`
 const PLAYER_FLASH_INTERVAL: u64 = 60;
 
 /// Burning time interval: 1 hour (3600 seconds).
-///
-/// C++ Reference: `User.cpp:1171` — `m_bFlameTime = UNIXTIME + (1 * HOUR);`
 const BURNING_HOUR: u64 = 3600;
 
 /// Maximum flame level.
-///
-/// C++ Reference: `User.cpp:1161` — `if (m_bFlamelevel >= 3) return;`
 const MAX_FLAME_LEVEL: u16 = 3;
 
 /// Check if a premium type supports flash bonuses.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:949`
 /// `bool validprem = GetPremium() >= 10 && GetPremium() <= 12 || GetPremium() == 7;`
 pub fn is_flash_premium(premium_type: u8) -> bool {
     (10..=12).contains(&premium_type) || premium_type == 7
 }
 
 /// Apply flash XP bonus on NPC kill (BUFF_TYPE_FISHING with sSpecialAmount == 2).
-///
-/// C++ Reference: `CUser::ExpFlash()` in `UserLevelExperienceSystem.cpp:443-466`
-///
 /// Increments flash_exp_bonus by 10 (max 100), resets DC/WAR bonuses,
 /// updates flash_time and flash_count, sets flash_type to EXP.
 pub fn exp_flash(world: &WorldState, sid: SessionId) {
@@ -118,8 +95,6 @@ pub fn exp_flash(world: &WorldState, sid: SessionId) {
 }
 
 /// Apply flash DC/Drop bonus on NPC kill (BUFF_TYPE_FISHING with sSpecialAmount == 1).
-///
-/// C++ Reference: `CUser::DcFlash()` in `UserLevelExperienceSystem.cpp:468-488`
 pub fn dc_flash(world: &WorldState, sid: SessionId) {
     let (premium, current_bonus) = world
         .with_session(sid, |h| (h.premium_in_use, h.flash_dc_bonus))
@@ -156,8 +131,6 @@ pub fn dc_flash(world: &WorldState, sid: SessionId) {
 }
 
 /// Apply flash WAR/Loyalty bonus on NPC kill (BUFF_TYPE_FISHING with sSpecialAmount == 3).
-///
-/// C++ Reference: `CUser::WarFlash()` in `UserLevelExperienceSystem.cpp:491-512`
 pub fn war_flash(world: &WorldState, sid: SessionId) {
     let (premium, current_bonus) = world
         .with_session(sid, |h| (h.premium_in_use, h.flash_war_bonus))
@@ -194,10 +167,6 @@ pub fn war_flash(world: &WorldState, sid: SessionId) {
 }
 
 /// Restore flash bonuses from DB-persisted flash state on login.
-///
-/// C++ Reference: `CUser::SetFlashTimeNote(bool remove)` in
-/// `CharacterSelectionHandler.cpp:933-965`
-///
 /// Called during GameStart phase 2 if `flash_time > 0 && GetPremium()`.
 pub fn set_flash_time_note(world: &WorldState, sid: SessionId) {
     let (flash_time, flash_count, flash_type, premium) = match world.with_session(sid, |h| {
@@ -214,7 +183,6 @@ pub fn set_flash_time_note(world: &WorldState, sid: SessionId) {
     let count = flash_count.min(MAX_FLASH_COUNT);
 
     world.update_session(sid, |h| {
-        // C++ Reference: line 957-962
         if premium == 10 || flash_type == 2 {
             h.flash_dc_bonus = count * 10;
         } else if premium == 11 || flash_type == 1 {
@@ -228,9 +196,6 @@ pub fn set_flash_time_note(world: &WorldState, sid: SessionId) {
 }
 
 /// Remove all flash bonuses (called on premium switch or flash time expiry).
-///
-/// C++ Reference: `CUser::SetFlashTimeNote(true)` in `CharacterSelectionHandler.cpp:933-947`
-///
 /// Order matters: C++ zeros flash_time/count/type first, then sends notice
 /// (while bonus values are still set so the notice packet is non-empty),
 /// then zeros the bonus values.
@@ -263,14 +228,11 @@ pub fn remove_flash_bonuses(world: &WorldState, sid: SessionId) {
     });
 
     // Step 4: Remove the fishing buff (C++ line 944)
-    // C++ Reference: `CharacterSelectionHandler.cpp:944`
     //   CMagicProcess::RemoveType4Buff(BUFF_TYPE_FISHING, this, true);
     remove_fishing_buff(world, sid);
 }
 
 /// Flash timer tick — called every minute per player from the update loop.
-///
-/// C++ Reference: `User.cpp:1020-1024`
 /// ```c++
 /// if (m_flashtime > 0 && m_flashchecktime + PLAYER_FLASH_INTERVAL < UNIXTIME) {
 ///     m_flashchecktime = UNIXTIME;
@@ -307,7 +269,6 @@ pub fn flash_update_tick(world: &WorldState, sid: SessionId, now: u64) {
             h.flash_dc_bonus = 0;
             h.flash_war_bonus = 0;
         });
-        // C++ Reference: `CharacterSelectionHandler.cpp:974`
         //   CMagicProcess::RemoveType4Buff(BUFF_TYPE_FISHING, this, true);
         remove_fishing_buff(world, sid);
     }
@@ -315,9 +276,6 @@ pub fn flash_update_tick(world: &WorldState, sid: SessionId, now: u64) {
 }
 
 /// Burning time tick — called every update cycle per player.
-///
-/// C++ Reference: `CUser::BurningTime()` in `User.cpp:1158-1172`
-///
 /// If `flame_time > 0` and current time >= `flame_time`, increment flame_level (max 3)
 /// and set next flame time to +1 hour.
 pub fn burning_time_tick(world: &WorldState, sid: SessionId, now: u64) {
@@ -338,7 +296,6 @@ pub fn burning_time_tick(world: &WorldState, sid: SessionId, now: u64) {
 }
 
 /// Start burning timer on zone entry / game entry.
-///
 /// Sets the initial flame_time to `now + 1 hour` if not already active.
 pub fn start_burning_timer(world: &WorldState, sid: SessionId, now: u64) {
     let flame_time = world.with_session(sid, |h| h.flame_time).unwrap_or(0);
@@ -350,10 +307,6 @@ pub fn start_burning_timer(world: &WorldState, sid: SessionId, now: u64) {
 }
 
 /// Send flash notice to client (add or remove).
-///
-/// C++ Reference: `CUser::SendFlashNotice(bool isRemove)` in
-/// `UserLevelExperienceSystem.cpp:514-534`
-///
 /// Wire format:
 /// ```text
 /// WIZ_NOTICE << DByte << u8(4) << u8(is_remove ? 2 : 1) << header_str << desc_str
@@ -399,38 +352,26 @@ pub fn send_flash_notice(world: &WorldState, sid: SessionId, is_remove: bool) {
 }
 
 /// Get flash EXP bonus for a session (0-100 percentage).
-///
-/// C++ Reference: `m_FlashExpBonus` — used in `UserLevelExperienceSystem.cpp:64-65`
 pub fn get_flash_exp_bonus(world: &WorldState, sid: SessionId) -> u8 {
     world.with_session(sid, |h| h.flash_exp_bonus).unwrap_or(0)
 }
 
 /// Get flash DC bonus for a session (0-100 percentage).
-///
-/// C++ Reference: `m_FlashDcBonus` — used in `Npc.cpp:7745`
 pub fn get_flash_dc_bonus(world: &WorldState, sid: SessionId) -> u8 {
     world.with_session(sid, |h| h.flash_dc_bonus).unwrap_or(0)
 }
 
 /// Get flash WAR bonus for a session (0-10).
-///
-/// C++ Reference: `m_FlashWarBonus`
 pub fn get_flash_war_bonus(world: &WorldState, sid: SessionId) -> u8 {
     world.with_session(sid, |h| h.flash_war_bonus).unwrap_or(0)
 }
 
 /// Get the current flame level for a session (0-3).
-///
-/// C++ Reference: `m_bFlamelevel`
 pub fn get_flame_level(world: &WorldState, sid: SessionId) -> u16 {
     world.with_session(sid, |h| h.flame_level).unwrap_or(0)
 }
 
 /// Remove the BUFF_TYPE_FISHING buff when flash bonuses expire.
-///
-/// C++ Reference: `CMagicProcess::RemoveType4Buff(BUFF_TYPE_FISHING, this, true)`
-/// in `CharacterSelectionHandler.cpp:944,974`
-///
 /// Removes the fishing buff from the session's buff map and sends a
 /// `MAGIC_DURATION_EXPIRED` packet to the client so the buff icon disappears.
 fn remove_fishing_buff(world: &WorldState, sid: SessionId) {
@@ -865,7 +806,6 @@ mod tests {
     fn test_remove_flash_bonuses_sends_notice_with_nonzero_bonus() {
         // H1 fix: verify that remove_flash_bonuses sends the notice
         // BEFORE zeroing bonus values, so the client receives the removal.
-        // C++ Reference: CharacterSelectionHandler.cpp:936-943
         let (world, sid) = setup_world_with_premium(11);
         let (tx, mut rx) = mpsc::unbounded_channel();
         // Replace the session's tx to capture packets
@@ -908,7 +848,6 @@ mod tests {
 
     #[test]
     fn test_remove_flash_bonuses_all_fields_zeroed() {
-        // C++ Reference: CharacterSelectionHandler.cpp:937-943
         // After removal, ALL flash fields should be zero
         let (world, sid) = setup_world_with_premium(7); // Platinum
         world.update_session(sid, |h| {
@@ -1048,7 +987,6 @@ mod tests {
 
     #[test]
     fn test_remove_flash_bonuses_removes_fishing_buff() {
-        // C++ Reference: CharacterSelectionHandler.cpp:944
         //   CMagicProcess::RemoveType4Buff(BUFF_TYPE_FISHING, this, true);
         let (world, sid) = setup_world_with_premium(11);
         // Add a fishing buff
@@ -1136,7 +1074,6 @@ mod tests {
 
     #[test]
     fn test_flash_update_tick_removes_fishing_buff_at_zero() {
-        // C++ Reference: CharacterSelectionHandler.cpp:974
         // When flash_time ticks to 0, fishing buff should be removed
         let (world, sid) = setup_world_with_premium(11);
         world.apply_buff(sid, make_fishing_buff());

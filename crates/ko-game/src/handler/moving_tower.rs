@@ -1,23 +1,16 @@
 //! WIZ_MOVING_TOWER (0x84) handler -- siege tower boarding and dismounting.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/TowerTransformationProcess.cpp`
-//!
 //! ## Sub-commands
-//!
 //! | Cmd | Direction     | Description                                      |
 //! |-----|---------------|--------------------------------------------------|
 //! | 1   | Client→Server | Board siege tower (ZONE_DELOS, siege war active)  |
 //! | 2   | Client→Server | Dismount siege tower (warp to position)           |
 //! | 16  | Client→Server | Mount NPC tower (ZONE_BATTLE6, war open)          |
 //! | 17  | Client→Server | Dismount NPC tower                                |
-//!
 //! ## Wire format
-//!
 //! **Client→Server (cmd 1):** `[u8 command=1]`
 //! **Client→Server (cmd 2):** `[u8 command=2] [u16 pos_x] [u16 pos_z]`
 //! **Client→Server (cmd 16):** `[u8 command=16] [u16 npc_id]`
 //! **Client→Server (cmd 17):** `[u8 command=17]`
-//!
 //! **Server→Client (cmd 1):** `[u8 command=1] [u8 success=1]`
 //! **Server→Client (cmd 2):** `[u8 command=2] [u8 success=1]`
 //! **Server→Client (cmd 16):** `[u8 command=16] [u8 success=1] [u32 user_id] [u32 npc_id] [u16 sx] [u16 sz] [u16 sy]`
@@ -34,8 +27,6 @@ use crate::world::{ZONE_BATTLE6, ZONE_DELOS};
 use crate::state_change_constants::{STATE_CHANGE_ABNORMAL, STATE_CHANGE_TEAM_COLOUR};
 
 /// Boarding transformation value (player becomes siege tower).
-///
-/// C++ Reference: `GameDefine.h:1403` — `BOARDING = 8`
 const ABNORMAL_BOARDING: u32 = 8;
 
 use crate::magic_constants::ABNORMAL_NORMAL;
@@ -44,14 +35,9 @@ use crate::magic_constants::ABNORMAL_NORMAL;
 const NPC_TYPE_TOWER: u8 = 191;
 
 /// Maximum squared distance for NPC tower interaction.
-///
-/// C++ Reference: `Unit.h:14` — `#define MAX_NPC_RANGE (121.0f) // pow(11.0f, 2.0f)`
-/// C++ `isInRange()` compares squared Euclidean distance (no sqrt).
 const MAX_NPC_RANGE_SQUARED: f32 = 121.0;
 
 /// NPC transformation value for mounting tower (450018 from C++).
-///
-/// C++ Reference: `TowerTransformationProcess.cpp:73`
 const TOWER_TRANSFORM_ID: u32 = 450018;
 
 /// Sub-command: board a siege tower (player transformation) in ZONE_DELOS.
@@ -64,8 +50,6 @@ const CMD_MOUNT_NPC_TOWER: u8 = 16;
 const CMD_DISMOUNT_NPC_TOWER: u8 = 17;
 
 /// Handle incoming WIZ_MOVING_TOWER (0x84) packet.
-///
-/// C++ Reference: `TowerTransformationProcess.cpp:28-104` — `CUser::HandleTowerPackets`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -106,8 +90,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Board a siege tower (cmd=1).
-///
-/// C++ Reference: `TowerTransformationProcess.cpp:34-47`
 /// Validates: in clan, zone == ZONE_DELOS, siege war open.
 async fn handle_board_siege(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -118,7 +100,6 @@ async fn handle_board_siege(session: &mut ClientSession) -> anyhow::Result<()> {
         None => return Ok(()),
     };
 
-    // C++: if (!isInClan() || GetZoneID() != ZONE_DELOS || !g_pMain->m_byBattleSiegeWarOpen) return;
     if ch.knights_id == 0 {
         debug!("[{}] WIZ_MOVING_TOWER cmd=1: not in clan", session.addr());
         return Ok(());
@@ -146,7 +127,6 @@ async fn handle_board_siege(session: &mut ClientSession) -> anyhow::Result<()> {
     }
     drop(csw);
 
-    // C++: StateChangeServerDirect(11, BOARDING);
     // Broadcast type-11 state change (team colour = BOARDING) to 3x3 region.
     let mut state_pkt = Packet::new(Opcode::WizStateChange as u8);
     state_pkt.write_u32(sid as u32);
@@ -161,7 +141,6 @@ async fn handle_board_siege(session: &mut ClientSession) -> anyhow::Result<()> {
         event_room,
     );
 
-    // C++: UserInOut(INOUT_OUT) — player disappears visually (inside the tower).
     let out_pkt = region::build_user_inout(region::INOUT_OUT, sid, None, &pos);
     world.broadcast_to_3x3(
         pos.zone_id,
@@ -182,8 +161,6 @@ async fn handle_board_siege(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Dismount a siege tower (cmd=2), warp to the given position.
-///
-/// C++ Reference: `TowerTransformationProcess.cpp:49-59`
 /// Validates: in clan, zone == ZONE_DELOS, siege war open.
 async fn handle_dismount_siege(
     session: &mut ClientSession,
@@ -198,7 +175,6 @@ async fn handle_dismount_siege(
         None => return Ok(()),
     };
 
-    // C++: if (!isInClan() || GetZoneID() != ZONE_DELOS || !g_pMain->m_byBattleSiegeWarOpen) return;
     if ch.knights_id == 0 {
         return Ok(());
     }
@@ -214,7 +190,6 @@ async fn handle_dismount_siege(
     }
     drop(csw);
 
-    // C++: StateChangeServerDirect(11, ABNORMAL_NORMAL);
     // Broadcast type-11 state change (restore normal appearance) to 3x3 region.
     let mut state_pkt = Packet::new(Opcode::WizStateChange as u8);
     state_pkt.write_u32(sid as u32);
@@ -229,7 +204,6 @@ async fn handle_dismount_siege(
         event_room,
     );
 
-    // C++: Warp(POSX, POSZ) — client sends coordinates multiplied by 10.
     let warp_x = pos_x as f32 / 10.0;
     let warp_z = pos_z as f32 / 10.0;
     world.update_position(sid, pos.zone_id, warp_x, pos.y, warp_z);
@@ -270,8 +244,6 @@ async fn handle_dismount_siege(
 }
 
 /// Mount an NPC tower (cmd=16) in ZONE_BATTLE6.
-///
-/// C++ Reference: `TowerTransformationProcess.cpp:61-77`
 /// Validates: no existing tower, zone == ZONE_BATTLE6, war open, NPC type 191.
 async fn handle_mount_npc_tower(session: &mut ClientSession, npc_id: u16) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -288,14 +260,12 @@ async fn handle_mount_npc_tower(session: &mut ClientSession, npc_id: u16) -> any
         return Ok(());
     }
 
-    // C++: if (!g_pMain->isWarOpen()) return;
     // isWarOpen() checks m_byBattleOpen >= NATION_BATTLE (nation war, not CSW).
     if !world.is_war_open() {
         debug!("[{}] WIZ_MOVING_TOWER cmd=16: war not open", session.addr());
         return Ok(());
     }
 
-    // C++: if (GetTowerID() != -1) return; — already mounted on a tower
     if world.get_tower_owner_id(sid) != -1 {
         debug!(
             "[{}] WIZ_MOVING_TOWER cmd=16: already mounted on tower",
@@ -304,7 +274,6 @@ async fn handle_mount_npc_tower(session: &mut ClientSession, npc_id: u16) -> any
         return Ok(());
     }
 
-    // C++ Reference: TowerTransformationProcess.cpp:63-66 — GetNpcPtr(NpcID, GetZoneID())
     // Client sends the full NPC runtime ID (already includes NPC_BAND). No addition needed.
     let npc_nid = npc_id as u32;
     let npc = match world.get_npc_instance(npc_nid) {
@@ -329,7 +298,6 @@ async fn handle_mount_npc_tower(session: &mut ClientSession, npc_id: u16) -> any
         return Ok(());
     }
 
-    // C++: pNpc->GetType() != 191 — must be a tower NPC
     let tmpl = match world.get_npc_template(npc.proto_id, npc.is_monster) {
         Some(t) => t,
         None => return Ok(()),
@@ -345,7 +313,6 @@ async fn handle_mount_npc_tower(session: &mut ClientSession, npc_id: u16) -> any
         return Ok(());
     }
 
-    // C++: pNpc->m_isTowerOwner — already owned by someone
     let is_owned = world
         .get_npc_ai(npc_nid)
         .map(|ai| ai.is_tower_owner)
@@ -359,7 +326,6 @@ async fn handle_mount_npc_tower(session: &mut ClientSession, npc_id: u16) -> any
         return Ok(());
     }
 
-    // C++: !isInRange(pNpc, MAX_NPC_RANGE) — range check (squared distance)
     // C++ Unit::isInRange uses GetDistance() which returns dx²+dz² (no sqrt).
     let dx = pos.x - npc.x;
     let dz = pos.z - npc.z;
@@ -375,7 +341,6 @@ async fn handle_mount_npc_tower(session: &mut ClientSession, npc_id: u16) -> any
         return Ok(());
     }
 
-    // C++: pNpc->StateChange(NPC_HIDE);
     // StateChange(NPC_HIDE) calls SendInOut(INOUT_OUT) — broadcasts NPC disappear to region.
     let hide_pkt = crate::npc::build_npc_inout(crate::npc::NPC_OUT, &npc, &tmpl);
     world.broadcast_to_3x3(
@@ -392,13 +357,10 @@ async fn handle_mount_npc_tower(session: &mut ClientSession, npc_id: u16) -> any
         ai.is_tower_owner = true;
     });
 
-    // C++: m_TowerOwnerID = pNpc->GetID();
     world.set_tower_owner_id(sid, npc_nid as i32);
 
-    // C++: Warp((uint16)pNpc->GetX() * 10, (uint16)pNpc->GetZ() * 10);
     world.update_position(sid, pos.zone_id, npc.x, npc.y, npc.z);
 
-    // C++: StateChangeServerDirect(3, 450018); — transformation visual
     let new_pos = world.get_position(sid).unwrap_or(pos);
     let mut state_pkt = Packet::new(Opcode::WizStateChange as u8);
     state_pkt.write_u32(sid as u32);
@@ -413,7 +375,6 @@ async fn handle_mount_npc_tower(session: &mut ClientSession, npc_id: u16) -> any
         event_room,
     );
 
-    // C++: pNpc->GetSPosX() = GetX() * 10, GetSPosZ() = GetZ() * 10, GetSPosY() = GetY() * 10
     let spawn_x = (npc.x * 10.0) as u16;
     let spawn_z = (npc.z * 10.0) as u16;
     let spawn_y = (npc.y * 10.0) as u16;
@@ -436,8 +397,6 @@ async fn handle_mount_npc_tower(session: &mut ClientSession, npc_id: u16) -> any
 }
 
 /// Dismount an NPC tower (cmd=17).
-///
-/// C++ Reference: `TowerTransformationProcess.cpp:79-97`
 /// Validates: has tower, zone == ZONE_BATTLE6, war open.
 async fn handle_dismount_npc_tower(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -448,12 +407,10 @@ async fn handle_dismount_npc_tower(session: &mut ClientSession) -> anyhow::Resul
         return Ok(());
     }
 
-    // C++: if (!g_pMain->isWarOpen()) return;
     if !world.is_war_open() {
         return Ok(());
     }
 
-    // C++: if (GetTowerID() == -1) return; — not mounted on any tower
     let tower_npc_id = world.get_tower_owner_id(sid);
     if tower_npc_id == -1 {
         debug!(
@@ -465,7 +422,6 @@ async fn handle_dismount_npc_tower(session: &mut ClientSession) -> anyhow::Resul
 
     let npc_nid = tower_npc_id as u32;
 
-    // C++: pNpc = GetNpcPtr(GetTowerID(), GetZoneID());
     // Validate the NPC still exists, is type 191, and is actually tower-owned.
     let npc = match world.get_npc_instance(npc_nid) {
         Some(n) => n,
@@ -476,7 +432,6 @@ async fn handle_dismount_npc_tower(session: &mut ClientSession) -> anyhow::Resul
         _ => return Ok(()),
     };
 
-    // C++: if (!pNpc->m_isTowerOwner) return;
     let is_owned = world
         .get_npc_ai(npc_nid)
         .map(|ai| ai.is_tower_owner)
@@ -485,7 +440,6 @@ async fn handle_dismount_npc_tower(session: &mut ClientSession) -> anyhow::Resul
         return Ok(());
     }
 
-    // C++: pNpc->StateChange(NPC_SHOW);
     // StateChange(NPC_SHOW) calls SendInOut(INOUT_IN) — broadcasts NPC reappear to region.
     let show_pkt = crate::npc::build_npc_inout(crate::npc::NPC_IN, &npc, &tmpl);
     world.broadcast_to_3x3(
@@ -497,15 +451,12 @@ async fn handle_dismount_npc_tower(session: &mut ClientSession) -> anyhow::Resul
         event_room,
     );
 
-    // C++: pNpc->m_isTowerOwner = false;
     world.update_npc_ai(npc_nid, |ai| {
         ai.is_tower_owner = false;
     });
 
-    // C++: m_TowerOwnerID = -1;
     world.set_tower_owner_id(sid, -1);
 
-    // C++: Preserve GM invisibility on dismount:
     //   AbnormalType abtype = ABNORMAL_NORMAL;
     //   if (isGM() && m_bAbnormalType == ABNORMAL_INVISIBLE) abtype = ABNORMAL_INVISIBLE;
     //   StateChangeServerDirect(3, abtype);
@@ -531,7 +482,6 @@ async fn handle_dismount_npc_tower(session: &mut ClientSession) -> anyhow::Resul
         event_room,
     );
 
-    // C++ Reference: TowerTransformationProcess.cpp:93-94 — InitType4(); RecastSavedMagic();
     world.clear_all_buffs(sid, false);
     world.set_user_ability(sid);
     world.recast_saved_magic(sid);
@@ -565,7 +515,6 @@ pub fn build_dismount_siege_response() -> Packet {
 }
 
 /// Build a WIZ_MOVING_TOWER response for mount NPC tower (cmd=16).
-///
 /// Wire: `[u8 16] [u8 1] [u32 user_id] [u32 npc_id] [u16 sx] [u16 sz] [u16 sy]`
 pub fn build_mount_npc_tower_response(
     user_id: u32,
@@ -586,7 +535,6 @@ pub fn build_mount_npc_tower_response(
 }
 
 /// Build a WIZ_MOVING_TOWER response for dismount NPC tower (cmd=17).
-///
 /// Wire: `[u8 17] [u8 1] [u32 user_id]`
 pub fn build_dismount_npc_tower_response(user_id: u32) -> Packet {
     let mut pkt = Packet::new(Opcode::WizMovingTower as u8);
@@ -597,10 +545,7 @@ pub fn build_dismount_npc_tower_response(user_id: u32) -> Packet {
 }
 
 /// Build a WIZ_MOVING_TOWER death dismount notification (cmd=17).
-///
 /// Sent when a player dies while mounted on an NPC tower.
-/// C++ Reference: `TowerTransformationProcess.cpp:4-25` — `CUser::TowerExitsFunciton`
-///
 /// Wire: `[u8 17] [u8 1] [u32 user_id] [u32 npc_id]`
 pub fn build_tower_death_dismount(user_id: u32, npc_id: u32) -> Packet {
     let mut pkt = Packet::new(Opcode::WizMovingTower as u8);
@@ -905,8 +850,7 @@ mod tests {
 
     #[test]
     fn test_gm_invisibility_preservation_on_dismount() {
-        // C++: if (isGM() && m_bAbnormalType == ABNORMAL_INVISIBLE) abtype = ABNORMAL_INVISIBLE;
-        // ABNORMAL_INVISIBLE = 0 (GameDefine.h:1396)
+        // ABNORMAL_INVISIBLE = 0
         // For GM: StateChangeServerDirect(3, 0) preserves invisibility.
         let abnormal_invisible: u32 = 0;
         let mut pkt = Packet::new(Opcode::WizStateChange as u8);

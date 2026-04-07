@@ -1,9 +1,4 @@
 //! Periodic character save — auto-saves all online characters every 10 minutes.
-//!
-//! C++ Reference: `User.h:29` — PLAYER_SAVE_INTERVAL (10 * 60 seconds)
-//! C++ Reference: `ServerStartStopHandler.cpp:339-374` — Timer_UpdateSessions
-//! C++ Reference: `DatabaseThread.cpp:1550-1564` — ReqSaveCharacter
-//!
 //! Iterates all in-game sessions and saves their stats, position, achievements,
 //! perks, saved magic, and genie data to the database. Each save is
 //! fire-and-forget so a single slow query does not block the rest.
@@ -29,11 +24,8 @@ use crate::world::WorldState;
 const PLAYER_SAVE_INTERVAL_SECS: u64 = 10 * 60;
 
 /// Start the periodic character save background task.
-///
 /// Spawns a tokio task that ticks every 10 minutes and saves all online
 /// characters' stats and positions to the database.
-///
-/// C++ Reference: `ServerStartStopHandler.cpp:339-374` — `Timer_UpdateSessions`
 pub fn start_character_save_task(
     world: Arc<WorldState>,
     pool: DbPool,
@@ -48,8 +40,7 @@ pub fn start_character_save_task(
 }
 
 /// Save all data for all online characters.
-///
-/// Matches C++ `CUser::ReqSaveCharacter()` which saves:
+/// Matches `CUser::ReqSaveCharacter()` which saves:
 /// 1. Stats + position (UpdateUser)
 /// 2. Achievement data (UpdateAchieveData)
 /// 3. User perks (UpdateUserPerks)
@@ -122,7 +113,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         });
 
         // ── 2b. Flash time save (fire-and-forget) ─────────────────────────
-        // C++ Reference: DBAgent.cpp — UpdateUser saves flash_time/count/type
         let flash_data = world.with_session(sid, |h| (h.flash_time, h.flash_count, h.flash_type));
         if let Some((ft, fc, ftype)) = flash_data {
             if ft > 0 || fc > 0 {
@@ -141,7 +131,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 2c. Stat + skill point save (fire-and-forget) ────────────────
-        // C++ Reference: DBAgent.cpp — UpdateUser saves strong/sta/dex/intel/cha/points/skill0-9
         // These are also saved immediately on each WIZ_POINT_CHANGE / WIZ_SKILLPT_CHANGE,
         // but periodic save provides durability in case those async writes fail.
         {
@@ -197,9 +186,7 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 3. Achievement data save (fire-and-forget) ──────────────────
-        // C++ Reference: DatabaseThread.cpp:1556 — g_DBAgent.UpdateAchieveData(this)
         // Update play_time before saving.
-        // C++ Reference: AchieveHandler.cpp:53-63 — UpdateAchievePlayTime()
         world.update_session(sid, |h| {
             if h.achieve_login_time > 0 {
                 let now = std::time::SystemTime::now()
@@ -272,7 +259,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 4. User perks save (fire-and-forget) ────────────────────────
-        // C++ Reference: DatabaseThread.cpp:1563 — g_DBAgent.UpdateUserPerks(this)
         let perk_data = world.with_session(sid, |h| (h.perk_levels, h.rem_perk));
         if let Some((perk_levels, rem_perk)) = perk_data {
             // Only save if any perk has been allocated or rem_perk is non-zero
@@ -470,7 +456,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 5. Saved magic / buff persistence (fire-and-forget) ─────────
-        // C++ Reference: DatabaseThread.cpp:1561 — g_DBAgent.UpdateSavedMagic(this)
         let magic_entries = world.get_saved_magic_entries(sid);
         if !magic_entries.is_empty() {
             let pool_c = pool.clone();
@@ -484,7 +469,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 6. Genie data save (fire-and-forget) ────────────────────────
-        // C++ Reference: DatabaseThread.cpp:1554 — g_DBAgent.UpdateGenieData(GetName(), this)
         let genie_data = world.with_session(sid, |h| {
             (h.genie_time_abs, h.genie_options.clone(), h.genie_loaded)
         });
@@ -514,7 +498,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 6a2. Sealed EXP save (fire-and-forget) ──────────────────────
-        // C++ Reference: DBAgent.cpp — sealed_exp persisted on save
         if ch.sealed_exp > 0 {
             let pool_c = pool.clone();
             let name_c = char_name.clone();
@@ -531,7 +514,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 6a3. Bind point save (fire-and-forget) ────────────────────────
-        // C++ Reference: DBAgent.cpp — UpdateUser saves bind zone + coordinates
         if ch.bind_zone > 0 {
             let pool_c = pool.clone();
             let name_c = char_name.clone();
@@ -550,7 +532,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 6a4. Sync user_knightdata (fire-and-forget) ─────────────────
-        // C++ Reference: SAVE_USER_DATA SP — updates USER_KNIGHTDATA on every save
         if ch.knights_id > 0 {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -586,7 +567,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 6a5. Pet data save (fire-and-forget) ────────────────────────────
-        // C++ Reference: DBAgent.cpp — SavePetData() on periodic save
         let pet_snapshot = world.with_session(sid, |h| {
             h.pet_data.as_ref().filter(|p| p.serial_id > 0).map(|p| {
                 ko_db::models::pet::PetUserDataRow {
@@ -617,7 +597,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 6b. Daily operation save (fire-and-forget) ────────────────────
-        // C++ Reference: UserDailyOpSystem.cpp — persisted via WIZ_DB_DAILY_OP
         if let Some(entry) = world.daily_ops.get(&char_name) {
             let pool_c = pool.clone();
             let name_c = char_name.clone();
@@ -635,7 +614,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 6c. Daily quest save (fire-and-forget) ──────────────────────
-        // C++ Reference: QuestDatabase.cpp:131-156 — UpdateQuestData daily section
         let dq_data = world.with_session(sid, |h| h.daily_quests.clone());
         if let Some(dq_map) = dq_data {
             if !dq_map.is_empty() {
@@ -655,7 +633,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 6d. Daily rank stats save (fire-and-forget) ─────────────────
-        // C++ Reference: DBAgent.cpp:5529-5544 — UPDATE_USER_DAILY_RANK
         let dr_data = world.with_session(sid, |h| {
             (
                 h.dr_gm_total_sold,
@@ -687,7 +664,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 7. Premium state save (fire-and-forget) ─────────────────────
-        // C++ Reference: DBAgent.cpp — AccountPremiumData save path
         // Uses account_id stored in SessionHandle (set during gamestart).
         let premium_data = world.with_session(sid, |h| {
             if h.account_id.is_empty() || h.premium_map.is_empty() {
@@ -716,7 +692,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 8. Inventory save (fire-and-forget) ──────────────────────────
-        // C++ Reference: DBAgent.cpp:1449-1458 — UpdateUser saves all 77 inventory slots
         // Provides crash protection — without this, inventory changes between
         // periodic saves would be lost on an unclean server shutdown.
         let inventory = world.get_inventory(sid);
@@ -750,7 +725,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 9. Quest progress save (fire-and-forget) ──────────────────────
-        // C++ Reference: DatabaseThread.cpp:1556 — g_DBAgent.UpdateQuestData(this)
         let quest_data = world.with_session(sid, |h| h.quests.clone());
         if let Some(quests) = quest_data {
             if !quests.is_empty() {
@@ -781,7 +755,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 10. Class/race save (fire-and-forget) ─────────────────────────
-        // C++ Reference: DBAgent.cpp — UpdateUser saves class/race
         // Safety net for Lua PromoteUser* class changes.
         {
             let pool_c = pool.clone();
@@ -800,7 +773,6 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
         }
 
         // ── 11. Warehouse save (fire-and-forget) ──────────────────────────
-        // C++ Reference: DBAgent.cpp — UpdateWarehouseData
         // Crash protection for warehouse changes between periodic saves.
         let wh_data = world.with_session(sid, |h| {
             if h.account_id.is_empty() || !h.warehouse_loaded || h.warehouse.is_empty() {
@@ -849,10 +821,8 @@ async fn save_all_characters(world: &WorldState, pool: &DbPool) {
 }
 
 /// Save a single character's data synchronously (awaited).
-///
 /// Used by `kick_session_for_duplicate()` to persist data before kicking,
 /// and by `save_all_characters_sync()` for shutdown saves.
-///
 /// Saves: stats, position, inventory (77 slots), saved magic, and marks offline.
 pub async fn save_single_character_sync(
     world: &WorldState,
@@ -1118,7 +1088,6 @@ pub async fn save_single_character_sync(
 
     // 8. Achievement data (batch)
     // Update play_time before saving.
-    // C++ Reference: AchieveHandler.cpp:53-63 — UpdateAchievePlayTime()
     world.update_session(sid, |h| {
         if h.achieve_login_time > 0 {
             let now = std::time::SystemTime::now()
@@ -1378,7 +1347,6 @@ pub async fn save_single_character_sync(
     }
 
     // 10b. Daily operation cooldowns
-    // C++ Reference: UserDailyOpSystem.cpp — persisted via WIZ_DB_DAILY_OP
     if let Some(entry) = world.daily_ops.get(&char_name) {
         let ud_repo = UserDataRepository::new(pool);
         let row = entry.to_row(&char_name);
@@ -1391,7 +1359,6 @@ pub async fn save_single_character_sync(
     }
 
     // 10c. Daily rank stats
-    // C++ Reference: DBAgent.cpp:5529-5544 — UPDATE_USER_DAILY_RANK
     let dr_data = world.with_session(sid, |h| {
         (
             h.dr_gm_total_sold,
@@ -1419,7 +1386,6 @@ pub async fn save_single_character_sync(
     }
 
     // 10d. Sealed EXP
-    // C++ Reference: DBAgent.cpp — sealed_exp persisted on save
     if ch.sealed_exp > 0 {
         let seal_repo = UserDataRepository::new(pool);
         if let Err(e) = seal_repo
@@ -1434,7 +1400,6 @@ pub async fn save_single_character_sync(
     }
 
     // 10e. Bind point
-    // C++ Reference: DBAgent.cpp — UpdateUser saves bind zone + coordinates
     if ch.bind_zone > 0 {
         if let Err(e) = repo
             .save_bind(
@@ -1453,7 +1418,6 @@ pub async fn save_single_character_sync(
     }
 
     // 10f. Sync user_knightdata
-    // C++ Reference: SAVE_USER_DATA SP — updates USER_KNIGHTDATA on every save
     if ch.knights_id > 0 {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1480,7 +1444,6 @@ pub async fn save_single_character_sync(
     }
 
     // 10g. Pet data save
-    // C++ Reference: DBAgent.cpp — SavePetData() on save
     let pet_snapshot = world.with_session(sid, |h| {
         h.pet_data.as_ref().filter(|p| p.serial_id > 0).map(|p| {
             ko_db::models::pet::PetUserDataRow {
@@ -1517,12 +1480,9 @@ pub async fn save_single_character_sync(
 }
 
 /// Synchronous (awaited) save of all online characters — used at shutdown.
-///
 /// Unlike the periodic `save_all_characters` which is fire-and-forget,
 /// this function awaits each character's save tasks to ensure all data
 /// is persisted before the process exits.
-///
-/// C++ Reference: `CGameServerDlg::OnClose()` — saves all users on shutdown.
 pub async fn save_all_characters_sync(world: &WorldState, pool: &DbPool) {
     let session_ids = world.get_in_game_session_ids();
     if session_ids.is_empty() {

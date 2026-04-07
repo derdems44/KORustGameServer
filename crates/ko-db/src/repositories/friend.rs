@@ -1,6 +1,4 @@
 //! Friend list repository — friend_list table access.
-//!
-//! C++ Reference: `CDBAgent::RequestFriendList`, `AddFriend`, `RemoveFriend`
 //! in `DBAgent.cpp:1333-1419`.
 
 use sqlx::PgPool;
@@ -8,8 +6,6 @@ use sqlx::PgPool;
 use crate::models::FriendRow;
 
 /// Maximum number of friends per player.
-///
-/// C++ Reference: `FriendHandler.cpp:3` — `#define MAX_FRIEND_COUNT 24`
 pub const MAX_FRIEND_COUNT: usize = 24;
 
 /// Repository for friend list database operations.
@@ -25,7 +21,6 @@ impl<'a> FriendRepository<'a> {
 
     /// Load all friends for a character.
     ///
-    /// C++ Reference: `CDBAgent::RequestFriendList`
     pub async fn load_friends(&self, user_id: &str) -> Result<Vec<FriendRow>, sqlx::Error> {
         sqlx::query_as::<_, FriendRow>(
             "SELECT user_id, friend_name FROM friend_list WHERE user_id = $1 ORDER BY added_at",
@@ -37,7 +32,6 @@ impl<'a> FriendRepository<'a> {
 
     /// Add a friend to the list. Returns true if inserted, false if already exists.
     ///
-    /// C++ Reference: `CDBAgent::AddFriend` — calls INSERT_FRIEND_LIST stored proc.
     pub async fn add_friend(&self, user_id: &str, friend_name: &str) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
             "INSERT INTO friend_list (user_id, friend_name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
@@ -52,7 +46,6 @@ impl<'a> FriendRepository<'a> {
 
     /// Remove a friend from the list. Returns true if removed.
     ///
-    /// C++ Reference: `CDBAgent::RemoveFriend` — calls DELETE_FRIEND_LIST stored proc.
     pub async fn remove_friend(
         &self,
         user_id: &str,

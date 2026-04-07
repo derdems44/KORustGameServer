@@ -1,6 +1,4 @@
 //! Character Seal system models.
-//!
-//! C++ Reference: `SealHandler.cpp` — `_CHARACTER_SEAL_ITEM` / `_CHARACTER_SEAL_ITEM_MAPPING`
 
 /// A sealed character snapshot row (maps to `character_seal_items` table).
 #[derive(Debug, Clone, sqlx::FromRow)]

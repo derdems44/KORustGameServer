@@ -1,15 +1,9 @@
 //! WIZ_SEL_NATION (0x05) handler — nation selection.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CharacterSelectionHandler.cpp:10-24`
-//!
 //! ## Request (C->S)
-//!
 //! | Offset | Type | Description |
 //! |--------|------|-------------|
 //! | 0      | u8   | Nation (1=Karus, 2=Elmorad) |
-//!
 //! ## Response (S->C)
-//!
 //! | Offset | Type | Description |
 //! |--------|------|-------------|
 //! | 0      | u8   | Result (0=fail, 1=Karus, 2=Elmorad) |

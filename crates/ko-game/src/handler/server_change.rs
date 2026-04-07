@@ -1,16 +1,11 @@
 //! WIZ_SERVERCHANGE (0x46) — S2C server transfer / redirect.
-//!
-//! C++ Reference: `CUser::SendServerChange(ip, port, init, zone, nation)`
 //! Wire format: `[SByte ip][u16 port][u8 init_flag][u16 zone_id][u8 nation]`
-//!
 //! Used for cross-server transfer. Single-server deployments respond
 //! with empty packet (rejection) or the current server's address.
 
 use ko_protocol::{Opcode, Packet};
 
 /// Build a server change redirect packet.
-///
-/// C++ Reference: `UserInfoSystem.cpp` — `SendServerChange()`
 /// Format: `[SByte ip][u16 port][u8 init][u16 zone][u8 nation]`
 pub fn build_server_change(
     ip: &str,

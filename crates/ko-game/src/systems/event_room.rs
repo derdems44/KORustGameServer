@@ -1,22 +1,15 @@
 //! Event room management system — shared infrastructure for BDW, Chaos, Juraid,
 //! Forgotten Temple, Dungeon Defence, and other room-based events.
-//!
-//! C++ Reference: `EventMainSystem.cpp`, `EventMainTimer.cpp`, `EventSigningSystem.cpp`
-//!
 //! ## Architecture
-//!
 //! `EventRoomManager` is stored in `WorldState` and provides:
 //! - Room lifecycle: create, destroy, get, list
 //! - Player tracking per room (join/leave)
 //! - Event timer state machine (Idle → Signing → Running → Finishing → Cleanup)
 //! - Background tick task that drives the event state machine
-//!
 //! ## Room States
-//!
 //! ```text
 //! Idle → Signing → Running → Finishing → Cleanup → (destroyed)
 //! ```
-//!
 //! - **Idle**: Room exists but no event is active.
 //! - **Signing**: Sign-up period; players can join/leave.
 //! - **Running**: Event is in progress; players are teleported in.
@@ -37,25 +30,17 @@ use crate::world::WorldState;
 use crate::zone::SessionId;
 
 /// Maximum number of rooms per event type.
-///
-/// C++ Reference: `Define.h:33` — `#define MAX_TEMPLE_EVENT_ROOM 60`
 pub const MAX_TEMPLE_EVENT_ROOM: u8 = 60;
 
 /// Maximum users per BDW/Juraid room (8 per nation = 16 total).
-///
-/// C++ Reference: Hard-coded to 8 per nation in `TempleEventManageRoom()`
 pub const MAX_ROOM_USERS_PER_NATION: usize = 8;
 
 /// Maximum users in Chaos Dungeon room.
-///
-/// C++ Reference: `nMaxUserCount = 18` in `TempleEventManageRoom()` for CHAOS
 pub const MAX_CHAOS_ROOM_USERS: usize = 18;
 
 // ── Event Type Enum ──────────────────────────────────────────────────────
 
 /// Event type identifier.
-///
-/// C++ Reference: `EventOpCode` enum in `packets.h:689`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i16)]
 pub enum TempleEventType {
@@ -95,8 +80,6 @@ impl TempleEventType {
 // ── Event Scheduling Type ──────────────────────────────────────────────
 
 /// Schedule type from EVENT_SCHEDULE_MAIN_LIST.
-///
-/// C++ Reference: `EventType` enum in `GameDefine.h:2645`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i16)]
 pub enum EventScheduleType {
@@ -123,8 +106,6 @@ impl EventScheduleType {
 // ── Event Local ID ──────────────────────────────────────────────────────
 
 /// Event local ID from schedule tables.
-///
-/// C++ Reference: `EventLocalID` enum in `GameDefine.h:2652`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum EventLocalId {
@@ -181,8 +162,6 @@ impl EventLocalId {
 // ── Room State ──────────────────────────────────────────────────────────
 
 /// Room lifecycle state.
-///
-/// C++ Reference: Implicit in `pTempleEvent.isActive`, `bAllowJoin`, `m_bFinished`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum RoomState {
@@ -215,8 +194,6 @@ impl RoomState {
 // ── Event User ──────────────────────────────────────────────────────────
 
 /// Tracks an event participant within a room.
-///
-/// C++ Reference: `_TEMPLE_STARTED_EVENT_USER`
 #[derive(Debug, Clone)]
 pub struct EventUser {
     /// Character name (used as key in C++).
@@ -231,27 +208,21 @@ pub struct EventUser {
     pub logged_out: bool,
     /// Per-player kill count (Chaos individual tracking).
     ///
-    /// C++ Reference: `m_ChaosExpansionKillCount`
     pub kills: u32,
     /// Per-player death count (Chaos individual tracking).
     ///
-    /// C++ Reference: `m_ChaosExpansionDeadCount`
     pub deaths: u32,
     /// BDW per-user points (+1 per kill, +10 per altar delivery).
     ///
-    /// C++ Reference: `m_BorderDefenceWarUserPoint`
     pub bdw_points: u32,
     /// Whether this user currently carries the BDW altar flag.
     ///
-    /// C++ Reference: `m_bHasAlterOptained`
     pub has_altar_obtained: bool,
 }
 
 // ── Event Room ──────────────────────────────────────────────────────────
 
 /// A single event room instance.
-///
-/// C++ Reference: `_BDW_ROOM_INFO`, `_JURAID_ROOM_INFO`, `_CHAOS_ROOM_INFO`
 #[derive(Debug)]
 pub struct EventRoom {
     /// Room number (1-based, up to MAX_TEMPLE_EVENT_ROOM).
@@ -282,11 +253,9 @@ pub struct EventRoom {
     pub elmorad_score: i32,
     /// Karus raw kill count (BDW only, separate from score).
     ///
-    /// C++ Reference: `_BDW_ROOM_INFO::m_iKarusKillCount`
     pub karus_kill_count: i32,
     /// El Morad raw kill count (BDW only, separate from score).
     ///
-    /// C++ Reference: `_BDW_ROOM_INFO::m_iElmoradKillCount`
     pub elmorad_kill_count: i32,
 }
 
@@ -409,8 +378,6 @@ impl EventRoom {
 // ── Temple Event State ──────────────────────────────────────────────────
 
 /// Global temple event state — tracks the currently active room-based event.
-///
-/// C++ Reference: `CGameServerDlg::pTempleEvent` (struct `_TEMPLE_EVENT_STATUS`)
 #[derive(Debug)]
 pub struct TempleEventState {
     /// Currently active event type (-1 = none).
@@ -502,8 +469,6 @@ impl TempleEventState {
 // ── Virtual Room Options ────────────────────────────────────────────────
 
 /// Timing options for room-based virtual events (BDW, Chaos, Juraid).
-///
-/// C++ Reference: `CGameServerDlg::pEventTimeOpt.pvroomop[3]`
 #[derive(Debug, Clone)]
 pub struct VroomOpt {
     /// Event name for logging.
@@ -523,8 +488,6 @@ pub struct VroomOpt {
 // ── Forgotten Temple Options ────────────────────────────────────────────
 
 /// Timing options for Forgotten Temple.
-///
-/// C++ Reference: `CGameServerDlg::pForgettenTemple.ptimeopt`
 #[derive(Debug, Clone)]
 pub struct ForgottenTempleOpts {
     /// Total play time in minutes.
@@ -557,8 +520,6 @@ impl Default for ForgottenTempleOpts {
 // ── Event Schedule Entry ────────────────────────────────────────────────
 
 /// Merged schedule entry combining main list + day list for runtime use.
-///
-/// C++ Reference: `EVENT_OPENTIMELIST` struct with `iday[7]` flags
 #[derive(Debug, Clone)]
 pub struct EventScheduleEntry {
     /// Event local ID (1-14).
@@ -588,8 +549,6 @@ pub struct EventScheduleEntry {
 // ── Signed-Up Event User ────────────────────────────────────────────────
 
 /// A user who has signed up for the current event but not yet assigned to a room.
-///
-/// C++ Reference: `_TEMPLE_EVENT_USER`
 #[derive(Debug, Clone)]
 pub struct SignedUpUser {
     /// Character name.
@@ -605,8 +564,6 @@ pub struct SignedUpUser {
 // ── Event Room Manager ──────────────────────────────────────────────────
 
 /// Central event room manager — stored in `WorldState`.
-///
-/// C++ Reference: Aggregation of `m_TempleEventBDWRoomList`, `m_TempleEventJuraidRoomList`,
 ///                `m_TempleEventChaosRoomList`, `pTempleEvent`, `pEventTimeOpt`
 #[derive(Debug)]
 pub struct EventRoomManager {
@@ -618,7 +575,6 @@ pub struct EventRoomManager {
 
     /// Users signed up for the current event but not yet in a room.
     ///
-    /// C++ Reference: `m_TempleEventUserMap`
     pub signed_up_users: parking_lot::RwLock<Vec<SignedUpUser>>,
 
     /// Atomic counter for join order assignment.
@@ -626,7 +582,6 @@ pub struct EventRoomManager {
 
     /// Virtual room timing options: index 0=BDW(84), 1=Chaos(85), 2=JR(87).
     ///
-    /// C++ Reference: `pEventTimeOpt.pvroomop[3]`
     pub vroom_opts: parking_lot::RwLock<[Option<VroomOpt>; 3]>,
 
     /// Forgotten Temple timing options.
@@ -749,7 +704,6 @@ impl EventRoomManager {
 
     /// Check if a user is already signed up for the event (by character name).
     ///
-    /// C++ Reference: `CUser::isEventUser()` — `return m_sJoinedEvent > 0;`
     /// In Rust we track sign-ups in the `signed_up_users` list instead of a per-user field.
     pub fn is_user_signed_up(&self, user_name: &str) -> bool {
         self.signed_up_users
@@ -803,7 +757,6 @@ impl EventRoomManager {
     /// Returns `Some((room_id, is_finished))` if found, `None` if the user is
     /// not in any room of that event type.
     ///
-    /// C++ equivalent: `GetEventRoom()` on the player + looking up the room.
     pub fn find_user_room(
         &self,
         event_type: TempleEventType,
@@ -832,8 +785,6 @@ impl Default for EventRoomManager {
 pub use crate::world::types::{ZONE_BDW, ZONE_CHAOS, ZONE_JURAID};
 
 /// Check if a zone is a temple event zone (BDW=84, Chaos=85, Juraid=87).
-///
-/// C++ Reference: `Unit::isInTempleEventZone()` in `Unit.h:188-194`
 pub fn is_in_temple_event_zone(zone_id: u16) -> bool {
     zone_id == ZONE_BDW || zone_id == ZONE_CHAOS || zone_id == ZONE_JURAID
 }
@@ -848,12 +799,7 @@ pub fn event_type_for_zone(zone_id: u16) -> Option<TempleEventType> {
     }
 }
 
-/// C++ equivalent of `CUser::virt_eventattack_check()`.
-///
 /// Returns `true` if the attack is ALLOWED, `false` if it should be blocked.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:493-524`
-///
 /// Logic:
 /// - If NOT in a temple event zone OR not in a valid room → allow (return true)
 /// - If in BDW zone → block if BDW not active OR room finished
@@ -894,8 +840,6 @@ pub fn virt_eventattack_check(erm: &EventRoomManager, zone_id: u16, user_name: &
 // ── Spawn Event NPC Helper ──────────────────────────────────────────────
 
 /// Parameters for spawning an event NPC.
-///
-/// C++ Reference: `CGameServerDlg::SpawnEventNpc()` parameters
 #[derive(Debug, Clone)]
 pub struct SpawnEventNpcParams {
     /// NPC template s_sid.
@@ -921,12 +865,9 @@ pub struct SpawnEventNpcParams {
 }
 
 /// Broadcast the event counter (sign-up counts) to all signed-up users.
-///
-/// C++ Reference: Per-event counter functions in `EventSigningSystem.cpp:411-450`
 ///   - BDW: `TemplEventBDWSendJoinScreenUpdate()` — sends karus + elmo counts
 ///   - Chaos: `TemplEventChaosSendJoinScreenUpdate()` — sends total count only
 ///   - Juraid: `TemplEventJuraidSendJoinScreenUpdate()` — sends via WIZ_EXT_HOOK
-///
 /// Called when a user joins/leaves the event.
 /// Returns the built packet so the caller can also send it to a specific user.
 pub fn broadcast_event_counter(world: &WorldState) -> Option<Packet> {
@@ -976,21 +917,13 @@ pub fn broadcast_event_counter(world: &WorldState) -> Option<Packet> {
 // ── Event Lifecycle: Teleport + Winner Screen + Kick ───────────────────
 
 /// Minimum level to teleport to nation capital (instead of Moradon).
-///
-/// C++ Reference: `TempleEventKickOutUser` — `if (pUser->GetLevel() >= 35)`
 const NATION_CAPITAL_MIN_LEVEL: u8 = 35;
 
 /// Winner screen countdown seconds before teleport.
-///
-/// C++ Reference: `TempleEventSendWinnerScreen` — `<< uint32(20)`
 const WINNER_SCREEN_COUNTDOWN_SECS: u32 = 20;
 
 /// Build the WIZ_SELECT_MSG (0x55) winner dialog packet.
-///
-/// C++ Reference: `TempleEventSendWinnerScreen()` in `EventMainSystem.cpp:442-603`
-///
 /// Packet format: `[0x55] [u32:0] [u8:7] [u64:0] [u32:event_msg_id] [u8:param] [u32:500]`
-///
 /// | Event   | event_msg_id | param |
 /// |---------|-------------|-------|
 /// | BDW     | 8           | 7     |
@@ -1015,11 +948,7 @@ pub fn build_winner_select_msg(active_event: i16) -> Packet {
 }
 
 /// Build the WIZ_EVENT TEMPLE_EVENT_FINISH (10) packet.
-///
-/// C++ Reference: `TempleEventSendWinnerScreen()` in `EventMainSystem.cpp:472-503`
-///
 /// Packet format: `[0x5F] [u8:10] [u8:2] [u8:0] [u8:winner_nation] [u32:20]`
-///
 /// - winner_nation: 1=Karus, 2=Elmorad, 0=draw/FFA
 /// - countdown: seconds until teleport home (always 20)
 pub fn build_finish_packet(winner_nation: u8) -> Packet {
@@ -1033,12 +962,7 @@ pub fn build_finish_packet(winner_nation: u8) -> Packet {
 }
 
 /// Build the TEMPLE_SCREEN scoreboard packet.
-///
-/// C++ Reference: `BDWUpdateRoomKillCount()` and `JRUpdateRoomKillCount()` in
-/// `JuraidBdwFragSystem.cpp:428-429,487-488`
-///
 /// Packet format: `[0x5F] [u8:TEMPLE_SCREEN=3] [u32:karus_score] [u32:elmo_score]`
-///
 /// Sent to all room users after each kill to update the scoreboard UI.
 pub fn build_temple_screen_packet(karus_score: i32, elmo_score: i32) -> Packet {
     const TEMPLE_SCREEN: u8 = 3;
@@ -1050,9 +974,6 @@ pub fn build_temple_screen_packet(karus_score: i32, elmo_score: i32) -> Packet {
 }
 
 /// Build TEMPLE_EVENT_ALTAR_FLAG packet — broadcast when a player picks up the altar flag.
-///
-/// C++ Reference: `CNpc::BDWMonumentAltarSystem()` in `JuraidBdwFragSystem.cpp:364-369`
-///
 /// Packet format: `[0x5F] [u8:49] [u8:name_len] [name_bytes] [u8:nation]`
 pub fn build_altar_flag_packet(carrier_name: &str, nation: u8) -> Packet {
     const TEMPLE_EVENT_ALTAR_FLAG: u8 = 49;
@@ -1065,10 +986,7 @@ pub fn build_altar_flag_packet(carrier_name: &str, nation: u8) -> Packet {
 }
 
 /// Build TEMPLE_EVENT_ALTAR_TIMER packet — broadcast when altar respawn timer starts.
-///
-/// C++ Reference: `CUser::BDWMonumentPointProcess()` in `JuraidBdwFragSystem.cpp:75`
-/// and `CUser::BDWUserHasObtainedLoqOut()` in `JuraidBdwFragSystem.cpp:155-162`
-///
+/// and `CUser::BDWUserHasObtainedLoqOut()`
 /// Packet format: `[0x5F] [u8:50] [u16:timer_secs]`
 pub fn build_altar_timer_packet(timer_secs: u16) -> Packet {
     const TEMPLE_EVENT_ALTAR_TIMER: u8 = 50;
@@ -1079,10 +997,6 @@ pub fn build_altar_timer_packet(timer_secs: u16) -> Packet {
 }
 
 /// Build altar respawn broadcast packet — sent when the altar NPC respawns.
-///
-/// C++ Reference: `CGameServerDlg::BDWMonumentAltarRespawn()` in
-/// `JuraidBdwFragSystem.cpp:40-44`
-///
 /// Packet format: `[0x5F] [u8:2] [u8:2]`
 pub fn build_altar_respawn_packet() -> Packet {
     let mut pkt = Packet::new(Opcode::WizEvent as u8);
@@ -1092,14 +1006,10 @@ pub fn build_altar_respawn_packet() -> Packet {
 }
 
 /// Send winner screen packets to all users in all rooms of the active event.
-///
-/// C++ Reference: `TempleEventSendWinnerScreen()` in `EventMainSystem.cpp:442-603`
-///
 /// For each room, determines the winner and sends the appropriate packets:
 /// - **BDW/Juraid**: Karus users get both WIZ_SELECT_MSG + WIZ_EVENT FINISH;
 ///   Elmorad users only get WIZ_SELECT_MSG (per C++ reference).
 /// - **Chaos**: All users (mixed) get both packets.
-///
 /// Also sets `finish_time_counter` on each room for the 20-second countdown
 /// before `TempleEventRoomClose` triggers teleport, and writes `winner_nation`
 /// to the room for later reward distribution.
@@ -1170,7 +1080,6 @@ pub fn send_winner_screen(world: &WorldState, active_event: i16, now: u64) {
 
         let total_users = if is_chaos {
             // C++ Chaos: clear invisibility then send both packets
-            // C++ Reference: EventMainSystem.cpp:593-597
             //   pUser->StateChangeServerDirect(7, 0);  // clear invis
             //   pUser->Send(&result);   // WIZ_SELECT_MSG
             //   pUser->Send(&newpkt2);  // WIZ_EVENT FINISH
@@ -1178,7 +1087,6 @@ pub fn send_winner_screen(world: &WorldState, active_event: i16, now: u64) {
             let arc_select = Arc::new(select_msg.clone());
             let arc_finish = Arc::new(finish_pkt.clone());
             for sid in &mixed_sids {
-                // C++: pUser->StateChangeServerDirect(7, 0) — clear invisibility
                 // Updates server-side state AND broadcasts WIZ_STATE_CHANGE to region
                 world.set_invisibility_type(*sid, 0);
                 let sc_pkt =
@@ -1200,7 +1108,6 @@ pub fn send_winner_screen(world: &WorldState, active_event: i16, now: u64) {
         } else {
             // C++ BDW/Juraid: Karus users get both packets,
             // Elmorad users only get WIZ_SELECT_MSG (no finish packet).
-            // C++ Reference: EventMainSystem.cpp:489-502 (BDW), 547-560 (Juraid)
             let arc_select = Arc::new(select_msg.clone());
             let arc_finish = Arc::new(finish_pkt.clone());
             for sid in &karus_sids {
@@ -1209,7 +1116,6 @@ pub fn send_winner_screen(world: &WorldState, active_event: i16, now: u64) {
             }
             for sid in &elmorad_sids {
                 world.send_to_session_arc(*sid, Arc::clone(&arc_select));
-                // C++: Elmorad loop does NOT send newpkt2 (finish packet)
             }
             karus_sids.len() + elmorad_sids.len()
         };
@@ -1225,11 +1131,7 @@ pub fn send_winner_screen(world: &WorldState, active_event: i16, now: u64) {
 }
 
 /// Build the WIZ_SELECT_MSG packet sent during teleport with play time countdown.
-///
-/// C++ Reference: `TempleEventTeleportUsers()` in `EventMainSystem.cpp:1021-1034`
-///
 /// Packet format: `[0x55] [u32:0] [u8:7] [u64:0] [u32:event_msg_id] [u8:param] [u32:play_secs]`
-///
 /// Same structure as the winner select msg, but uses play time instead of 500.
 pub fn build_teleport_select_msg(active_event: i16, play_secs: u32) -> Packet {
     let (event_msg_id, param): (u32, u8) = match active_event {
@@ -1250,9 +1152,6 @@ pub fn build_teleport_select_msg(active_event: i16, play_secs: u32) -> Packet {
 }
 
 /// Build the WIZ_BIFROST timer overlay packet.
-///
-/// C++ Reference: `TempleEventTeleportUsers()` in `EventMainSystem.cpp:1036-1037`
-///
 /// Packet format: `[0x7B] [u8:5] [u16:time_secs]`
 pub fn build_teleport_bifrost(play_secs: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizBifrost as u8);
@@ -1262,9 +1161,6 @@ pub fn build_teleport_bifrost(play_secs: u16) -> Packet {
 }
 
 /// Build the WIZ_EVENT(1) packet sent to BDW users on teleport.
-///
-/// C++ Reference: `TempleEventTeleportUsers()` in `EventMainSystem.cpp:1043`
-///
 /// Packet format: `[0x5F] [u8:1]`
 pub fn build_bdw_event_start_packet() -> Packet {
     let mut pkt = Packet::new(Opcode::WizEvent as u8);
@@ -1273,9 +1169,6 @@ pub fn build_bdw_event_start_packet() -> Packet {
 }
 
 /// Send active event time / join screen update to a player entering an event zone.
-///
-/// C++ Reference: `TempleEventSendActiveEventTime()` in `EventMainSystem.cpp:1987-2012`
-///
 /// Two paths:
 /// 1. **Non-event user**: Sends `TempleEventGetActiveEventTime` — `WIZ_EVENT + u8(TEMPLE_EVENT=7)
 ///    + i16(active_event) + u16(remaining_seconds)`.
@@ -1320,7 +1213,6 @@ pub fn send_active_event_time(world: &WorldState, sid: SessionId) {
 
     if !is_event_user {
         // Path 1: Non-event user — send active event time
-        // C++ Reference: EventMainSystem.cpp:1970-1984
         let mut pkt = Packet::new(Opcode::WizEvent as u8);
         pkt.write_u8(7); // TEMPLE_EVENT sub-opcode
         pkt.write_i16(active_event);
@@ -1330,7 +1222,6 @@ pub fn send_active_event_time(world: &WorldState, sid: SessionId) {
     }
 
     // Path 2: Event user — send join confirmation + screen update
-    // C++ Reference: EventMainSystem.cpp:1996-1998
     let mut join_pkt = Packet::new(Opcode::WizEvent as u8);
     join_pkt.write_u8(8); // TEMPLE_EVENT_JOIN sub-opcode
     join_pkt.write_u8(1); // success
@@ -1338,7 +1229,6 @@ pub fn send_active_event_time(world: &WorldState, sid: SessionId) {
     world.send_to_session_owned(sid, join_pkt);
 
     // Send event-specific counter screen update
-    // C++ Reference: EventSigningSystem.cpp:427-450
     match active_event {
         4 => {
             // BDW: WIZ_EVENT + TEMPLE_EVENT_COUNTER(16) + u16(4) + u16(karus) + u16(elmo)
@@ -1380,11 +1270,7 @@ pub fn send_active_event_time(world: &WorldState, sid: SessionId) {
 }
 
 /// Build the TempleEventStart broadcast packet announcing event sign-up.
-///
-/// C++ Reference: `TempleEventStart()` in `EventMainSystem.cpp:607-633`
-///
 /// Packet format: `[0x5F] [u8:7] [i16:active_event] [u16:remaining_secs]`
-///
 /// Sent to all online players to show the event sign-up UI.
 pub fn build_event_start_broadcast(active_event: i16, remaining_secs: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEvent as u8);
@@ -1395,9 +1281,6 @@ pub fn build_event_start_broadcast(active_event: i16, remaining_secs: u16) -> Pa
 }
 
 /// Build BDW counter packet with per-nation counts.
-///
-/// C++ Reference: `TemplEventBDWSendJoinScreenUpdate()` in `EventSigningSystem.cpp:427-438`
-///
 /// Packet format: `[0x5F] [u8:16] [u16:4] [u16:karus] [u16:elmo]`
 pub fn build_bdw_counter_packet(karus_count: u16, elmo_count: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEvent as u8);
@@ -1409,11 +1292,7 @@ pub fn build_bdw_counter_packet(karus_count: u16, elmo_count: u16) -> Packet {
 }
 
 /// Build Chaos counter packet with total count only (no trailing zero).
-///
-/// C++ Reference: `TemplEventChaosSendJoinScreenUpdate()` in `EventSigningSystem.cpp:440-449`
-///
 /// Packet format: `[0x5F] [u8:16] [u16:24] [u16:total]`
-///
 /// Note: Chaos sends only total count — no trailing u16(0) unlike BDW.
 pub fn build_chaos_counter_packet(total_count: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEvent as u8);
@@ -1424,11 +1303,7 @@ pub fn build_chaos_counter_packet(total_count: u16) -> Packet {
 }
 
 /// Build Juraid counter packet via WIZ_EXT_HOOK opcode.
-///
-/// C++ Reference: `TemplEventJuraidSendJoinScreenUpdate()` in `EventSigningSystem.cpp:411-425`
-///
 /// Packet format: `[0xE9] [u8:0xE2] [u16:karus] [u16:elmo] [u16:remaining_secs]`
-///
 /// Uses entirely different opcode (WIZ_EXT_HOOK) with JURAID sub-opcode (0xE2).
 pub fn build_juraid_counter_packet(
     karus_count: u16,
@@ -1444,12 +1319,8 @@ pub fn build_juraid_counter_packet(
 }
 
 /// Teleport all assigned room users into the event zone.
-///
-/// C++ Reference: `TempleEventTeleportUsers()` in `EventMainSystem.cpp:1017-1245`
-///
 /// After room assignment, each user is zone-changed into the event zone
 /// at coordinates (0, 0) — the server uses random spawn from start_position.
-///
 /// Also sends timer overlay packets per C++ reference:
 /// - `WIZ_SELECT_MSG` with play time countdown
 /// - `WIZ_BIFROST(5)` timer overlay
@@ -1515,14 +1386,10 @@ pub fn teleport_users_to_event(world: &WorldState, event_type: TempleEventType) 
 }
 
 /// Create server-initiated parties for event rooms (BDW and Juraid only).
-///
-/// C++ Reference: `CGameServerDlg::TempleEventCreateParties()` in `EventMainSystem.cpp:884-1014`
-///
 /// For each room, iterates Karus then Elmorad users. If a nation has >1 user,
 /// the first valid user becomes the party leader and subsequent users are added.
 /// Each member receives PARTY_INSERT packets for all existing members, and all
 /// existing members receive a PARTY_INSERT for the new joiner.
-///
 /// Chaos Dungeon never creates parties (FFA mode).
 pub fn temple_event_create_parties(world: &WorldState, event_type: TempleEventType) {
     use crate::handler::party::build_party_member_info;
@@ -1642,9 +1509,6 @@ pub fn temple_event_create_parties(world: &WorldState, event_type: TempleEventTy
 }
 
 /// Send a zone change packet for event teleport.
-///
-/// C++ Reference: `CUser::ZoneChange()` with `eventroom` parameter.
-///
 /// Coordinates (0, 0) cause the client to use default spawn for the zone.
 fn send_event_zone_change(
     world: &WorldState,
@@ -1656,7 +1520,6 @@ fn send_event_zone_change(
     // Update server-side position (0,0,0 = use zone default spawn)
     world.update_position(sid, zone_id, 0.0, 0.0, 0.0);
 
-    // C++ Reference: ZoneChangeWarpHandler.cpp:447-450
     //   if (eventroom == 0 && GetEventRoom() > 0) m_bEventRoom = 0;
     //   else if (eventroom > 0)                    m_bEventRoom = eventroom;
     if event_room > 0 {
@@ -1686,9 +1549,6 @@ fn send_event_zone_change(
 }
 
 /// Determine the kick-out destination zone for a player leaving an event.
-///
-/// C++ Reference: `TempleEventKickOutUser()` in `EventMainSystem.cpp:2017-2052`
-///
 /// - BDW/Chaos: Nation capital (level >= 35) or Moradon
 /// - Juraid: Ronark Land or Moradon
 pub fn kick_out_destination(event_zone: u16, nation: u8, level: u8) -> u16 {
@@ -1718,9 +1578,6 @@ pub fn kick_out_destination(event_zone: u16, nation: u8, level: u8) -> u16 {
 }
 
 /// Process per-room finish countdown after winner screen is sent.
-///
-/// C++ Reference: `TempleEventRoomClose()` in `EventMainSystem.cpp:385-439`
-///
 /// Checks each room's `finish_time_counter`. When the countdown expires
 /// (20 seconds after winner screen), the room is marked as finished and
 /// users are kicked out. This enables per-room independent finish timing.
@@ -1763,7 +1620,6 @@ pub fn temple_event_room_close(world: &WorldState, event_type: TempleEventType, 
             };
 
             // Per-user cleanup before teleport
-            // C++ Reference: EventMainSystem.cpp:2041 —
             //   if (pUser->m_bHasAlterOptained)
             //       RemoveType4Buff(BUFF_TYPE_FRAGMENT_OF_MANES, pUser, true, true);
             //       pUser->m_bHasAlterOptained = false;
@@ -3170,7 +3026,6 @@ mod tests {
 
     #[test]
     fn test_send_event_zone_change_sets_event_room() {
-        // C++ Reference: ZoneChangeWarpHandler.cpp:447-450
         // When event_room > 0, m_bEventRoom is set to that value.
         let world = crate::world::WorldState::new();
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();

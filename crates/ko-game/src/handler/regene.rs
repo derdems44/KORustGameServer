@@ -1,18 +1,10 @@
 //! WIZ_REGENE (0x12) handler — respawn after death.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/AttackHandler.cpp:258-455`
-//!
 //! ## Client -> Server
-//!
 //! `[u8 regene_type]`
-//!
 //! - Type 1: Respawn at bind point / zone start
 //! - Type 2: Respawn using resurrection stones (level > 5, costs 3 * level stones)
-//!
 //! ## Server -> Client
-//!
 //! `[u16 x*10] [u16 z*10] [u16 y*10]`
-//!
 //! After sending the regene response, the server:
 //! 1. Sets the player's region
 //! 2. Broadcasts INOUT_RESPAWN to the 3x3 region
@@ -37,30 +29,20 @@ use crate::world::types::{
 use crate::zone::calc_region;
 
 /// Resurrection stone item ID.
-///
-/// C++ Reference: `AttackHandler.cpp:278` — `RobItem(379006000, 3 * GetLevel())`
 const ITEM_RESURRECTION_STONE: u32 = 379006000;
 
 /// Minimum level required to use resurrection stones.
-///
-/// C++ Reference: `AttackHandler.cpp:276` — `if (GetLevel() <= 5)`
 const MIN_LEVEL_FOR_STONES: u8 = 5;
 
 /// Blink duration in seconds.
-///
-/// C++ Reference: `Define.h:72` — `#define BLINK_TIME (10)`
 const BLINK_TIME: u64 = 10;
 
 use crate::magic_constants::ABNORMAL_NORMAL;
 
 /// Abnormal type: blinking (respawn invulnerability).
-///
-/// C++ Reference: `GameDefine.h:1400` — `ABNORMAL_BLINKING = 4`
 const ABNORMAL_BLINKING: u32 = 4;
 
 /// Abnormal type: chaos/dungeon-defence normal (non-blinking form for special zones).
-///
-/// C++ Reference: `GameDefine.h:1402` — `ABNORMAL_CHAOS_NORMAL = 7`
 const ABNORMAL_CHAOS_NORMAL: u32 = 7;
 
 use crate::magic_constants::{
@@ -69,8 +51,6 @@ use crate::magic_constants::{
 use crate::state_change_constants::STATE_CHANGE_ABNORMAL;
 
 /// Handle WIZ_REGENE from the client.
-///
-/// C++ Reference: `AttackHandler.cpp:258-455` (CUser::Regene)
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -80,7 +60,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let sid = session.session_id();
 
     // Player must be dead to respawn
-    // C++ Reference: AttackHandler.cpp:267-268
     if !world.is_player_dead(sid) {
         return Ok(());
     }
@@ -89,7 +68,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let mut regene_type = reader.read_u8().unwrap_or(1);
 
     // Normalize: only 1 or 2 are valid
-    // C++ Reference: AttackHandler.cpp:270-271
     if regene_type != 1 && regene_type != 2 {
         regene_type = 1;
     }
@@ -100,7 +78,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Type 2: Resurrection stone respawn
-    // C++ Reference: AttackHandler.cpp:273-279
     // Requires level > 5 and 3 * level resurrection stones (item 379006000)
     if regene_type == 2 {
         if char_info.level <= MIN_LEVEL_FOR_STONES {
@@ -137,15 +114,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Determine respawn location
-    // C++ Reference: AttackHandler.cpp:282-371
     let (dest_zone, mut dest_x, mut dest_z) =
         determine_respawn_location(&char_info, pos.zone_id, &world);
 
     // Reset state: set to standing, restore HP/MP
-    // C++ Reference: AttackHandler.cpp:378-379
     world.update_res_hp_type(sid, crate::world::USER_STANDING);
 
-    // C++ Reference: AttackHandler.cpp:407-408 — reset death tracking fields
     world.update_session(sid, |h| {
         h.who_killed_me = -1;
         h.lost_exp = 0;
@@ -156,7 +130,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let new_hp = char_info.max_hp;
     world.update_character_hp(sid, new_hp);
 
-    // C++ Reference: AttackHandler.cpp:427-428
     //   if (GetZoneID() == ZONE_UNDER_CASTLE) MSpChange(GetMaxMana());
     // Only ZONE_UNDER_CASTLE gets full MP restore on respawn
     if dest_zone == ZONE_UNDER_CASTLE {
@@ -179,7 +152,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     } else {
         // Same-zone respawn
         // Validate spawn position is within zone map bounds
-        // C++ Reference: SMDFile.cpp:196 — IsValidPosition(x, z)
         if let Some(zone) = world.get_zone(pos.zone_id) {
             if !zone.is_valid_position(dest_x, dest_z) {
                 tracing::error!(
@@ -223,7 +195,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         }
 
         // 5. Send WIZ_REGENE response to client
-        // C++ Reference: AttackHandler.cpp:402-404
         let mut resp = Packet::new(Opcode::WizRegene as u8);
         resp.write_u16((dest_x * 10.0) as u16); // GetSPosX
         resp.write_u16((dest_z * 10.0) as u16); // GetSPosZ
@@ -232,22 +203,18 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         session.send_packet(&resp).await?;
 
         // 6. Broadcast INOUT_RESPAWN to new region
-        // C++ Reference: AttackHandler.cpp:413
         region::broadcast_user_in(session).await?;
 
         // 7. Send region data to player
-        // C++ Reference: AttackHandler.cpp:415-416 — RegionNpcInfoForMe() only
         region::send_region_user_in_out_for_me(session).await?;
         region::send_region_npc_info_for_me(session).await?;
     }
 
     // ── InitializeStealth ────────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:418 — `InitializeStealth()`
     // Sends WIZ_STEALTH with u8(0) u16(0) to reset stealth/invisibility
     send_initialize_stealth(session).await?;
 
     // ── Cure DOT & Poison ────────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:419-420
     //   SendUserStatusUpdate(USER_STATUS_DOT, USER_STATUS_CURE)
     //   SendUserStatusUpdate(USER_STATUS_POISON, USER_STATUS_CURE)
     world.clear_durational_skills(sid);
@@ -255,19 +222,16 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     send_user_status_update(session, USER_STATUS_POISON, USER_STATUS_CURE).await?;
 
     // ── Arena speed cure ──────────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:422-423
     //   if (isInArena()) SendUserStatusUpdate(USER_STATUS_SPEED, USER_STATUS_CURE);
     if dest_zone == ZONE_ARENA {
         send_user_status_update(session, USER_STATUS_SPEED, USER_STATUS_CURE).await?;
     }
 
     // ── Reset anger gauge ─────────────────────────────────────────────
-    // C++ Reference: UserRegeneSystem.cpp:126-127
     //   if (GetAngerGauge() > 0) UpdateAngerGauge(0);
     super::arena::reset_anger_gauge(&world, sid);
 
     // 8. Send HP change to client (full HP restore)
-    // C++ Reference: AttackHandler.cpp:425
     let mut hp_pkt = Packet::new(Opcode::WizHpChange as u8);
     hp_pkt.write_i16(new_hp); // MaxHP
     hp_pkt.write_i16(new_hp); // CurrentHP (fully restored)
@@ -275,7 +239,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     session.send_packet(&hp_pkt).await?;
 
     // ── RecastSavedMagic ─────────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:430-437
     //   if (!isBlinking() && zone != CHAOS/DUNGEON_DEFENCE/KNIGHT_ROYALE)
     //     { InitType4(); RecastSavedMagic(); }
     // Recast on all regene types (C++ does it for magicid != 0, but also for normal regene
@@ -299,22 +262,18 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── BlinkStart ───────────────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:439-442
     //   if (GetZoneID() == ZONE_CHAOS_DUNGEON) BlinkStart(-10);
     //   else if (magicid == 0 && !isNPCTransformation()) BlinkStart();
     // BlinkStart(-10) means BLINK_TIME(-10) = 0s — no blink in Chaos Dungeon.
-    // C++ Reference: User.cpp:4070 — m_tBlinkExpiryTime = UNIXTIME + BLINK_TIME + exBlinkTime
     if dest_zone != ZONE_CHAOS_DUNGEON {
         activate_blink(session, dest_zone)?;
     }
 
     // ── ZoneOnlineRewardChange ──────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:444 — `ZoneOnlineRewardChange()`
     // Reset the player's online reward timer after respawn.
     crate::systems::zone_rewards::zone_online_reward_change(&world, sid);
 
     // ── Loyalty-zero kick ─────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:447-453
     //   if (magicid == 0) {
     //     if (GetLoyalty() == 0 && (GetMap()->isWarZone()
     //         || isInSpecialEventZone() || isInPKZone() || cindirella))
@@ -369,8 +328,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Send WIZ_STEALTH to reset stealth/invisibility state.
-///
-/// C++ Reference: `User.cpp:4537-4542` — `CUser::InitializeStealth()`
 /// ```text
 /// Packet pkt(WIZ_STEALTH);
 /// pkt << uint8(0) << uint16(0);
@@ -391,13 +348,10 @@ async fn send_initialize_stealth(session: &mut ClientSession) -> anyhow::Result<
 
 /// Send WIZ_ZONEABILITY sub-opcode 2 to cure a status effect,
 /// then broadcast PARTY_STATUSCHANGE to party members.
-///
-/// C++ Reference: `User.cpp:4370-4393` — `CUser::SendUserStatusUpdate()`
 /// ```text
 /// Packet result(WIZ_ZONEABILITY, uint8(2));
 /// result << uint8(type) << uint8(status);
 /// ```
-///
 /// C++ also calls `SendPartyStatusUpdate()` (`PartyHandler.cpp:1275-1282`).
 async fn send_user_status_update(
     session: &mut ClientSession,
@@ -410,7 +364,6 @@ async fn send_user_status_update(
     pkt.write_u8(status_behaviour);
     session.send_packet(&pkt).await?;
 
-    // C++ Reference: PartyHandler.cpp:1275-1282 — SendPartyStatusUpdate()
     let world = session.world().clone();
     let sid = session.session_id();
     if let Some(party_id) = world.get_party_id(sid) {
@@ -425,18 +378,13 @@ async fn send_user_status_update(
 }
 
 /// Activate blink (respawn invulnerability).
-///
-/// C++ Reference: `User.cpp:4051-4076` — `CUser::BlinkStart(int exBlinkTime)`
-///
 /// `duration_secs` is the total blink duration in seconds.
 /// C++ uses `BLINK_TIME(10) + exBlinkTime`, so:
 /// - Normal: pass `BLINK_TIME` (10)
 /// - Special zones (Chaos Dungeon, Knight Royale, Dungeon Defence): pass 55 (10 + 45)
-///
 /// Checks:
 /// - Not a GM (authority == 0)
 /// - Zone supports blink (blink_zone == true, not a war zone)
-///
 /// Sets `blink_expiry_time` and broadcasts `ABNORMAL_BLINKING` state change.
 pub(crate) fn activate_blink_with_duration(
     session: &mut ClientSession,
@@ -446,7 +394,6 @@ pub(crate) fn activate_blink_with_duration(
     let world = session.world().clone();
     let sid = session.session_id();
 
-    // C++ Reference: User.cpp:4053 — `if (isGM() || isTransformed()) return;`
     let is_gm = world
         .get_character_info(sid)
         .map(|ch| ch.authority == 0)
@@ -456,12 +403,10 @@ pub(crate) fn activate_blink_with_duration(
     }
 
     // M5: Skip blink if transformed
-    // C++ Reference: User.cpp:4053 — `if (isGM() || isTransformed()) return;`
     if world.is_transformed(sid) {
         return Ok(());
     }
 
-    // C++ Reference: User.cpp:4055 — `if (GetMap()->isWarZone() || GetMap()->m_bBlinkZone != 1)`
     // If war zone or blink_zone is not enabled, clear blink if active and return
     let (is_war, has_blink) = world
         .get_zone(zone_id)
@@ -477,7 +422,6 @@ pub(crate) fn activate_blink_with_duration(
         .unwrap_or((false, false));
 
     if is_war || !has_blink {
-        // C++: if already blinking, clear it and broadcast ABNORMAL_NORMAL
         let was_blinking = {
             let now = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -487,7 +431,6 @@ pub(crate) fn activate_blink_with_duration(
         };
         if was_blinking {
             world.clear_blink(sid);
-            // C++ Reference: User.cpp:4062 — use ABNORMAL_CHAOS_NORMAL for chaos/dungeon zones
             let normal_type = if zone_id == ZONE_CHAOS_DUNGEON || zone_id == ZONE_DUNGEON_DEFENCE {
                 ABNORMAL_CHAOS_NORMAL
             } else {
@@ -516,7 +459,6 @@ pub(crate) fn activate_blink_with_duration(
         .as_secs();
     let expiry = now + duration_secs;
 
-    // C++ Reference: User.cpp:4069-4072
     //   m_bAbnormalType = ABNORMAL_BLINKING;
     //   m_tBlinkExpiryTime = UNIXTIME + BLINK_TIME;
     //   m_bRegeneType = REGENE_ZONECHANGE;
@@ -527,7 +469,6 @@ pub(crate) fn activate_blink_with_duration(
     });
 
     // Broadcast ABNORMAL_BLINKING state change to 3x3 region
-    // C++ Reference: User.cpp:4075 — `StateChangeServerDirect(3, ABNORMAL_BLINKING)`
     let state_pkt =
         build_state_change_broadcast(sid as u32, STATE_CHANGE_ABNORMAL, ABNORMAL_BLINKING);
     if let Some((pos, event_room)) = world.with_session(sid, |h| (h.position, h.event_room)) {
@@ -552,17 +493,13 @@ pub(crate) fn activate_blink_with_duration(
 }
 
 /// Activate blink with the default duration (BLINK_TIME = 10 seconds).
-///
 /// Convenience wrapper around `activate_blink_with_duration`.
 pub(crate) fn activate_blink(session: &mut ClientSession, zone_id: u16) -> anyhow::Result<()> {
     activate_blink_with_duration(session, zone_id, BLINK_TIME)
 }
 
 /// Build a WIZ_STATE_CHANGE broadcast packet.
-///
 /// Format: `[u32 socket_id] [u8 bType] [u32 nBuff]`
-///
-/// C++ Reference: `User.cpp:2999-3001` — StateChange broadcast
 pub fn build_state_change_broadcast(sid: u32, b_type: u8, n_buff: u32) -> Packet {
     let mut pkt = Packet::new(Opcode::WizStateChange as u8);
     pkt.write_u32(sid);
@@ -572,9 +509,6 @@ pub fn build_state_change_broadcast(sid: u32, b_type: u8, n_buff: u32) -> Packet
 }
 
 /// Determine the respawn location for a dead player.
-///
-/// C++ Reference: `AttackHandler.cpp:282-371` (CUser::Regene position logic)
-///
 /// Priority order:
 /// 1. Bind point (if set and not in ZONE_DELOS)
 /// 2. Home zone (≤ZONE_ELMORAD) or active battle zone → nation-specific from start_position + random offset
@@ -592,7 +526,6 @@ fn determine_respawn_location(
     use rand::Rng;
 
     // ── 1. Bind point respawn ─────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:289,297-301 — GetObjectEvent(m_sBind), byLife==1
     // Our bind_zone/bind_x/bind_z is equivalent to C++'s m_sBind event coords.
     let bind_zone = char_info.bind_zone as u16;
     if bind_zone > 0
@@ -603,7 +536,6 @@ fn determine_respawn_location(
     }
 
     // ── 2. Home zone or active battle zone → nation-specific coords ──
-    // C++ Reference: AttackHandler.cpp:305-311
     //   if ((GetZoneID() <= ZONE_ELMORAD) ||
     //       (GetZoneID() != ZONE_SNOW_BATTLE && GetZoneID() == ZONE_BATTLE_BASE + m_byBattleZone))
     //   {
@@ -639,7 +571,6 @@ fn determine_respawn_location(
     }
 
     // ── 3. Chaos Dungeon / Bowl event → random spawn point ───────────
-    // C++ Reference: AttackHandler.cpp:321-326
     //   if (GetZoneID() == ZONE_CHAOS_DUNGEON || (tBowlEventZone == GetZoneID() && isBowlEventActive))
     //     GetStartPositionRandom(sx, sz);
     if let Some((rx, rz)) = world.get_start_position_random(current_zone) {
@@ -647,7 +578,6 @@ fn determine_respawn_location(
     }
 
     // ── 4. Juraid Mountain — stage-specific respawn coords ───────────
-    // C++ Reference: AttackHandler.cpp:327-354
     //   3 stages × 2 nations = 6 coordinate sets with ±3 random offset.
     //   isDevaStage:   K(511,738) E(511,281)
     //   isBridgeStage2: K(336,848) E(695,171)
@@ -659,7 +589,6 @@ fn determine_respawn_location(
     }
 
     // ── 5. Default: nation-specific from start_position table ─────────
-    // C++ Reference: AttackHandler.cpp:357-363 — GetStartPosition(sx, sz, 0, isCind)
     if let Some(sp) = world.get_start_position(current_zone) {
         let (base_x, base_z) = if char_info.nation == 1 {
             (sp.karus_x as f32, sp.karus_z as f32)
@@ -696,14 +625,10 @@ fn determine_respawn_location(
 }
 
 /// Determine Juraid Mountain respawn coordinates based on bridge stage.
-///
-/// C++ Reference: `AttackHandler.cpp:327-354`
-///
 /// Stage determination from bridge state:
 /// - No bridges open → Deva stage (starting area)
 /// - Bridge 0 open, bridge 1 not → Bridge1 stage
 /// - Bridge 1 open → Bridge2 stage
-///
 /// Coordinates are hardcoded per stage per nation with ±3 random offset.
 fn juraid_respawn_coords(nation: u8, world: &crate::world::WorldState) -> Option<(f32, f32)> {
     use rand::Rng;
@@ -726,7 +651,6 @@ fn juraid_respawn_coords(nation: u8, world: &crate::world::WorldState) -> Option
     }
 
     // No active event room → fall through to default GetStartPosition path
-    // C++ Reference: AttackHandler.cpp:327 — `isInValidRoom(0)` guard
     if !found_room {
         return None;
     }
@@ -774,7 +698,6 @@ mod tests {
     #[test]
     fn test_regene_response_format() {
         // Server -> Client: [u16 x*10] [u16 z*10] [u16 y*10]
-        // C++ Reference: AttackHandler.cpp:402-404
         let x = 512.0_f32;
         let z = 341.0_f32;
 
@@ -824,7 +747,6 @@ mod tests {
     #[test]
     fn test_respawn_position_bind_point() {
         // When bind_zone > 0 and bind coords are set, use bind point
-        // C++ Reference: AttackHandler.cpp:289-302
         let bind_zone: u8 = 11;
         let bind_x: f32 = 200.0;
         let bind_z: f32 = 300.0;
@@ -857,7 +779,6 @@ mod tests {
     #[test]
     fn test_respawn_position_coords_scaled() {
         // WIZ_REGENE response sends positions multiplied by 10
-        // C++ Reference: AttackHandler.cpp:403 — `GetSPosX()` = `uint16(GetX() * 10)`
         let x = 512.5_f32;
         let z = 341.3_f32;
 
@@ -869,7 +790,6 @@ mod tests {
 
     #[test]
     fn test_regene_type_normalization() {
-        // C++ Reference: AttackHandler.cpp:270-271
         // Only types 1 and 2 are valid, anything else becomes 1
         for invalid in [0_u8, 3, 4, 5, 255] {
             let normalized = if invalid != 1 && invalid != 2 {
@@ -885,14 +805,12 @@ mod tests {
 
     #[test]
     fn test_resurrection_stone_constants() {
-        // C++ Reference: AttackHandler.cpp:276-278
         assert_eq!(ITEM_RESURRECTION_STONE, 379006000);
         assert_eq!(MIN_LEVEL_FOR_STONES, 5);
     }
 
     #[test]
     fn test_resurrection_stone_cost_calculation() {
-        // C++ Reference: AttackHandler.cpp:278 — RobItem(379006000, 3 * GetLevel())
         // Cost = 3 * level
         assert_eq!(3u16 * 10, 30); // level 10 needs 30 stones
         assert_eq!(3u16 * 60, 180); // level 60 needs 180 stones
@@ -901,7 +819,6 @@ mod tests {
 
     #[test]
     fn test_resurrection_stone_level_check() {
-        // C++ Reference: AttackHandler.cpp:276 — if (GetLevel() <= 5)
         // Level 5 and below cannot use resurrection stones
         for level in 0..=5u8 {
             assert!(level <= MIN_LEVEL_FOR_STONES);
@@ -933,7 +850,6 @@ mod tests {
 
     #[test]
     fn test_abnormal_constants() {
-        // C++ Reference: GameDefine.h:1396-1402
         assert_eq!(ABNORMAL_NORMAL, 1);
         assert_eq!(ABNORMAL_BLINKING, 4);
     }
@@ -966,7 +882,6 @@ mod tests {
 
     #[test]
     fn test_initialize_stealth_packet_format() {
-        // C++ Reference: User.cpp:4539-4541
         // Packet pkt(WIZ_STEALTH); pkt << uint8(0) << uint16(0);
         let mut pkt = Packet::new(Opcode::WizStealth as u8);
         pkt.write_u8(0);
@@ -985,7 +900,6 @@ mod tests {
 
     #[test]
     fn test_user_status_update_dot_cure_format() {
-        // C++ Reference: User.cpp:4372-4373
         // Packet result(WIZ_ZONEABILITY, uint8(2));
         // result << uint8(type) << uint8(status);
         let mut pkt = Packet::new(Opcode::WizZoneability as u8);
@@ -1038,7 +952,6 @@ mod tests {
 
     #[test]
     fn test_blink_expiry_calculation() {
-        // C++ Reference: User.cpp:4070 — m_tBlinkExpiryTime = UNIXTIME + BLINK_TIME
         let now: u64 = 1700000000;
         let expiry = now + BLINK_TIME;
         assert_eq!(expiry, 1700000010);
@@ -1048,7 +961,6 @@ mod tests {
 
     #[test]
     fn test_blink_time_check_logic() {
-        // C++ Reference: User.cpp:4078-4090 — BlinkTimeCheck()
         let now: u64 = 1700000015;
         let expiry: u64 = 1700000010;
         // now >= expiry means blink has expired
@@ -1069,7 +981,6 @@ mod tests {
 
     #[test]
     fn test_abnormal_chaos_normal_constant() {
-        // C++ Reference: GameDefine.h:1402
         assert_eq!(ABNORMAL_CHAOS_NORMAL, 7);
     }
 
@@ -1078,13 +989,11 @@ mod tests {
         assert_eq!(ZONE_CHAOS_DUNGEON, 85);
         assert_eq!(ZONE_DUNGEON_DEFENCE, 89);
         assert_eq!(ZONE_ARENA, 48);
-        // C++ Reference: Define.h:205 — ZONE_UNDER_CASTLE 86
         assert_eq!(ZONE_UNDER_CASTLE, 86);
     }
 
     #[test]
     fn test_user_status_speed_constant() {
-        // C++ Reference: Define.h:555 — USER_STATUS_SPEED = 3
         assert_eq!(USER_STATUS_SPEED, 3);
     }
 
@@ -1092,7 +1001,6 @@ mod tests {
     fn test_chaos_zone_blink_clear_uses_chaos_normal() {
         // When clearing blink in ZONE_CHAOS_DUNGEON or ZONE_DUNGEON_DEFENCE,
         // the server should broadcast ABNORMAL_CHAOS_NORMAL (7) instead of ABNORMAL_NORMAL (1).
-        // C++ Reference: User.cpp:4062
         let zone_id = ZONE_CHAOS_DUNGEON;
         let chaos_type = if zone_id == ZONE_CHAOS_DUNGEON || zone_id == ZONE_DUNGEON_DEFENCE {
             ABNORMAL_CHAOS_NORMAL
@@ -1116,7 +1024,6 @@ mod tests {
 
     #[test]
     fn test_arena_speed_cure_packet_format() {
-        // C++ Reference: AttackHandler.cpp:422-423
         // if (isInArena()) SendUserStatusUpdate(USER_STATUS_SPEED, USER_STATUS_CURE)
         let mut pkt = Packet::new(Opcode::WizZoneability as u8);
         pkt.write_u8(2); // sub-opcode
@@ -1134,7 +1041,6 @@ mod tests {
 
     #[test]
     fn test_blink_skip_when_transformed() {
-        // C++ Reference: User.cpp:4053 — `if (isGM() || isTransformed()) return;`
         // When a player is transformed, BlinkStart should be skipped
         let is_transformed = true;
         let is_gm = false;
@@ -1162,7 +1068,6 @@ mod tests {
 
     #[test]
     fn test_blink_sets_can_use_skills_false() {
-        // C++ Reference: User.cpp:4072 — `m_bCanUseSkills = false;`
         // When blink activates, skills should be disabled
         // BlinkStart sets can_use_skills to false
         let can_use_skills = false;
@@ -1171,7 +1076,6 @@ mod tests {
 
     #[test]
     fn test_blink_clear_restores_can_use_skills() {
-        // C++ Reference: User.cpp:4083 — `m_bCanUseSkills = true;`
         // When blink expires, skills should be re-enabled
         // BlinkTimeCheck sets can_use_skills to true
         let can_use_skills = true;
@@ -1180,7 +1084,6 @@ mod tests {
 
     #[test]
     fn test_post_blink_transform_skill_reenable_logic() {
-        // C++ Reference: User.cpp:994-995
         //   if (!isBlinking() && isTransformed() && m_bCanUseSkills == false)
         //       m_bCanUseSkills = true;
         let is_blinking = false;
@@ -1212,7 +1115,6 @@ mod tests {
 
     #[test]
     fn test_mini_arena_respawn_constants() {
-        // C++ Reference: AttackHandler.cpp:316-319
         // MINI_ARENA_RESPAWN_X=734, MINI_ARENA_RESPAWN_Z=427, RADIUS=5
         let x: f32 = 734.0;
         let z: f32 = 427.0;
@@ -1227,7 +1129,6 @@ mod tests {
 
     // ── Sprint 316: ZONE_DELOS bind point restriction ────────────────
 
-    /// C++ Reference: ZONE_DELOS (30) does not allow bind point respawn.
     /// Players in Delos must use the zone's default spawn position.
     #[test]
     fn test_delos_blocks_bind_point() {

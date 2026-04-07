@@ -1,31 +1,20 @@
 //! Lottery Event handler — WIZ_EXT_HOOK (0xE9) sub-opcode LOTTERY (0xC7).
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/LotterySystem.cpp`
-//! C++ Reference: `KOOriginalGameServer/shared/database/RimaLotterySet.h`
-//! C++ Reference: `KOOriginalGameServer/GameServer/GameDefine.h` — `_RIMA_LOTTERY_PROCESS`
-//!
 //! ## Overview
-//!
 //! The Lottery Event is a server-wide timed event where players spend required
 //! items/gold to earn lottery tickets. When time expires, up to 4 random winners
 //! are drawn from participants and each receives a reward item via the in-game
 //! letter system.
-//!
 //! ## Sub-opcode flow (ExtSub::LOTTERY = 0xC7)
-//!
 //! | Client→Server sub | Description              |
 //! |--------------------|--------------------------|
 //! | 3                  | Join lottery (buy ticket) |
-//!
 //! | Server→Client sub | Description                             |
 //! |--------------------|-----------------------------------------|
 //! | 1                  | Event started / current state broadcast |
 //! | 2                  | Participant count updated (all)         |
 //! | 3                  | Join result (success/fail + ticket count) |
 //! | 4                  | Event ended / reset                     |
-//!
 //! ## Packet formats
-//!
 //! ### Start broadcast (sub=1, sent to all or on game entry)
 //! ```text
 //! WIZ_EXT_HOOK << u8(0xC7) << u8(1)
@@ -33,18 +22,15 @@
 //!   << [4x: u32 reward_item_id]
 //!   << u32(user_limit) << u32(remaining_secs) << u32(join_count) << u32(my_ticket_count)
 //! ```
-//!
 //! ### Participant count update (sub=2, broadcast to all)
 //! ```text
 //! WIZ_EXT_HOOK << u8(0xC7) << u8(2)
 //! ```
-//!
 //! ### Join result (sub=3, sent to joining player)
 //! ```text
 //! WIZ_EXT_HOOK << u8(0xC7) << u8(3) << u8(result) << u32(ticket_count_or_error_msg)
 //! result: 0 = fail (followed by length-prefixed error string), 1 = success (followed by u32 ticket_count)
 //! ```
-//!
 //! ### End broadcast (sub=4, sent to all on reset)
 //! ```text
 //! WIZ_EXT_HOOK << u8(0xC7) << u8(4)
@@ -70,43 +56,27 @@ use crate::world::ITEM_GOLD;
 pub(crate) use super::ext_hook::EXT_SUB_LOTTERY;
 
 /// Sub-opcode sent by client to join the lottery.
-///
-/// C++ Reference: `LotterySystem.cpp:134` — `case 3: LotteryJoinFunction()`
 pub const SUB_JOIN: u8 = 3;
 
 /// Sub-opcode sent to all players when event starts.
-///
-/// C++ Reference: `LotterySystem.cpp:69`
 pub const SUB_START: u8 = 1;
 
 /// Sub-opcode broadcast to all when participant count changes.
-///
-/// C++ Reference: `LotterySystem.cpp:289`
 pub const SUB_COUNT_UPDATE: u8 = 2;
 
 /// Sub-opcode sent to joining player with result (success/fail).
-///
-/// C++ Reference: `LotterySystem.cpp:176,283`
 pub const SUB_JOIN_RESULT: u8 = 3;
 
 /// Sub-opcode broadcast to all when event ends/resets.
-///
-/// C++ Reference: `LotterySystem.cpp:494`
 pub const SUB_END: u8 = 4;
 
 /// Maximum number of winners drawn per lottery.
-///
-/// C++ Reference: `LotterySystem.cpp:367` — `int x = 4`
 pub const MAX_WINNERS: usize = 4;
 
 /// Maximum number of required items per lottery.
-///
-/// C++ Reference: `_RIMA_LOTTERY_DB::nReqItem[5]`
 pub const MAX_REQ_ITEMS: usize = 5;
 
 /// Maximum number of reward items per lottery.
-///
-/// C++ Reference: `_RIMA_LOTTERY_DB::nRewardItem[4]`
 pub const MAX_REWARD_ITEMS: usize = 4;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -114,8 +84,6 @@ pub const MAX_REWARD_ITEMS: usize = 4;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Per-user lottery state (mirrors `_RIMA_LOOTERY_USER_INFO`).
-///
-/// C++ Reference: `GameDefine.h:2455`
 #[derive(Debug, Clone)]
 pub struct LotteryUserInfo {
     /// In-game character name (uppercase).
@@ -127,8 +95,6 @@ pub struct LotteryUserInfo {
 }
 
 /// Global lottery runtime state (mirrors `_RIMA_LOTTERY_PROCESS`).
-///
-/// C++ Reference: `GameDefine.h:2477`
 #[derive(Debug, Clone)]
 pub struct LotteryProcess {
     /// Whether the event is currently active.
@@ -181,7 +147,6 @@ impl LotteryProcess {
 }
 
 /// Thread-safe shared lottery process state.
-///
 /// Wrapped in `Arc<RwLock<...>>` to allow access from multiple
 /// handler calls and background timer task.
 pub type SharedLotteryProcess = Arc<RwLock<LotteryProcess>>;
@@ -196,10 +161,6 @@ pub fn new_lottery_process() -> SharedLotteryProcess {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a lottery start/state packet (sub=1).
-///
-/// C++ Reference: `LotterySystem.cpp:69-82` — start broadcast
-/// C++ Reference: `LotterySystem.cpp:96-124` — per-user game entry send
-///
 /// Wire format (all little-endian):
 /// ```text
 /// WIZ_EXT_HOOK(0xE9) << u8(0xC7) << u8(1)
@@ -228,9 +189,6 @@ pub fn build_start_packet(proc: &LotteryProcess, now: u32, my_ticket_count: u32)
 }
 
 /// Build participant count update broadcast (sub=2).
-///
-/// C++ Reference: `LotterySystem.cpp:287-291`
-///
 /// Wire format:
 /// ```text
 /// WIZ_EXT_HOOK(0xE9) << u8(0xC7) << u8(2)
@@ -243,9 +201,6 @@ pub fn build_count_update_packet() -> Packet {
 }
 
 /// Build a join-result success packet (sub=3, result=1).
-///
-/// C++ Reference: `LotterySystem.cpp:283-285`
-///
 /// Wire format:
 /// ```text
 /// WIZ_EXT_HOOK(0xE9) << u8(0xC7) << u8(3) << u8(1) << u32(ticket_count)
@@ -260,9 +215,6 @@ pub fn build_join_success_packet(ticket_count: u32) -> Packet {
 }
 
 /// Build a join-result failure packet (sub=3, result=0) with message.
-///
-/// C++ Reference: `LotterySystem.cpp:174-179`, `LotterySystem.cpp:183-190`
-///
 /// Wire format:
 /// ```text
 /// WIZ_EXT_HOOK(0xE9) << u8(0xC7) << u8(3) << u8(0) << sbyte_string(msg)
@@ -277,9 +229,6 @@ pub fn build_join_fail_packet(msg: &str) -> Packet {
 }
 
 /// Build event-end broadcast packet (sub=4).
-///
-/// C++ Reference: `LotterySystem.cpp:493-497`
-///
 /// Wire format:
 /// ```text
 /// WIZ_EXT_HOOK(0xE9) << u8(0xC7) << u8(4)
@@ -296,8 +245,6 @@ pub fn build_end_packet() -> Packet {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a server-wide PUBLIC_CHAT announcement packet (type=7).
-///
-/// C++ Reference: `LotterySystem.cpp:85-87`, `LotterySystem.cpp:413-414`
 /// Uses `ChatType::Public = 7`, nation=ALL(0), sender_id=0, name="SYSTEM".
 pub fn build_lottery_announce(msg: &str) -> Packet {
     build_chat_packet(
@@ -317,11 +264,8 @@ pub fn build_lottery_announce(msg: &str) -> Packet {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Send lottery state to a player on game entry.
-///
 /// Called from `gamestart` when a player enters the world while a lottery
 /// event is active. Mirrors `CUser::LotteryGameStartSend()`.
-///
-/// C++ Reference: `LotterySystem.cpp:90-125`
 pub async fn send_on_game_entry(
     session: &mut ClientSession,
     lottery: &SharedLotteryProcess,
@@ -388,10 +332,7 @@ pub async fn send_on_game_entry(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle a LOTTERY join request from the client (sub=3).
-///
-/// C++ Reference: `LotterySystem.cpp:127-292` — `CUser::ExtLotteryJoinFunction()`
 /// and `CUser::LotteryJoinFunction()`
-///
 /// Flow:
 /// 1. Check lottery is active.
 /// 2. Check user-limit not exceeded.
@@ -482,7 +423,6 @@ pub async fn handle_join(
     }
 
     if total_gold_cost > 0 {
-        // C++ Reference: `LotterySystem.cpp:222-231` — `if (!GoldLose(nReqGold))`
         if !world.gold_lose(sid, total_gold_cost) {
             let pkt = build_join_fail_packet("You don't have enough money for the lottery event.");
             session.send_packet(&pkt).await?;
@@ -495,7 +435,6 @@ pub async fn handle_join(
     }
 
     // ── 7. Deduct non-gold items ──────────────────────────────────────────
-    // C++ Reference: `LotterySystem.cpp:234-248`
     // NOTE: C++ uses nReqItem[i] twice for ItemCount (appears to be a C++ bug),
     // but the intent is to rob the item. We use the correct item_count.
     for (item_id, item_count) in &req_items {
@@ -503,8 +442,7 @@ pub async fn handle_join(
             continue;
         }
         // Check item is not countable kind 2 (non-stackable quest items)
-        // C++ Reference: `LotterySystem.cpp:242` — `if (pItem.m_bCountable == 2) continue`
-        // We attempt rob; if it fails we continue (matches C++ `if (!RobItem) continue`)
+        // We attempt rob; if it fails we continue (matches `if (!RobItem) continue`)
         if !world.rob_item(sid, *item_id, (*item_count).min(u16::MAX as u32) as u16) {
             warn!(
                 "[{}] Lottery: rob_item({}, {}) failed for {}",
@@ -593,14 +531,10 @@ pub async fn handle_join(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Start a lottery event from the given settings.
-///
-/// C++ Reference: `LotterySystem.cpp:6-88` — `CGameServerDlg::LotterySystemStart()`
-///
 /// `req_items`: array of (item_id, item_count) — up to 5 slots
 /// `reward_items`: array of item_ids — up to 4 slots
 /// `user_limit`: max participants
 /// `event_time_secs`: duration in seconds
-///
 /// Returns `false` if required items or rewards are all zero (invalid config).
 pub fn start_lottery(
     lottery: &SharedLotteryProcess,
@@ -654,12 +588,8 @@ pub fn start_lottery(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Draw winners from participants using the same algorithm as C++.
-///
-/// C++ Reference: `LotterySystem.cpp:347-440` — `CGameServerDlg::LotterySendGift()`
-///
 /// Selects up to `MAX_WINNERS` (4) random unique indices from the participant
 /// list. Returns a vec of (winner_name, reward_item_index) pairs.
-///
 /// The reward_item_index (0-3) maps to `proc.reward_items[index]`.
 pub fn draw_winners(proc: &LotteryProcess) -> Vec<(String, usize)> {
     let participants: Vec<&LotteryUserInfo> =
@@ -674,7 +604,6 @@ pub fn draw_winners(proc: &LotteryProcess) -> Vec<(String, usize)> {
     let mut rng = rand::thread_rng();
     let mut selected_indices: Vec<usize> = Vec::with_capacity(num_winners);
 
-    // C++ Reference: `LotterySystem.cpp:373-388` — collision-rejection sampling
     while selected_indices.len() < num_winners {
         let idx = rng.gen_range(0..total);
         if !selected_indices.contains(&idx) {
@@ -695,8 +624,6 @@ pub fn draw_winners(proc: &LotteryProcess) -> Vec<(String, usize)> {
 }
 
 /// Reset the lottery event state.
-///
-/// C++ Reference: `LotterySystem.cpp:478-501` — `CGameServerDlg::LotterySystemReset()`
 pub fn reset_lottery(proc: &mut LotteryProcess) {
     proc.lottery_start = false;
     proc.timer_control = false;
@@ -716,15 +643,12 @@ pub fn reset_lottery(proc: &mut LotteryProcess) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Result of a lottery timer tick.
-///
-/// C++ Reference: `LotterySystem.cpp:442-476` — `CGameServerDlg::LotteryEventTimer()`
 #[derive(Debug, PartialEq, Eq)]
 pub enum LotteryTickResult {
     /// No action needed (lottery inactive or still running).
     Idle,
     /// Countdown warning: remaining minutes to broadcast.
     ///
-    /// C++ Reference: `LotterySystem.cpp:452-463` — LogosYolla at 15/10/5/3/2/1 minutes
     CountdownWarning(u32),
     /// Time expired: draw winners and reset.
     ///
@@ -737,13 +661,9 @@ pub enum LotteryTickResult {
 }
 
 /// Process one timer tick for the lottery event.
-///
-/// C++ Reference: `LotterySystem.cpp:442-476` — `CGameServerDlg::LotteryEventTimer()`
-///
 /// Called every second from the event system background task. Checks if the
 /// lottery is active, sends countdown warnings at key intervals, and when
 /// time expires draws winners and resets the lottery state.
-///
 /// The caller is responsible for:
 /// - Broadcasting countdown warning announcements
 /// - Sending reward letters to winners via `create_system_letter()`
@@ -764,7 +684,6 @@ pub fn lottery_timer_tick(lottery: &SharedLotteryProcess, now: u32) -> LotteryTi
     };
 
     if remaining > 0 {
-        // C++ Reference: LotterySystem.cpp:452-463 — countdown warnings
         let warn_minutes = match remaining {
             900 => Some(15),
             600 => Some(10),
@@ -781,7 +700,6 @@ pub fn lottery_timer_tick(lottery: &SharedLotteryProcess, now: u32) -> LotteryTi
     }
 
     // ── Time expired: draw winners, reset ─────────────────────────────────
-    // C++ Reference: LotterySystem.cpp:466-475
     //   pLotteryProc.TimerControl = false;
     //   pLotteryProc.SendGitfActivate = true;
     //   LotterySendGift();
@@ -818,8 +736,6 @@ pub fn lottery_timer_tick(lottery: &SharedLotteryProcess, now: u32) -> LotteryTi
 }
 
 /// Format a winner ordinal string matching C++ output.
-///
-/// C++ Reference: `LotterySystem.cpp:420-426`
 ///   case 1: "%dst Winner Player : %s"
 ///   case 2: "%dnd Winner Player : %s"
 ///   case 3: "%drd Winner Player : %s"
@@ -839,9 +755,6 @@ pub fn format_winner_message(rank: usize, name: &str) -> String {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle WIZ_EXT_HOOK (0xE9) sub-opcode LOTTERY (0xC7) from client.
-///
-/// C++ Reference: `LotterySystem.cpp:127-140` — `CUser::ExtLotteryJoinFunction()`
-///
 /// The first byte of `pkt.data` is the LOTTERY sub-opcode:
 /// - `3` = join request → `handle_join()`
 /// - Others are ignored (server → client only).
@@ -887,7 +800,6 @@ mod tests {
 
     #[test]
     fn test_build_start_packet_format() {
-        // C++ Reference: LotterySystem.cpp:69-82
         // result << u8(1) << [5x req_item, req_count] << [4x reward] << user_limit << remaining << join_count << ticket_count
         let proc = make_active_proc();
         let pkt = build_start_packet(&proc, 1_000_000, 3);
@@ -931,7 +843,6 @@ mod tests {
 
     #[test]
     fn test_build_count_update_packet() {
-        // C++ Reference: LotterySystem.cpp:287-291
         let pkt = build_count_update_packet();
         assert_eq!(pkt.opcode, Opcode::EXT_HOOK_S2C);
 
@@ -943,7 +854,6 @@ mod tests {
 
     #[test]
     fn test_build_join_success_packet() {
-        // C++ Reference: LotterySystem.cpp:283-285
         // pkt << u8(0xC7) << u8(3) << u8(1) << ticket_count
         let pkt = build_join_success_packet(5);
         assert_eq!(pkt.opcode, Opcode::EXT_HOOK_S2C);
@@ -958,7 +868,6 @@ mod tests {
 
     #[test]
     fn test_build_join_fail_packet() {
-        // C++ Reference: LotterySystem.cpp:174-179
         // pkt << u8(0xC7) << u8(3) << u8(0) << string(msg)
         let pkt = build_join_fail_packet("No items");
         assert_eq!(pkt.opcode, Opcode::EXT_HOOK_S2C);
@@ -974,7 +883,6 @@ mod tests {
 
     #[test]
     fn test_build_end_packet() {
-        // C++ Reference: LotterySystem.cpp:493-497
         let pkt = build_end_packet();
         assert_eq!(pkt.opcode, Opcode::EXT_HOOK_S2C);
 
@@ -986,7 +894,6 @@ mod tests {
 
     #[test]
     fn test_ext_sub_lottery_opcode_constant() {
-        // C++ Reference: shared/packets.h:227 — LOTTERY = 0xC7
         assert_eq!(EXT_SUB_LOTTERY, 0xC7);
     }
 

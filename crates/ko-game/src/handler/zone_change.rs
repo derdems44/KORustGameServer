@@ -1,9 +1,5 @@
 //! WIZ_ZONE_CHANGE (0x27) handler — cross-zone teleport and warp gates.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/ZoneChangeWarpHandler.cpp`
-//!
 //! ## Flow
-//!
 //! 1. Player steps on warp tile → `trigger_zone_change()` called from move_handler
 //! 2. Same zone → `same_zone_warp()` (sends WIZ_WARP)
 //! 3. Cross zone → cleanup old zone, update position, send WIZ_ZONE_CHANGE(Teleport=3)
@@ -30,42 +26,29 @@ use crate::world::{
 use crate::zone::{calc_region, SessionId};
 
 /// Monster transformation type — cancelled on zone change to restricted zones.
-///
-/// C++ Reference: `Unit.h:323` — `TransformationMonster = 1`
 use crate::magic_constants::TRANSFORMATION_MONSTER;
 
 use crate::magic_constants::MAGIC_CANCEL_TRANSFORMATION;
 
 /// Extended blink duration for special zones (10 base + 45 extra = 55 seconds).
-///
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:682` — `BlinkStart(45)` → BLINK_TIME(10) + 45 = 55
 const BLINK_TIME_SPECIAL_ZONE: u64 = 55;
 
 /// Zone change sub-opcodes.
-///
-/// C++ Reference: `packets.h:332-338` (ZoneChangeOpcodes enum)
 const ZONE_CHANGE_LOADING: u8 = 1;
 const ZONE_CHANGE_LOADED: u8 = 2;
 const ZONE_CHANGE_TELEPORT: u8 = 3;
 
 // ── WarpListResponse error codes ─────────────────────────────────────────
-// C++ Reference: `User.h:88-97` — `enum class WarpListResponse`
 
 /// Generic error (default).
 const WARP_ERROR: u8 = 0;
 /// Below minimum level for this zone.
 const WARP_MIN_LEVEL: u8 = 2;
 /// Cannot enter during Castle Siege War (not in clan / wrong grade).
-///
-/// C++ Reference: `User.h:93` — `WarpListNotDuringCSW = 3`
 const WARP_NOT_DURING_CSW: u8 = 3;
 /// Cannot enter during active war.
-///
-/// C++ Reference: `User.h:94` — `WarpListNotDuringWar = 4`
 const WARP_NOT_DURING_WAR: u8 = 4;
 /// Need national points (loyalty) to enter.
-///
-/// C++ Reference: `User.h:95` — `WarpListNeedNP = 5`
 const WARP_NEED_NP: u8 = 5;
 /// Don't qualify (above max level).
 const WARP_DO_NOT_QUALIFY: u8 = 7;
@@ -73,20 +56,12 @@ const WARP_DO_NOT_QUALIFY: u8 = 7;
 use crate::world::{NATION_ELMORAD, NATION_KARUS};
 
 /// Zone Ardream type for battle zone type comparison.
-///
-/// C++ Reference: `m_byBattleZoneType == ZONE_ARDREAM` (zone ID 72 variant)
 const ZONE_ARDREAM_TYPE: u8 = 72;
 
 /// Validate zone entry permissions for a player.
-///
-/// C++ Reference: `CUser::CanChangeZone()` in ZoneChangeWarpHandler.cpp:821-1002
-///
 /// Checks level requirements, nation restrictions, and GM bypass.
 /// Returns `Ok(())` if allowed, `Err(error_code)` with the WarpListResponse code.
 /// Validate Cinderella War zone entry requirements.
-///
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:25-70`
-///
 /// Returns `None` if entry is allowed, or `Some(message)` with the rejection
 /// reason string to send via `HSACSX_SendMessageBox`.
 fn validate_cinderella_entry(world: &WorldState, sid: SessionId) -> Option<String> {
@@ -158,7 +133,6 @@ fn validate_zone_entry(world: &WorldState, sid: SessionId, dest_zone: u16) -> Re
     };
 
     // GMs bypass all zone restrictions
-    // C++ Reference: ZoneChangeWarpHandler.cpp:824 — if (isGM()) return true;
     // AUTHORITY_GAME_MASTER = 0, AUTHORITY_GM_USER = 2
     if ch.authority == 0 || ch.authority == 2 {
         return Ok(());
@@ -170,12 +144,10 @@ fn validate_zone_entry(world: &WorldState, sid: SessionId, dest_zone: u16) -> Re
     if let Some(zone) = world.get_zone(dest_zone) {
         let (min_level, max_level) = zone.level_range();
 
-        // C++ Reference: ZoneChangeWarpHandler.cpp:832-836
         if min_level > 0 && level < min_level {
             return Err((WARP_MIN_LEVEL, min_level));
         }
 
-        // C++ Reference: ZoneChangeWarpHandler.cpp:838-842
         if max_level > 0 && max_level < 83 && level > max_level {
             return Err((WARP_DO_NOT_QUALIFY, 0));
         }
@@ -184,10 +156,8 @@ fn validate_zone_entry(world: &WorldState, sid: SessionId, dest_zone: u16) -> Re
     let nation = ch.nation;
 
     // Zone-specific nation restrictions
-    // C++ Reference: ZoneChangeWarpHandler.cpp:844-1002
     match dest_zone {
         // Karus homeland — Karus always allowed; El Morad only during invasion
-        // C++ Reference: ZoneChangeWarpHandler.cpp:846-859
         ZONE_KARUS | ZONE_KARUS2 | ZONE_KARUS3 => {
             if nation == NATION_KARUS {
                 // Own nation always allowed
@@ -202,7 +172,6 @@ fn validate_zone_entry(world: &WorldState, sid: SessionId, dest_zone: u16) -> Re
             }
         }
         // El Morad homeland — El Morad always allowed; Karus only during invasion
-        // C++ Reference: ZoneChangeWarpHandler.cpp:861-875
         ZONE_ELMORAD | ZONE_ELMORAD2 | ZONE_ELMORAD3 => {
             if nation == NATION_ELMORAD {
                 // Own nation always allowed
@@ -229,7 +198,6 @@ fn validate_zone_entry(world: &WorldState, sid: SessionId, dest_zone: u16) -> Re
             }
         }
         // Delos — CSW clan/grade check + loyalty requirement
-        // C++ Reference: ZoneChangeWarpHandler.cpp:892-919
         ZONE_DELOS => {
             // During CSW: must be in a real clan (not auto-clan) with grade <= 3
             let csw = world.csw_event().blocking_read();
@@ -252,7 +220,6 @@ fn validate_zone_entry(world: &WorldState, sid: SessionId, dest_zone: u16) -> Re
             }
 
             // Always require loyalty > 0 for Delos
-            // C++ Reference: ZoneChangeWarpHandler.cpp:912-916
             if ch.loyalty == 0 {
                 return Err((WARP_NEED_NP, 0));
             }
@@ -260,7 +227,6 @@ fn validate_zone_entry(world: &WorldState, sid: SessionId, dest_zone: u16) -> Re
         // Bifrost — always allowed
         ZONE_BIFROST => {}
         // Ardream — blocked during any active war, requires loyalty
-        // C++ Reference: ZoneChangeWarpHandler.cpp:923-935
         ZONE_ARDREAM => {
             if world.is_war_open() {
                 return Err((WARP_NOT_DURING_WAR, 0));
@@ -270,7 +236,6 @@ fn validate_zone_entry(world: &WorldState, sid: SessionId, dest_zone: u16) -> Re
             }
         }
         // Ronark Land / Ronark Land Base — blocked during war UNLESS battle zone type is Ardream
-        // C++ Reference: ZoneChangeWarpHandler.cpp:937-964
         ZONE_RONARK_LAND | ZONE_RONARK_LAND_BASE => {
             let battle_state = world.get_battle_state();
             if battle_state.is_war_open() && battle_state.battle_zone_type != ZONE_ARDREAM_TYPE {
@@ -281,14 +246,12 @@ fn validate_zone_entry(world: &WorldState, sid: SessionId, dest_zone: u16) -> Re
             }
         }
         // SPBATTLE zones (105-115) — require loyalty
-        // C++ Reference: ZoneChangeWarpHandler.cpp:966-984
         z if (ZONE_SPBATTLE_MIN..=ZONE_SPBATTLE_MAX).contains(&z) => {
             if ch.loyalty == 0 {
                 return Err((WARP_NEED_NP, 0));
             }
         }
         // Default: war zones may only be entered if that war zone is active
-        // C++ Reference: ZoneChangeWarpHandler.cpp:985-999
         _ => {
             if let Some(zone) = world.get_zone(dest_zone) {
                 if zone.is_war_zone() {
@@ -316,8 +279,6 @@ fn validate_zone_entry(world: &WorldState, sid: SessionId, dest_zone: u16) -> Re
 }
 
 /// Send a zone change rejection packet to the client.
-///
-/// C++ Reference: ZoneChangeWarpHandler.cpp:12-23
 async fn send_warp_error(
     session: &mut ClientSession,
     error: u8,
@@ -333,7 +294,6 @@ async fn send_warp_error(
 }
 
 /// Handle WIZ_ZONE_CHANGE packets from the client.
-///
 /// The client sends this after receiving a teleport command:
 /// - Sub=1 (Loading): client is loading the new zone
 /// - Sub=2 (Loaded): client finished loading
@@ -360,10 +320,7 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Trigger a zone change from a warp gate event.
-///
 /// Called from `move_handler` when the player steps on a ZoneChange event tile.
-///
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:3-522` (CUser::ZoneChange)
 pub async fn trigger_zone_change(
     session: &mut ClientSession,
     dest_zone: u16,
@@ -378,7 +335,6 @@ pub async fn trigger_zone_change(
         return Ok(());
     }
 
-    // C++ Reference: Unit.h — m_bCanTeleport blocks warp gate teleportation
     if !world.can_teleport(sid) {
         return Ok(());
     }
@@ -395,13 +351,11 @@ pub async fn trigger_zone_change(
     };
 
     // Same zone → use WIZ_WARP (simpler flow)
-    // C++ Reference: ZoneChangeWarpHandler.cpp:200-206
     if pos.zone_id == dest_zone {
         return same_zone_warp(session, dest_x, dest_z).await;
     }
 
     // Verify destination zone exists and is active
-    // C++ Reference: ZoneChangeWarpHandler.cpp:5-6 — pMap->m_Status must be 1
     match world.get_zone(dest_zone) {
         Some(zone) => {
             let zone_status = zone.zone_info.as_ref().map(|zi| zi.status).unwrap_or(1);
@@ -428,7 +382,6 @@ pub async fn trigger_zone_change(
     }
 
     // Resolve (0,0) coordinates to zone start_position
-    // C++ Reference: ZoneChangeWarpHandler.cpp:182-189 — if (x==0 && z==0) GetStartPosition()
     let (dest_x, dest_z) = if dest_x == 0.0 && dest_z == 0.0 {
         resolve_zero_coords(dest_zone, sid, &world)
     } else {
@@ -436,7 +389,6 @@ pub async fn trigger_zone_change(
     };
 
     // Validate destination position is within zone map bounds
-    // C++ Reference: SMDFile.cpp:196 — IsValidPosition(x, z)
     if let Some(zone) = world.get_zone(dest_zone) {
         if !zone.is_valid_position(dest_x, dest_z) {
             tracing::warn!(
@@ -452,7 +404,6 @@ pub async fn trigger_zone_change(
     }
 
     // Cinderella War zone entry validation
-    // C++ Reference: ZoneChangeWarpHandler.cpp:25-70
     {
         let cind_zone = world.cinderella_zone_id();
         if super::cinderella::is_cinderella_zone(dest_zone, cind_zone) {
@@ -471,10 +422,8 @@ pub async fn trigger_zone_change(
     }
 
     // Validate zone entry permissions (level, nation, etc.)
-    // C++ Reference: ZoneChangeWarpHandler.cpp:12 — if (check && !CanChangeZone(...))
     if let Err((error_code, min_level)) = validate_zone_entry(&world, sid, dest_zone) {
         world.set_zone_changing(sid, false);
-        // C++ Reference: ZoneChangeWarpHandler.cpp:20-21 — clear on warp failure.
         world.set_check_warp_zone_change(sid, false);
         send_warp_error(session, error_code, min_level).await?;
         return Ok(());
@@ -483,15 +432,13 @@ pub async fn trigger_zone_change(
     let nation = world.get_character_info(sid).map(|c| c.nation).unwrap_or(0);
 
     // 0b. BDW cleanup when warping out of zone 84
-    // C++ Reference: ZoneChangeWarpHandler.cpp:429-436
     if pos.zone_id == crate::systems::bdw::ZONE_BDW && dest_zone != crate::systems::bdw::ZONE_BDW {
-        // Remove speed debuff first (C++ ZoneChangeWarpHandler.cpp:432-434)
+        // Remove speed debuff first
         world.remove_buff(sid, crate::systems::bdw::BUFF_TYPE_FRAGMENT_OF_MANES);
         super::logout::bdw_user_logout(&world, sid);
     }
 
     // 0c. Monster Stone cleanup when warping out of a stone zone (81-83)
-    // C++ Reference: ZoneChangeWarpHandler.cpp:307-311 — TempleMonsterStoneItemExitRoom()
     // When ANY player exits, the entire room is disbanded.
     {
         use crate::systems::monster_stone;
@@ -508,7 +455,6 @@ pub async fn trigger_zone_change(
     }
 
     // 0c1b. Dungeon Defence cleanup when warping out of zone 89
-    // C++ Reference: ZoneChangeWarpHandler.cpp:364-372
     //   case ZONE_DUNGEON_DEFENCE:
     //     DungeonDefenceRobItemSkills();  // remove all Monster Coins
     //     SetMaxHp(1);                   // force HP recalc (normal formula)
@@ -517,11 +463,9 @@ pub async fn trigger_zone_change(
         use crate::handler::dungeon_defence;
         if pos.zone_id == ZONE_DUNGEON_DEFENCE && dest_zone != ZONE_DUNGEON_DEFENCE {
             // Remove all Monster Coins from inventory
-            // C++ Reference: DungeonDefenceRobItemSkills() lines 233-238
             world.rob_all_of_item(sid, dungeon_defence::MONSTER_COIN_ITEM);
 
             // Force HP recalculation with normal formula (iFlag=1 bypasses zone override)
-            // C++ Reference: SetMaxHp(1) — skip zone-based HP cap, restore normal HP
             world.recalculate_max_hp_mp(sid);
 
             // Clear event_room
@@ -532,7 +476,6 @@ pub async fn trigger_zone_change(
     }
 
     // 0c1c. Chaos Dungeon cleanup when warping out of zone 85
-    // C++ Reference: ZoneChangeWarpHandler.cpp:329-340
     //   case ZONE_CHAOS_DUNGEON:
     //     if (sNewZone != ZONE_CHAOS_DUNGEON && isEventUser())
     //       SetMaxHp(1);  RobChaosSkillItems();  m_bEventRoom = 0;
@@ -541,17 +484,14 @@ pub async fn trigger_zone_change(
         let is_event_user = world.with_session(sid, |h| h.joined_event).unwrap_or(false);
         if pos.zone_id == ZONE_CHAOS_DUNGEON && dest_zone != ZONE_CHAOS_DUNGEON && is_event_user {
             // Remove Chaos Dungeon skill items from inventory
-            // C++ Reference: User.cpp:4576-4584 — RobChaosSkillItems()
             for &item_id in &[ITEM_LIGHT_PIT, ITEM_DRAIN_RESTORE, ITEM_KILLING_BLADE] {
                 world.rob_all_of_item(sid, item_id);
             }
 
             // Remove player from Chaos Expansion ranking
-            // C++ Reference: ZoneChangeWarpHandler.cpp:441
             world.chaos_remove_player(sid);
 
             // Force HP recalculation with normal formula
-            // C++ Reference: SetMaxHp(1) — bypass zone HP cap, restore normal HP
             world.recalculate_max_hp_mp(sid);
 
             // Clear event_room
@@ -562,7 +502,6 @@ pub async fn trigger_zone_change(
     }
 
     // 0c2. Draki Tower cleanup when warping out of zone 95
-    // C++ Reference: DrakiTowerKickTimer — when player leaves zone 95, reset room
     {
         use crate::handler::draki_tower;
         if pos.zone_id == draki_tower::ZONE_DRAKI_TOWER
@@ -586,7 +525,6 @@ pub async fn trigger_zone_change(
     }
 
     // 0d-cind. Cinderella War zone exit cleanup
-    // C++ Reference: CindirellaWar.cpp:576-682 — CindirellaLogOut on zone change
     {
         let cind_zone = world.cinderella_zone_id();
         if pos.zone_id == cind_zone && dest_zone != cind_zone {
@@ -595,7 +533,6 @@ pub async fn trigger_zone_change(
     }
 
     // 0d. Generic temple event zone exit cleanup — ResetTempleEventData equivalent
-    // C++ Reference: ZoneChangeWarpHandler.cpp:423-445
     //   if (isInTempleEventZone() && isEventUser() && !isInTempleEventZone(newZone))
     //       ResetTempleEventData(); // clears m_bEventRoom, m_iEventJoinOrder, etc.
     {
@@ -626,7 +563,6 @@ pub async fn trigger_zone_change(
     );
 
     // 1+. BottomUserLogOut — zone-wide logout notification for bottom user list
-    // C++ Reference: ZoneChangeWarpHandler.cpp:421 — BottomUserLogOut()
     // Sends WIZ_USER_INFORMATIN(sub=4/RegionDelete) to all players in the old zone.
     if let Some(ch) = world.get_character_info(sid) {
         let region_del_pkt = super::user_info::build_region_delete_packet(&ch.name);
@@ -634,7 +570,6 @@ pub async fn trigger_zone_change(
     }
 
     // 1+. Zindan War logout when leaving SPBATTLE zone
-    // C++ Reference: ZoneChangeWarpHandler.cpp:279-280
     let is_old_spbattle = (ZONE_SPBATTLE_MIN..=ZONE_SPBATTLE_MAX).contains(&pos.zone_id);
     let is_new_spbattle = (ZONE_SPBATTLE_MIN..=ZONE_SPBATTLE_MAX).contains(&dest_zone);
     if is_old_spbattle && !is_new_spbattle && world.is_zindan_event_opened() {
@@ -643,12 +578,10 @@ pub async fn trigger_zone_change(
     }
 
     // 1a. Reset anger gauge when leaving the zone.
-    // C++ Reference: ZoneChangeWarpHandler.cpp:291-294
     //   if (GetAngerGauge() > 0) UpdateAngerGauge(0);
     super::arena::reset_anger_gauge(&world, sid);
 
     // 1b. Remove rival on cross-zone change
-    // C++ Reference: ZoneChangeWarpHandler.cpp:301-302
     //   if (hasRival()) RemoveRival();
     {
         let has_rival = world
@@ -661,7 +594,6 @@ pub async fn trigger_zone_change(
     }
 
     // 1b. Dismiss active pet on cross-zone change
-    // C++ Reference: ZoneChangeWarpHandler.cpp:304 — PetOnDeath()
     {
         let mut pet_index: Option<u32> = None;
         world.update_session(sid, |h| {
@@ -681,8 +613,6 @@ pub async fn trigger_zone_change(
     }
 
     // 1c. ResetWindows — cancel trade, merchant, mining, fishing, challenge
-    // C++ Reference: ZoneChangeWarpHandler.cpp:305 — ResetWindows()
-    // C++ Reference: User.cpp:3948-3978 — ResetWindows() implementation
     {
         // Cancel active trade
         if world.is_trading(sid) {
@@ -697,7 +627,6 @@ pub async fn trigger_zone_change(
         }
 
         // Cancel active challenge (duel request)
-        // C++ Reference: User.cpp:3953-3957 — HandleChallengeCancelled / HandleChallengeRejected
         {
             let (requesting, requested, challenge_user) = world.get_challenge_state(sid);
             if requesting > 0 || requested > 0 {
@@ -723,23 +652,19 @@ pub async fn trigger_zone_change(
         }
 
         // Close merchant stall if we're a vendor
-        // C++ Reference: User.cpp:3960-3965 — MerchantClose / BuyingMerchantClose
         if world.is_merchanting(sid) {
             world.close_merchant(sid);
         }
 
         // Remove from merchant we're browsing
-        // C++ Reference: User.cpp:3968-3969 — CancelMerchant
         world.remove_from_merchant_lookers(sid);
 
         // Stop mining / fishing
-        // C++ Reference: User.cpp:3971-3975 — HandleMiningStop / HandleFishingStop
         mining::stop_mining_internal(&world, sid);
         mining::stop_fishing_internal(&world, sid);
     }
 
     // 1d. Party cleanup — promote leader if needed, then remove from party
-    // C++ Reference: ZoneChangeWarpHandler.cpp:313-318
     //   if (isInParty() && isPartyLeader()) PartyLeaderPromote(pParty->uid[1]);
     //   PartyNemberRemove(GetSocketID());
     world.cleanup_party_on_disconnect(sid);
@@ -768,7 +693,6 @@ pub async fn trigger_zone_change(
     }
 
     // 5a. Cancel monster transformation if entering a restricted zone
-    // C++ Reference: ZoneChangeWarpHandler.cpp:247-274
     // Transformations are allowed in homeland, Eslant, and Moradon zones.
     // If entering any other zone while monster-transformed, cancel the transformation.
     let transform_type = world
@@ -787,7 +711,6 @@ pub async fn trigger_zone_change(
     }
 
     // 5b. Pre-transition buff cleanup (cross-zone only)
-    // C++ Reference: ZoneChangeWarpHandler.cpp:480-491
     // Clear DOTs, buffs, stealth, and recalculate stats
     // C++ line 25,488: Cinderella zone entry removes saved magic (bRemoveSavedMagic=true)
     let cind_zone = world.cinderella_zone_id();
@@ -797,7 +720,6 @@ pub async fn trigger_zone_change(
     stealth::remove_stealth(&world, sid);
     world.set_user_ability(sid);
 
-    // C++ Reference: ZoneChangeWarpHandler.cpp:482-483
     // Reset death tracking fields on zone change
     world.update_session(sid, |h| {
         h.who_killed_me = -1;
@@ -805,12 +727,10 @@ pub async fn trigger_zone_change(
     });
 
     // 6. Send zone ability for the new zone
-    // C++ Reference: ZoneChangeWarpHandler.cpp:287 — SetZoneAbilityChange(sNewZone)
     super::zone_ability::send_zone_ability(session, dest_zone).await?;
     super::zone_ability::send_zone_flag(session, dest_zone).await?;
 
     // 6b. Draki Tower: dead player regene position update before zone change
-    // C++ Reference: ZoneChangeWarpHandler.cpp:452-456
     if pos.zone_id == crate::handler::draki_tower::ZONE_DRAKI_TOWER && world.is_player_dead(sid) {
         let mut regene_pkt = Packet::new(Opcode::WizRegene as u8);
         regene_pkt.write_u16((dest_x * 10.0) as u16);
@@ -820,7 +740,6 @@ pub async fn trigger_zone_change(
     }
 
     // 7. Send WIZ_ZONE_CHANGE(Teleport=3) to client
-    // C++ Reference: ZoneChangeWarpHandler.cpp:467-472
     let mut pkt = Packet::new(Opcode::WizZoneChange as u8);
     pkt.write_u8(ZONE_CHANGE_TELEPORT);
     pkt.write_u16(dest_zone);
@@ -833,7 +752,6 @@ pub async fn trigger_zone_change(
     session.send_packet(&pkt).await?;
 
     // 7b. Send GOLDSHELL packet during active nation war
-    // C++ Reference: User.cpp:1936-1942 — sent right after ZoneChange teleport
     // Only during NATION_BATTLE and when battle zone is NOT ZONE_BATTLE3
     {
         let battle_state = world.get_battle_state();
@@ -867,16 +785,12 @@ pub async fn trigger_zone_change(
     save_position_async(session, dest_zone, dest_x, dest_z);
 
     // 9. Save active buffs to DB for persistence across zone change
-    // C++ Reference: DatabaseThread.cpp:1561 — g_DBAgent.UpdateSavedMagic(this)
     session.save_saved_magic_async();
 
     // 10. Send active event time (for players entering event zones)
-    // C++ Reference: ZoneChangeWarpHandler.cpp:511
     crate::systems::event_room::send_active_event_time(&world, sid);
 
     // 11. Send event remaining time when entering Bifrost, Ronark Land, or Battle zones
-    // C++ Reference: User.cpp:1972-1976 — SendEventRemainingTime()
-    // C++ Reference: User.cpp:1981 — BeefEventGetTime()
     {
         use crate::world::{ZONE_BATTLE4, ZONE_BATTLE5};
 
@@ -897,7 +811,6 @@ pub async fn trigger_zone_change(
         }
 
         // BeefEventGetTime: send actual Bifrost remaining time
-        // C++ Reference: User.cpp:1981
         if dest_zone == ZONE_BIFROST
             || pos.zone_id == ZONE_BIFROST
             || dest_zone == ZONE_RONARK_LAND
@@ -912,7 +825,6 @@ pub async fn trigger_zone_change(
     }
 
     // 12. Send lottery event state on zone change
-    // C++ Reference: User.cpp:1978-1979 — LotteryGameStartSend()
     {
         let lottery_proc = world.lottery_process().clone();
         let proc_guard = lottery_proc.read();
@@ -953,8 +865,6 @@ pub async fn trigger_zone_change(
 }
 
 /// Same-zone warp — teleport within the current zone.
-///
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:608-619` (CUser::Warp)
 pub async fn same_zone_warp(
     session: &mut ClientSession,
     dest_x: f32,
@@ -970,7 +880,6 @@ pub async fn same_zone_warp(
     let zone_id = pos.zone_id;
 
     // Validate destination position is within zone map bounds
-    // C++ Reference: SMDFile.cpp:196 — IsValidPosition(x, z)
     if let Some(zone) = world.get_zone(zone_id) {
         if !zone.is_valid_position(dest_x, dest_z) {
             tracing::warn!(
@@ -1013,7 +922,6 @@ pub async fn same_zone_warp(
     }
 
     // 5. Send WIZ_WARP to client
-    // C++ Reference: ZoneChangeWarpHandler.cpp:617-619
     let mut pkt = Packet::new(Opcode::WizWarp as u8);
     pkt.write_u16((dest_x * 10.0) as u16);
     pkt.write_u16((dest_z * 10.0) as u16);
@@ -1027,7 +935,6 @@ pub async fn same_zone_warp(
     region::send_region_npc_info_for_me(session).await?;
 
     // 7. Broadcast INOUT_WARP to new region
-    // C++ Reference: ZoneChangeWarpHandler.cpp:631 — UserInOut(INOUT_WARP)
     region::broadcast_user_in_with_type(session, region::INOUT_WARP).await?;
 
     // 8. Clear zone_changing flag
@@ -1047,10 +954,7 @@ pub async fn same_zone_warp(
 }
 
 /// Handle ZoneChangeLoading (sub=1) — client is loading the new zone.
-///
 /// Server responds by sending NPC/user region data, then ZoneChangeLoaded ACK.
-///
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:657-667`
 async fn handle_loading(session: &mut ClientSession) -> anyhow::Result<()> {
     // Send NPC region list — client uses cached templates for rendering
     // C++ ZoneChangeWarpHandler.cpp:662 — only RegionNpcInfoForMe(), no NPC_INOUT
@@ -1074,23 +978,18 @@ async fn handle_loading(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle ZoneChangeLoaded (sub=2) — client finished loading the new zone.
-///
 /// Server broadcasts INOUT_RESPAWN so other players in the new zone see us.
 /// For cross-zone changes: activates blink, clears+recasts saved magic,
 /// sends Delos siege packets if applicable.
-///
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:669-735`
 async fn handle_loaded(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
 
-    // C++ Reference: ZoneChangeWarpHandler.cpp:671
     if !world.is_zone_changing(sid) {
         return Ok(());
     }
 
     // Broadcast INOUT_RESPAWN to new zone (now others see us)
-    // C++ Reference: ZoneChangeWarpHandler.cpp:674
     region::broadcast_user_in(session).await?;
 
     // All zone changes going through handle_loaded are cross-zone
@@ -1098,7 +997,6 @@ async fn handle_loaded(session: &mut ClientSession) -> anyhow::Result<()> {
     let pos = world.get_position(sid);
     let zone_id = pos.as_ref().map(|p| p.zone_id).unwrap_or(0);
 
-    // C++ Reference: ZoneChangeWarpHandler.cpp:694 — `if (isDead()) SendDeathAnimation()`
     // If the player is dead when arriving in the new zone, broadcast death animation
     // so nearby players see them as a corpse.
     if world.is_player_dead(sid) {
@@ -1123,7 +1021,6 @@ async fn handle_loaded(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // Activate blink (respawn invulnerability) for cross-zone changes
-    // C++ Reference: ZoneChangeWarpHandler.cpp:679-684
     //   if (zone == CHAOS/KNIGHT_ROYALE/DUNGEON_DEFENCE) BlinkStart(45); // 10+45=55
     //   else if (!isNPCTransformation()) BlinkStart(); // 10
     let blink_duration = if matches!(
@@ -1137,7 +1034,6 @@ async fn handle_loaded(session: &mut ClientSession) -> anyhow::Result<()> {
     regene::activate_blink_with_duration(session, zone_id, blink_duration)?;
 
     // Clear all buffs (without removing saved magic) then recast saved magic
-    // C++ Reference: ZoneChangeWarpHandler.cpp:688-692
     // Skip for Chaos Dungeon AND Cinderella War zones
     // C++ line 688: `if (GetZoneID() != ZONE_CHAOS_DUNGEON && !IsCindIn())`
     let cind_zone = world.cinderella_zone_id();
@@ -1145,12 +1041,10 @@ async fn handle_loaded(session: &mut ClientSession) -> anyhow::Result<()> {
     if zone_id != ZONE_CHAOS_DUNGEON && !is_cind_in {
         world.clear_all_buffs(sid, false);
         // Recast saved magic — restore persistent buffs after zone change
-        // C++ Reference: ZoneChangeWarpHandler.cpp:691 — RecastSavedMagic()
         world.recast_saved_magic(sid);
     }
 
     // Zone-based HP override for Chaos Dungeon (86) and Dungeon Defence (89)
-    // C++ Reference: UserHealtMagicSpSystem.cpp:241-243
     //   else if (GetZoneID() == ZONE_CHAOS_DUNGEON && iFlag == 0
     //         || (GetZoneID() == ZONE_DUNGEON_DEFENCE && iFlag == 0))
     //       m_MaxHp = 10000 / 10;   // = 1000
@@ -1164,13 +1058,11 @@ async fn handle_loaded(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // DD zone entry: remove any leftover Monster Coins from previous runs
-    // C++ Reference: DungeonDefenceRobItemSkills() lines 233-238
     if zone_id == ZONE_DUNGEON_DEFENCE {
         world.rob_all_of_item(sid, crate::handler::dungeon_defence::MONSTER_COIN_ITEM);
     }
 
     // Send Delos siege packets if entering Delos during active siege
-    // C++ Reference: ZoneChangeWarpHandler.cpp:697-709 + thyke_csw.cpp:214-241
     if zone_id == ZONE_DELOS {
         let csw_state = world.csw_event().read().await;
         if csw_state.is_active() && csw_state.csw_time > 0 {
@@ -1189,7 +1081,6 @@ async fn handle_loaded(session: &mut ClientSession) -> anyhow::Result<()> {
             send_delos_siege_packets(session, remaining).await?;
 
             // CSW ext_hook timer packet
-            // C++ Reference: thyke_csw.cpp:214-235
             let owner_name = {
                 let mk = world.get_csw_master_knights();
                 if mk != 0 {
@@ -1212,7 +1103,6 @@ async fn handle_loaded(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // ── Zindan War zone entry ─────────────────────────────────────────
-    // C++ Reference: GameServerDlg.cpp:2567 — ZindanWarSendScore()
     if zone_id == ZONE_SPBATTLE1 && world.is_zindan_event_opened() {
         let pkt = {
             let zws = world.zindan_war_state.read();
@@ -1233,7 +1123,6 @@ async fn handle_loaded(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // ── Tournament zone entry ────────────────────────────────────────
-    // C++ Reference: ZoneChangeWarpHandler.cpp:724 — TournamentSendTimer()
     // Send scoreboard, timer, and clan list when entering a tournament zone.
     // Also validates that the player's clan is one of the two competing clans.
     if super::tournament::is_tournament_zone(zone_id) {
@@ -1248,13 +1137,10 @@ async fn handle_loaded(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // Reset zone online reward timers for the new zone
-    // C++ Reference: ZoneChangeWarpHandler.cpp — ZoneOnlineRewardChange()
     crate::systems::zone_rewards::zone_online_reward_change(&world, sid);
 
     // Clear zone_changing flag
-    // C++ Reference: ZoneChangeWarpHandler.cpp:732-734
     world.set_zone_changing(sid, false);
-    // C++ Reference: ZoneChangeWarpHandler.cpp:734 — clear warp-loop flag on completion.
     world.set_check_warp_zone_change(sid, false);
 
     tracing::info!(
@@ -1267,16 +1153,12 @@ async fn handle_loaded(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Send Delos castle siege packets on zone entry.
-///
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:697-709`
-///
 /// Sends WIZ_SELECT_MSG and WIZ_BIFROST packets with the siege timer.
 async fn send_delos_siege_packets(
     session: &mut ClientSession,
     remaining_secs: u32,
 ) -> anyhow::Result<()> {
     // WIZ_SELECT_MSG packet
-    // C++ Reference: ZoneChangeWarpHandler.cpp:699-704
     let mut sel_pkt = Packet::new(Opcode::WizSelectMsg as u8);
     sel_pkt.write_u32(0);
     sel_pkt.write_u8(7);
@@ -1287,7 +1169,6 @@ async fn send_delos_siege_packets(
     session.send_packet(&sel_pkt).await?;
 
     // WIZ_BIFROST packet
-    // C++ Reference: ZoneChangeWarpHandler.cpp:707-709
     let mut bif_pkt = Packet::new(Opcode::WizBifrost as u8);
     bif_pkt.write_u8(5);
     bif_pkt.write_u16(remaining_secs as u16);
@@ -1297,7 +1178,6 @@ async fn send_delos_siege_packets(
 }
 
 /// Save position to DB asynchronously (fire-and-forget).
-///
 /// DB stores positions as i32 (world coords × 100).
 pub(crate) fn save_position_async(session: &ClientSession, zone_id: u16, x: f32, z: f32) {
     let pool = session.pool().clone();
@@ -1323,10 +1203,7 @@ pub(crate) fn save_position_async(session: &ClientSession, zone_id: u16, x: f32,
 }
 
 /// Check if a zone allows monster transformations (not cancelled on entry).
-///
 /// Resolve (0.0, 0.0) coordinates to zone start_position with nation-specific coords.
-///
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:182-189`
 /// When a zone change is triggered with (0,0) coordinates (e.g., event kick-out),
 /// the server looks up the spawn position from the start_position table using
 /// nation-specific columns. Falls back to zone spawn_position if no DB entry.
@@ -1385,7 +1262,6 @@ fn resolve_zero_coords(
     (267.0, 303.0)
 }
 
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:247-263`
 /// Monster transformations are preserved in homeland, Eslant, and Moradon zones.
 /// Entering any other zone cancels monster transformations.
 fn is_transform_allowed_zone(zone_id: u16) -> bool {
@@ -1412,10 +1288,7 @@ fn is_transform_allowed_zone(zone_id: u16) -> bool {
 }
 
 /// Server-initiated zone change (teleport a user without their ClientSession).
-///
-/// C++ Reference: `CUser::ZoneChange()` — called from timer ticks and room resets
 /// to force-teleport users who are in event instances.
-///
 /// This is a lightweight version of `trigger_zone_change` that works with
 /// just a session ID + WorldState (no ClientSession needed).
 pub(crate) fn server_teleport_to_zone(
@@ -1436,7 +1309,6 @@ pub(crate) fn server_teleport_to_zone(
     }
 
     // Resolve (0,0) coordinates to zone start_position
-    // C++ Reference: ZoneChangeWarpHandler.cpp:182-189
     let (dest_x, dest_z) = if dest_x == 0.0 && dest_z == 0.0 {
         resolve_zero_coords(dest_zone, sid, world)
     } else {
@@ -1467,7 +1339,6 @@ pub(crate) fn server_teleport_to_zone(
     );
 
     // 1+. BottomUserLogOut — zone-wide logout notification for bottom user list
-    // C++ Reference: ZoneChangeWarpHandler.cpp:421 — BottomUserLogOut()
     if let Some(ch) = world.get_character_info(sid) {
         let region_del_pkt = super::user_info::build_region_delete_packet(&ch.name);
         world.broadcast_to_zone(pos.zone_id, Arc::new(region_del_pkt), Some(sid));
@@ -1501,7 +1372,6 @@ pub(crate) fn server_teleport_to_zone(
     world.send_to_session_owned(sid, pkt);
 
     // 5b. Send GOLDSHELL during active nation war
-    // C++ Reference: User.cpp:1936-1942
     {
         let battle_state = world.get_battle_state();
         if battle_state.battle_open == crate::systems::war::NATION_BATTLE
@@ -1517,15 +1387,9 @@ pub(crate) fn server_teleport_to_zone(
 }
 
 /// Monster Stone room exit cleanup.
-///
-/// C++ Reference: `CUser::TempleMonsterStoneItemExitRoom()` in `MonsterStoneSystem.cpp:470-503`
-///
 /// When ANY player exits a Monster Stone zone, the ENTIRE room is disbanded:
 /// all users are cleared, their `event_room` is reset to 0, event NPCs
 /// are despawned, and the room is returned to the pool.
-///
-/// C++ Reference: `TempleMonsterStoneItemExitRoom()` in
-/// `MonsterStoneSystem.cpp:469-503`
 pub(crate) fn monster_stone_exit_room(
     world: &std::sync::Arc<crate::world::WorldState>,
     exiting_sid: crate::zone::SessionId,
@@ -1542,7 +1406,6 @@ pub(crate) fn monster_stone_exit_room(
         }
         None => {
             // Not in any room — just clear the event_room field + monster stone status
-            // C++ Reference: MonsterStoneSystem.cpp:479 — m_sMonsterStoneStatus = false
             world.update_session(exiting_sid, |h| {
                 h.event_room = 0;
                 h.monster_stone_status = false;
@@ -1555,14 +1418,12 @@ pub(crate) fn monster_stone_exit_room(
     let users = world.monster_stone_write().reset_room(room_id);
 
     // Teleport remaining users to Moradon, clear event_room + monster stone status
-    // C++ Reference: MonsterStoneSystem.cpp:489 — m_sMonsterStoneStatus = false
     for &uid in &users {
         world.update_session(uid, |h| {
             h.event_room = 0;
             h.monster_stone_status = false;
         });
         // Don't teleport the exiting user (they triggered the exit via their own zone change)
-        // C++ Reference: MonsterStoneSystem.cpp:493-495 — isInGame() && isInMonsterStoneZone()
         if uid != exiting_sid {
             use crate::systems::monster_stone;
             let in_stone_zone = world
@@ -1576,7 +1437,6 @@ pub(crate) fn monster_stone_exit_room(
     }
 
     // Despawn all event NPCs belonging to this room
-    // C++ Reference: TempleMonsterStoneResetNpcs(roomid, zoneid) line 501
     if zone_id > 0 {
         let event_room_id = room_id + 1; // 1-based
         world.despawn_room_npcs(zone_id as u16, event_room_id);
@@ -1656,7 +1516,6 @@ mod tests {
 
     #[test]
     fn test_delos_siege_select_msg_packet_format() {
-        // C++ Reference: ZoneChangeWarpHandler.cpp:699-704
         // WIZ_SELECT_MSG packet for Delos siege timer
         let remaining_secs: u32 = 600; // 10 minutes
 
@@ -1684,7 +1543,6 @@ mod tests {
 
     #[test]
     fn test_delos_siege_bifrost_packet_format() {
-        // C++ Reference: ZoneChangeWarpHandler.cpp:707-709
         // WIZ_BIFROST packet with siege timer
         let remaining_secs: u32 = 600;
 
@@ -1727,7 +1585,6 @@ mod tests {
 
     #[test]
     fn test_death_animation_packet_format() {
-        // C++ Reference: Unit.cpp:2121-2126 — SendDeathAnimation
         // Packet: WIZ_DEAD [u32 dead_unit_id]
         let sid: u16 = 42;
         let mut pkt = Packet::new(Opcode::WizDead as u8);
@@ -1753,7 +1610,6 @@ mod tests {
 
     #[test]
     fn test_blink_time_special_zone() {
-        // C++ Reference: ZoneChangeWarpHandler.cpp:682 — BlinkStart(45)
         // BLINK_TIME(10) + 45 = 55
         assert_eq!(super::BLINK_TIME_SPECIAL_ZONE, 55);
     }
@@ -2054,7 +1910,6 @@ mod tests {
         assert_eq!(world.get_exchange_user(sid1), Some(sid2));
 
         // Simulate zone change: cancel trade for both parties
-        // C++ Reference: ZoneChangeWarpHandler.cpp:478 — ExchangeCancel
         world.update_session(sid1, |h| {
             h.trade_state = 0; // TRADE_STATE_NONE
             h.exchange_user = None;
@@ -2640,7 +2495,6 @@ mod tests {
     // ── Sprint 265: Delos CSW validation + warp error codes ──────────
 
     /// Warp error code constants should match C++ WarpListResponse enum.
-    /// C++ Reference: User.h:88-97
     #[test]
     fn test_warp_error_code_constants() {
         assert_eq!(super::WARP_ERROR, 0);
@@ -2651,7 +2505,6 @@ mod tests {
     }
 
     /// Delos CSW validation: player with zero loyalty should be rejected.
-    /// C++ Reference: ZoneChangeWarpHandler.cpp:912-916
     #[test]
     fn test_delos_zero_loyalty_rejected() {
         let world = make_validation_world();
@@ -2669,7 +2522,6 @@ mod tests {
     }
 
     /// Delos CSW validation: player with loyalty > 0 and no active CSW should pass.
-    /// C++ Reference: ZoneChangeWarpHandler.cpp:894 — CSW not active skips clan check
     #[test]
     fn test_delos_with_loyalty_no_csw_allowed() {
         let world = make_validation_world();
@@ -2680,7 +2532,6 @@ mod tests {
     }
 
     /// GMs bypass all zone restrictions including Delos.
-    /// C++ Reference: ZoneChangeWarpHandler.cpp:824
     #[test]
     fn test_delos_gm_bypass() {
         let world = make_validation_world();
@@ -2974,7 +2825,6 @@ mod tests {
     // ── Sprint 280: Cinderella zone buff clearing ───────────────────────
 
     /// Test Cinderella zone detection for buff clearing.
-    /// C++ Reference: ZoneChangeWarpHandler.cpp:25,488
     #[test]
     fn test_cinderella_zone_detection() {
         use crate::handler::cinderella::is_cinderella_zone;
@@ -2991,7 +2841,6 @@ mod tests {
     }
 
     /// Test post-load recast should skip Chaos Dungeon AND Cinderella zones.
-    /// C++ Reference: ZoneChangeWarpHandler.cpp:688
     #[test]
     fn test_recast_skip_chaos_and_cinderella() {
         // ZONE_CHAOS_DUNGEON = 85, Cinderella zones are dynamic
@@ -3019,7 +2868,6 @@ mod tests {
 
     /// Cross-zone change broadcasts RegionDelete (BottomUserLogOut) to old zone.
     ///
-    /// C++ Reference: ZoneChangeWarpHandler.cpp:421 — BottomUserLogOut()
     #[test]
     fn test_cross_zone_change_sends_region_delete() {
         use crate::world::{CharacterInfo, Position, WorldState};

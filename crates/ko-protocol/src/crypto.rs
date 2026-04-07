@@ -1,18 +1,13 @@
 //! Knight Online encryption/decryption — byte-for-byte port of JvCryption.cpp.
-//!
-//! C++ Reference: `KOOriginalGameServer/shared/JvCryption.cpp`
-//!
 //! The algorithm is a symmetric XOR stream cipher:
 //! - 3-layer XOR per byte: rotation key, session key (8-byte cycle), length key
 //! - Rotation key evolves via `rkey *= 2171` (32-bit wrapping)
 //! - CRC32 appended for integrity verification
-//!
 //! Encryption == Decryption (XOR is self-inverse).
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Hardcoded private key — must match the client.
-/// C++ Reference: `#define g_private_key 0x1207500120128966`
 const PRIVATE_KEY: u64 = 0x1207_5001_2012_8966;
 
 /// Initial rotation key constant.
@@ -50,7 +45,6 @@ const CRC32_TABLE: [u32; 256] = {
 };
 
 /// Knight Online session encryption state.
-///
 /// Each TCP connection gets its own `JvCryption` instance.
 /// After key exchange, all packets are encrypted/decrypted with this.
 pub struct JvCryption {
@@ -109,7 +103,6 @@ impl JvCryption {
     }
 
     /// Encrypt data in-place.
-    /// C++ Reference: `CJvCryption::JvEncryptionFast`
     ///
     /// Algorithm per byte `i`:
     /// ```text
@@ -143,7 +136,6 @@ impl JvCryption {
     /// Decrypt data and verify CRC32 checksum.
     /// Returns the payload length (without CRC) on success, or `None` if CRC fails.
     ///
-    /// C++ Reference: `CJvCryption::JvDecryptionWithCRC32`
     pub fn decrypt_with_crc32(&self, data: &mut [u8]) -> Option<usize> {
         if data.len() < 4 {
             return None;
@@ -191,8 +183,7 @@ impl Default for JvCryption {
     }
 }
 
-/// Compute CRC32 checksum with a custom start value (same as C++ `crc32()` function).
-///
+/// Compute CRC32 checksum with a custom start value (same as `crc32()` function).
 /// C++ signature: `crc32(const unsigned char *s, unsigned int len, unsigned int startVal)`
 /// Uses polynomial 0xEDB88320.
 pub fn crc32_with_start(data: &[u8], start_val: u32) -> u32 {
@@ -204,7 +195,6 @@ pub fn crc32_with_start(data: &[u8], start_val: u32) -> u32 {
 }
 
 /// Compute CRC32 checksum with initial value 0xFFFFFFFF.
-///
 /// Used by JvCryption encrypt/decrypt (C++ calls `crc32(data, len, -1)`).
 pub fn crc32(data: &[u8]) -> u32 {
     crc32_with_start(data, 0xFFFF_FFFF)

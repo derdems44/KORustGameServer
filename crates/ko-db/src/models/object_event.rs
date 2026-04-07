@@ -1,12 +1,8 @@
 //! Object event position model.
-//!
-//! C++ Reference: `_OBJECT_EVENT` struct in `shared/database/structs.h`
 //! Data source: `K_OBJECTPOS2369` table (MSSQL) → `object_event_pos` (PostgreSQL)
 
 /// A row from the `object_event_pos` table — defines an interactive object
 /// in a zone (bind point, warp gate, lever, anvil, etc.).
-///
-/// C++ Reference: `_OBJECT_EVENT` in `structs.h:308-321`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ObjectEventRow {
     /// Auto-increment primary key.

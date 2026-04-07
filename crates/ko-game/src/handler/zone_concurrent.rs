@@ -1,22 +1,14 @@
 //! WIZ_ZONE_CONCURRENT (0x4D) handler -- Battle zone user counts.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/ServerStartStopHandler.cpp:520`
-//!
 //! This packet provides concurrent user counts for battle zones.
 //! The client uses it to display zone population in the battle zone
 //! selection UI, helping players choose which zone to enter.
-//!
 //! ## Client -> Server
-//!
 //! Empty (or ignored) -- the client triggers this when opening the
 //! battle zone selection dialog.
-//!
 //! ## Server -> Client
-//!
 //! ```text
 //! [u8 zone_count] [per_zone: [u16 zone_id] [u16 user_count]] ...
 //! ```
-//!
 //! IDA analysis (sub_D7D2B0): The client iterates over zone entries,
 //! reads zone info and builds a concatenated string for the zone
 //! selection UI. The format matches the C++ pattern of listing
@@ -45,9 +37,6 @@ const BATTLE_ZONES: &[u16] = &[
 ];
 
 /// Handle WIZ_ZONE_CONCURRENT (0x4D) -- send battle zone user counts.
-///
-/// C++ Reference: `CGameServerDlg::ReportConcurrentUser`
-///
 /// When the client opens the battle zone selection UI, it sends this
 /// opcode. The server responds with user counts per battle zone.
 pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
@@ -65,7 +54,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
 }
 
 /// Build WIZ_ZONE_CONCURRENT S2C packet.
-///
 /// Format: `[u8 zone_count] [per_zone: [u16 zone_id] [u16 user_count]]`
 fn build_zone_concurrent_packet(world: &crate::world::WorldState) -> Packet {
     let mut pkt = Packet::new(Opcode::WizZoneConcurrent as u8);

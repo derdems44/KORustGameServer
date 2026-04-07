@@ -1,15 +1,10 @@
 //! Start position models — per-zone spawn/respawn coordinates.
-//!
-//! C++ Reference: `_START_POSITION` (GameDefine.h:2091), `_START_POSITION_RANDOM` (GameDefine.h:4178)
 //! Source: MSSQL `START_POSITION2369` (79 rows), `START_POSITION_RANDOM` (38 rows)
 
 /// Per-zone spawn/respawn coordinates for Karus and El Morad nations.
-///
 /// Used for death respawn, `/town` command, zone change default coords.
 /// Keyed by `zone_id`. Each row has separate X/Z coords per nation,
 /// optional gate coords, and a random range offset.
-///
-/// C++ equivalent: `_START_POSITION` struct (GameDefine.h:2091)
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct StartPositionRow {
     /// Zone identifier (PK).
@@ -37,10 +32,7 @@ pub struct StartPositionRow {
 }
 
 /// Random spawn point for special zones (Chaos Dungeon, Bowl events).
-///
 /// Multiple points per zone; server picks one at random and applies radius offset.
-///
-/// C++ equivalent: `_START_POSITION_RANDOM` struct (GameDefine.h:4178)
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct StartPositionRandomRow {
     /// Auto-increment ID.

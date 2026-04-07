@@ -1,9 +1,5 @@
 //! WIZ_DAILYRANK (0xC2) handler — Daily ranking system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/dailyrank.cpp`
-//!
-//! ## Daily Rank Types (C++ `DailyRankType` enum in `GameDefine.h:4511-4522`)
-//!
+//! ## Daily Rank Types (`DailyRankType` enum in `GameDefine.h:4511-4522`)
 //! | Value | Name              | Description                    |
 //! |-------|-------------------|--------------------------------|
 //! | 0     | GRAND_MERCHANT    | Top gold earners               |
@@ -14,16 +10,12 @@
 //! | 5     | DRAKI_RANK        | Draki Tower ranking             |
 //! | 6     | DISCIPLE_KERON    | Upgrade master rank             |
 //! | 8     | KING_OF_FELANKOR  | Clan ranking (by points)        |
-//!
 //! ## Client -> Server (WIZ_DAILYRANK 0xC2)
-//!
 //! ```text
 //! [u8 sub_opcode]   // always 1 = show
 //! [u8 rank_type]    // DailyRankType
 //! ```
-//!
 //! ## Server -> Client (WIZ_DAILYRANK 0xC2)
-//!
 //! ```text
 //! [u8 sub_opcode=1]
 //! [u8 rank_type]
@@ -40,7 +32,7 @@ use tracing::{debug, warn};
 
 use crate::session::{ClientSession, SessionState};
 
-/// Daily rank type constants from C++ `DailyRankType` enum.
+/// Daily rank type constants from `DailyRankType` enum.
 const DAILY_RANK_GRAND_MERCHANT: u8 = 0;
 const DAILY_RANK_KNIGHT_ADONIS: u8 = 1;
 const DAILY_RANK_HERO_OF_CHAOS: u8 = 2;
@@ -51,8 +43,6 @@ const DAILY_RANK_DISCIPLE_KERON: u8 = 6;
 const DAILY_RANK_KING_OF_FELANKOR: u8 = 8;
 
 /// Handle incoming WIZ_DAILYRANK (0xC2) packet.
-///
-/// C++ Reference: `CUser::HandleDailyRank()` in `dailyrank.cpp:4-19`
 pub async fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -78,8 +68,6 @@ pub async fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Resu
 }
 
 /// Handle daily rank show request (sub_opcode = 1).
-///
-/// C++ Reference: `CUser::HandleDailyRankShow()` in `dailyrank.cpp:21-278`
 async fn handle_daily_rank_show(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -123,7 +111,6 @@ fn get_rank_fields(row: &DailyRankRow, rank_type: u8) -> (i32, i32) {
 }
 
 /// Send an empty daily rank response.
-///
 /// C++ pattern: WIZ_DAILYRANK, sub=1, rank_type, my_rank=0, diff=0, count=0
 /// NOTE: Draki (type 5) has a different format — no diff field.
 async fn send_empty_daily_rank(session: &mut ClientSession, rank_type: u8) -> anyhow::Result<()> {
@@ -132,10 +119,8 @@ async fn send_empty_daily_rank(session: &mut ClientSession, rank_type: u8) -> an
     pkt.write_u8(rank_type);
     pkt.write_u32(0); // my_rank
     if rank_type != DAILY_RANK_DRAKI {
-        // C++ Reference: dailyrank.cpp:48 — non-Draki empty: rank+diff+count
         pkt.write_u32(0); // rank_diff (absent for Draki)
     }
-    // C++ Reference: dailyrank.cpp:293 — Draki empty: rank+count (no diff)
     pkt.write_u16(0); // count
 
     session.send_packet(&pkt).await?;
@@ -150,9 +135,6 @@ async fn send_empty_daily_rank(session: &mut ClientSession, rank_type: u8) -> an
 }
 
 /// Send user-based daily rank (6 rank types) from cached DB data.
-///
-/// C++ Reference: `HandleDailyRankShow` GRAND_MERCHANT/KNIGHT_ADONIS/etc cases.
-///
 /// Loads cached `daily_rank` data, filters ranked users (rank > 0), sorts ascending
 /// (rank 1 = best), finds player's own rank, and sends top 100 names.
 async fn send_user_daily_rank(session: &mut ClientSession, rank_type: u8) -> anyhow::Result<()> {
@@ -227,9 +209,6 @@ async fn send_user_daily_rank(session: &mut ClientSession, rank_type: u8) -> any
 }
 
 /// Send clan-based daily rank for KING_OF_FELANKOR.
-///
-/// C++ Reference: `HandleDailyRankShow` case `KING_OF_FELANKOR` in `dailyrank.cpp:219-267`
-///
 /// Merges top clans from both nations sorted by points, finds player's clan rank.
 async fn send_clan_daily_rank(session: &mut ClientSession, rank_type: u8) -> anyhow::Result<()> {
     let world = session.world();
@@ -295,9 +274,6 @@ async fn send_clan_daily_rank(session: &mut ClientSession, rank_type: u8) -> any
 }
 
 /// Send Draki Tower daily rank filtered by player's class.
-///
-/// C++ Reference: `CUser::ReqHandleDailyRank()` in `dailyrank.cpp:280-357`
-///
 /// Loads ranking from DB filtered by class, sorted by stage DESC then time ASC.
 async fn send_draki_daily_rank(session: &mut ClientSession, rank_type: u8) -> anyhow::Result<()> {
     let world = session.world();
@@ -337,7 +313,6 @@ async fn send_draki_daily_rank(session: &mut ClientSession, rank_type: u8) -> an
         }
     }
 
-    // C++ Reference: dailyrank.cpp:340-353 — Draki format has NO diff field
     // Format: [sub=1][rank_type=5][u32 MyRank][u16 Count][sbyte_strings]
     let mut pkt = Packet::new(Opcode::WizDailyRank as u8);
     pkt.write_u8(1); // sub_opcode
@@ -420,7 +395,6 @@ mod tests {
     #[test]
     fn test_empty_draki_rank_packet_format() {
         // Draki empty: sub(1) + rank_type(1) + rank(4) + count(2) = 8 (NO diff field)
-        // C++ Reference: dailyrank.cpp:293 — DailyPacket << uint32(0) << uint16(0)
         let mut pkt = Packet::new(Opcode::WizDailyRank as u8);
         pkt.write_u8(1);
         pkt.write_u8(DAILY_RANK_DRAKI);

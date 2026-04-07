@@ -1,13 +1,8 @@
 //! Monster Stone instance system.
-//!
-//! C++ Reference: `MonsterStoneSystem.cpp` (562 lines)
-//!
 //! A player activates a Monster Stone item to enter a private instance (zones 81-83)
 //! with waves of monsters. Killing the boss ends the instance after a 20-second grace.
 //! If the timer expires (30 minutes), the player is kicked to Moradon.
-//!
 //! ## Flow
-//!
 //! 1. Player uses a Monster Stone item (WIZ_EVENT, sub-opcode 6)
 //! 2. Server allocates a room from the pool (max 750)
 //! 3. Player (+ party in new mode) teleported to zone 81/82/83
@@ -21,58 +16,40 @@ use ko_protocol::{Opcode, Packet};
 // ── Constants ────────────────────────────────────────────────────────────────
 
 /// Maximum number of monster stone rooms.
-///
-/// C++ Reference: `GameDefine.h:5` — `#define MAX_MONSTER_STONE_ROOM 750`
 pub const MAX_ROOMS: usize = 750;
 
 /// Room duration in seconds (30 minutes).
-///
-/// C++ Reference: `Define.h:93` — `#define MONSTER_STONE_TIME 1800`
 pub const ROOM_DURATION_SECS: u64 = 1800;
 
 /// NPC despawn duration in seconds.
-///
-/// C++ Reference: `Define.h:94` — `#define MONSTER_STONE_DEAD_TIME 1800`
 pub const NPC_DESPAWN_SECS: u16 = 1800;
 
 /// Grace period after boss kill (seconds).
-///
-/// C++ Reference: `Define.h:95` — `#define MONSTER_STONE_FINISH_TIME 20`
 pub const FINISH_GRACE_SECS: u64 = 20;
 
 pub use crate::world::types::{ZONE_MORADON, ZONE_STONE1, ZONE_STONE2, ZONE_STONE3};
 
 /// WIZ_EVENT sub-opcode for Monster Stone activation.
-///
-/// C++ Reference: `packets.h` — `MONSTER_STONE = 6`
 pub const SUB_OPCODE_MONSTER_STONE: u8 = 6;
 
 /// WIZ_BIFROST sub-opcode for Monster Stone timer display.
-///
-/// C++ Reference: `packets.h` — `MONSTER_SQUARD = 5`
 pub const SUB_OPCODE_MONSTER_SQUARD: u8 = 5;
 
 /// WIZ_EVENT sub-opcode for temple event finish.
 pub const SUB_OPCODE_TEMPLE_EVENT_FINISH: u8 = 10;
 
 /// Valid Monster Stone item IDs.
-///
-/// C++ Reference: `MonsterStoneSystem.cpp:33-34`
 pub const ITEM_STONE1: u32 = 300_144_036;
 pub const ITEM_STONE2: u32 = 300_145_037;
 pub const ITEM_STONE3: u32 = 300_146_038;
 pub const ITEM_UNIVERSAL: u32 = 900_144_023;
 
 /// SpawnEventType for Monster Stone NPCs.
-///
-/// C++ Reference: `GameDefine.h` — `SpawnEventType::MonsterStone = 8`
 pub const SPAWN_EVENT_TYPE_MONSTER_STONE: u16 = 8;
 
 // ── Zone Helper ──────────────────────────────────────────────────────────────
 
 /// Check if a zone ID is a Monster Stone zone (81, 82, or 83).
-///
-/// C++ Reference: `Unit.h` — `isInMonsterStoneZone()`
 pub fn is_monster_stone_zone(zone_id: u16) -> bool {
     zone_id == ZONE_STONE1 || zone_id == ZONE_STONE2 || zone_id == ZONE_STONE3
 }
@@ -80,8 +57,6 @@ pub fn is_monster_stone_zone(zone_id: u16) -> bool {
 // ── Room State ───────────────────────────────────────────────────────────────
 
 /// State of a single Monster Stone room.
-///
-/// C++ Reference: `_MONSTER_STONE_INFO` in `GameDefine.h:4909-4946`
 #[derive(Debug, Clone)]
 pub struct MonsterStoneRoom {
     /// Room index (0-based). Set once at initialization.
@@ -128,7 +103,6 @@ impl MonsterStoneRoom {
 
     /// Reset the room state, preserving room_id.
     ///
-    /// C++ Reference: `_MONSTER_STONE_INFO::reset()` — preserves `roomid`.
     pub fn reset(&mut self) {
         self.active = false;
         self.zone_id = 0;
@@ -143,7 +117,6 @@ impl MonsterStoneRoom {
 
     /// Check if this room can be allocated (usable, not active, no users).
     ///
-    /// C++ Reference: `MonsterStoneSystem.cpp:50-54`
     pub fn is_available(&self) -> bool {
         self.usable && !self.active && self.users.is_empty()
     }
@@ -152,8 +125,6 @@ impl MonsterStoneRoom {
 // ── Room Pool Manager ────────────────────────────────────────────────────────
 
 /// Manages the pool of Monster Stone rooms.
-///
-/// C++ Reference: `m_TempleEventMonsterStoneRoomList[MAX_MONSTER_STONE_ROOM]`
 #[derive(Debug)]
 pub struct MonsterStoneManager {
     rooms: Vec<MonsterStoneRoom>,
@@ -174,7 +145,6 @@ impl MonsterStoneManager {
 
     /// Allocate the first available room. Returns the room index (0-based).
     ///
-    /// C++ Reference: `MonsterStoneSystem.cpp:49-59` — first-fit linear scan.
     pub fn allocate_room(&mut self) -> Option<u16> {
         for room in &self.rooms {
             if room.is_available() {
@@ -196,7 +166,6 @@ impl MonsterStoneManager {
 
     /// Activate a room with the given parameters.
     ///
-    /// C++ Reference: `MonsterStoneSystem.cpp:149-156`
     pub fn activate_room(
         &mut self,
         room_id: u16,
@@ -224,7 +193,6 @@ impl MonsterStoneManager {
 
     /// Process timer tick for all active rooms. Returns indices of rooms that expired.
     ///
-    /// C++ Reference: `TempleMonsterStoneTimer()` in `MonsterStoneSystem.cpp:399-418`
     pub fn timer_tick(&mut self, now: u64) -> Vec<u16> {
         let mut expired = Vec::new();
         for room in &mut self.rooms {
@@ -246,7 +214,6 @@ impl MonsterStoneManager {
 
     /// Mark boss killed in a room and set the grace period.
     ///
-    /// C++ Reference: `MonsterStoneKillProcess()` in `MonsterStoneSystem.cpp:508-540`
     pub fn boss_killed(&mut self, room_id: u16, now: u64) -> bool {
         let Some(room) = self.rooms.get_mut(room_id as usize) else {
             return false;
@@ -261,7 +228,6 @@ impl MonsterStoneManager {
 
     /// Reset a room and return the list of user session IDs that were in it.
     ///
-    /// C++ Reference: `TempleMonsterStoneAutoResetRoom()` in `MonsterStoneSystem.cpp:422-438`
     pub fn reset_room(&mut self, room_id: u16) -> Vec<u16> {
         let Some(room) = self.rooms.get_mut(room_id as usize) else {
             return Vec::new();
@@ -303,9 +269,6 @@ impl MonsterStoneManager {
 // ── Packet Builders ──────────────────────────────────────────────────────────
 
 /// Build the WIZ_BIFROST Monster Stone timer packet.
-///
-/// C++ Reference: `MonsterStoneTimerScreen()` line 545-548
-///
 /// `WIZ_BIFROST | uint8(MONSTER_SQUARD=5) | uint16(time_secs)`
 pub fn build_timer_packet(time_secs: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizBifrost as u8);
@@ -315,8 +278,6 @@ pub fn build_timer_packet(time_secs: u16) -> Packet {
 }
 
 /// Build the WIZ_SELECT_MSG timer display packet.
-///
-/// C++ Reference: `MonsterStoneTimerScreen()` line 550-560
 pub fn build_select_msg_timer(time_secs: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizSelectMsg as u8);
     pkt.write_u32(0);
@@ -332,9 +293,6 @@ pub fn build_select_msg_timer(time_secs: u16) -> Packet {
 }
 
 /// Build the WIZ_EVENT Monster Stone fail response.
-///
-/// C++ Reference: `SendMonsterStoneFail()` lines 3-7
-///
 /// `WIZ_EVENT | uint8(MONSTER_STONE=6) | uint8(error_id)`
 pub fn build_fail_packet(error_id: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizEvent as u8);
@@ -344,9 +302,6 @@ pub fn build_fail_packet(error_id: u8) -> Packet {
 }
 
 /// Build the boss kill finish notification packets.
-///
-/// C++ Reference: `MonsterStoneKillProcess()` lines 524-537
-///
 /// Returns (event_finish_pkt, quest_pkt).
 pub fn build_boss_kill_packets() -> (Packet, Packet) {
     // Packet 1: WIZ_EVENT TEMPLE_EVENT_FINISH
@@ -368,8 +323,6 @@ pub fn build_boss_kill_packets() -> (Packet, Packet) {
 }
 
 /// Determine zone and family for the universal stone (item 900144023) based on level.
-///
-/// C++ Reference: `MonsterStoneSystem.cpp:251-308`
 pub fn universal_stone_zone_family(level: u8) -> Option<(u8, u16)> {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -406,8 +359,6 @@ pub fn universal_stone_zone_family(level: u8) -> Option<(u8, u16)> {
 }
 
 /// Determine zone for a specific stone item in new_monsterstone mode.
-///
-/// C++ Reference: `MonsterStoneSystem.cpp:82-88`
 pub fn item_to_zone(item_id: u32) -> Option<u8> {
     match item_id {
         ITEM_STONE1 => Some(ZONE_STONE1 as u8),
@@ -418,8 +369,6 @@ pub fn item_to_zone(item_id: u32) -> Option<u8> {
 }
 
 /// Random family for a zone in new_monsterstone mode.
-///
-/// C++ Reference: `MonsterStoneSystem.cpp:89-94`
 pub fn random_family_for_zone(zone_id: u8) -> u16 {
     use rand::Rng;
     let mut rng = rand::thread_rng();

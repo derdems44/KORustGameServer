@@ -1,9 +1,5 @@
 //! Dungeon Defence (Full Moon Rift) instance handler.
-//!
-//! C++ Reference: `DungeonDefenceSystem.cpp` (1,034 LOC)
-//!
 //! ## Instance Lifecycle
-//!
 //! 1. **Sign**: Party leader initiates entry via `DungeonDefenceSign()`.
 //!    Validates party (all in Moradon, alive, have rift voucher), determines difficulty.
 //! 2. **Room Assign**: Finds a free DD room, sets initial state, teleports party in.
@@ -13,17 +9,13 @@
 //!    After all monsters in a stage are killed, `ChangeDungeonDefenceStage()` advances.
 //! 6. **Finish**: After the final stage boss dies, 30s finish timer starts.
 //! 7. **Kick**: All players teleported back to Moradon, room reset.
-//!
 //! ## Difficulty Levels
-//!
 //! | Difficulty | Party Size | Stages    | Stage IDs |
 //! |------------|------------|-----------|-----------|
 //! | Easy (1)   | 2-3        | 5 stages  | 1-5       |
 //! | Normal (2) | 4-7        | 12 stages | 6-17      |
 //! | Hard (3)   | 8+         | 18 stages | 18-35     |
-//!
 //! ## Rewards (per monster kill)
-//!
 //! - **Full Moon Rift Jewel**: 1 for stages 1-17, 2 for stages 18-35 (killer only)
 //! - **Monster Coin**: 2 for killer, 1 for each other party member
 //! - **Lunar Order Token**: 1 per party member when boss dies (9931, 9936, 9951, 9959, 9971)
@@ -38,58 +30,38 @@ use ko_db::models::dungeon_defence::{DfMonsterRow, DfStageRow};
 pub use crate::world::types::ZONE_DUNGEON_DEFENCE;
 
 /// Full Moon Rift Voucher item (required to enter).
-///
-/// C++ Reference: `Define.h:353`
 pub const DUNGEON_DEFENCE_RIFT_ITEM: u32 = 914057000;
 
 /// Monster Coin item (reward per kill).
-///
-/// C++ Reference: `Define.h:387`
 pub const MONSTER_COIN_ITEM: u32 = 914058000;
 
 /// Full Moon Rift Jewel item (reward per kill, 1 or 2 depending on stage).
-///
-/// C++ Reference: `Define.h:388`
 pub const MONSTER_RIFT_JEWEL: u32 = 914069000;
 
 /// Lunar Order Token item (boss-kill reward for whole party).
-///
-/// C++ Reference: `Define.h:321`
 pub const LUNAR_ORDER_TOKEN: u32 = 810977000;
 
 /// Maximum number of DD rooms available.
 pub const DD_MAX_ROOMS: u16 = 60;
 
 /// Initial spawn timer (seconds before first wave).
-///
-/// C++ Reference: `pRoomInfo->m_DefenceSpawnTime = 60;`
 pub const DD_INITIAL_SPAWN_TIME: u32 = 60;
 
 /// Room close timer (seconds before forced eviction).
-///
-/// C++ Reference: `pRoomInfo->m_DefenceRoomClose = 7200;`
 pub const DD_ROOM_CLOSE_TIME: u32 = 7200;
 
 /// Finish timer (seconds after final stage before kick).
-///
-/// C++ Reference: `pRoomInfo->m_DefenceOutTime = 30;`
 pub const DD_FINISH_TIME: u16 = 30;
 
 /// WIZ_EVENT sub-opcode for dungeon defence sign.
-///
-/// C++ Reference: `packets.h:801` — `TEMPLE_EVENT_DUNGEON_SIGN = 58`
 pub const TEMPLE_EVENT_DUNGEON_SIGN: u8 = 58;
 
 /// WIZ_EVENT sub-opcode for stage counter display.
-///
-/// C++ Reference: `packets.h:803` — `TEMPLE_EVENT_STAGE_COUNTER = 60`
 pub const TEMPLE_EVENT_STAGE_COUNTER: u8 = 60;
 
 // ── Guardian NPC Templates ─────────────────────────────────────────────
 
 /// Guardian NPC spawn definitions.
-///
-/// C++ Reference: `DungeonDefenceSign()` — 6 guardian NPCs spawned at room creation.
 /// Format: (npc_id, pos_x, pos_z)
 pub const GUARDIAN_NPCS: [(u16, i16, i16); 6] = [
     (31737, 199, 200),
@@ -103,13 +75,9 @@ pub const GUARDIAN_NPCS: [(u16, i16, i16); 6] = [
 // ── Boss Monster IDs ───────────────────────────────────────────────────
 
 /// Boss monster proto IDs that grant Lunar Order Token on death.
-///
-/// C++ Reference: `DungeonDefenceProcess()` — boss check at lines 617-621
 pub const BOSS_MONSTER_IDS: [u16; 5] = [9931, 9951, 9936, 9959, 9971];
 
 /// All valid DD monster proto IDs (for reward eligibility).
-///
-/// C++ Reference: `DungeonDefenceProcess()` — `isZoneDungeonMonster` at lines 545-570
 pub const DD_MONSTER_IDS: [u16; 26] = [
     9927, 9928, 9929, 9930, 9931, 9932, 9933, 9934, 9935, 9936, 9937, 9938, 9939, 9940, 9941, 9942,
     9947, 9948, 9949, 9950, 9951, 9955, 9956, 9957, 9958, 9959,
@@ -118,8 +86,6 @@ pub const DD_MONSTER_IDS: [u16; 26] = [
 // ── Sign Result Codes ──────────────────────────────────────────────────
 
 /// Error/result codes sent in the TEMPLE_EVENT_DUNGEON_SIGN response.
-///
-/// C++ Reference: `DungeonDefenceSign()` comment block at lines 10-18
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DdSignResult {
@@ -144,8 +110,6 @@ pub enum DdSignResult {
 // ── Difficulty Enum ────────────────────────────────────────────────────
 
 /// Dungeon Defence difficulty level.
-///
-/// C++ Reference: `m_DefenceDifficulty` values in `DungeonDefenceSign()`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DdDifficulty {
@@ -157,7 +121,6 @@ pub enum DdDifficulty {
 impl DdDifficulty {
     /// Determine difficulty from party member count.
     ///
-    /// C++ Reference: `DungeonDefenceSign()` lines 125-127
     pub fn from_party_size(count: u16) -> Option<Self> {
         match count {
             2..=3 => Some(Self::Easy),
@@ -169,7 +132,6 @@ impl DdDifficulty {
 
     /// Get the starting stage ID for this difficulty.
     ///
-    /// C++ Reference: `DungeonDefenceSign()` lines 129-143
     pub fn starting_stage(&self) -> i16 {
         match self {
             Self::Easy => 1,
@@ -180,7 +142,6 @@ impl DdDifficulty {
 
     /// Get the final stage ID for this difficulty.
     ///
-    /// C++ Reference: `ChangeDungeonDefenceStage()` lines 470-472
     pub fn final_stage(&self) -> i16 {
         match self {
             Self::Easy => 5,
@@ -191,7 +152,6 @@ impl DdDifficulty {
 
     /// Get the maximum number of stages in this difficulty.
     ///
-    /// C++ Reference: `SendDungeonDefenceDetail()` max_stage values
     pub fn max_stages(&self) -> u8 {
         match self {
             Self::Easy => 5,
@@ -202,7 +162,6 @@ impl DdDifficulty {
 
     /// Get the stage offset to compute the display stage number.
     ///
-    /// C++ Reference: `SendDungeonDefenceDetail()` — stage_id calculation
     ///   Easy: stage_id directly, Normal: stage_id - 5, Hard: stage_id - 17
     pub fn stage_offset(&self) -> i16 {
         match self {
@@ -216,8 +175,6 @@ impl DdDifficulty {
 // ── Room State ─────────────────────────────────────────────────────────
 
 /// Runtime state for a single Dungeon Defence room instance.
-///
-/// C++ Reference: `_DUNGEON_DEFENCE_ROOM_INFO` struct
 pub struct DdRoomInfo {
     /// Room ID (1-based).
     pub room_id: AtomicU16,
@@ -266,7 +223,6 @@ impl DdRoomInfo {
 
     /// Reset the room to idle state.
     ///
-    /// C++ Reference: `DungeonDefenceUserisOut()` lines 331-341
     pub fn reset(&self) {
         self.kill_count.store(0, Ordering::Relaxed);
         self.spawn_time
@@ -288,7 +244,6 @@ impl DdRoomInfo {
     /// Uses CAS on `is_started` to prevent TOCTOU races when multiple
     /// parties try to claim rooms concurrently.
     ///
-    /// C++ Reference: `DungeonDefenceSign()` lines 151-158
     ///
     /// Returns `true` if the room was successfully claimed and initialized,
     /// `false` if it was already started by another party.
@@ -317,11 +272,8 @@ impl DdRoomInfo {
 }
 
 /// Atomically find and claim a free DD room, initializing it for the given difficulty.
-///
 /// Combines the find + start into a single atomic operation to prevent
 /// TOCTOU races where two parties could claim the same room.
-///
-/// C++ Reference: `DungeonDefenceSign()` room search loop
 pub fn try_claim_free_room(rooms: &[DdRoomInfo], difficulty: DdDifficulty) -> Option<u16> {
     for room in rooms {
         if room.try_claim_and_start(difficulty) {
@@ -350,9 +302,6 @@ pub enum DdTickResult {
 }
 
 /// Run one tick of the DD timer for a room.
-///
-/// C++ Reference: `CGameServerDlg::DungeonDefenceTimer()` lines 242-290
-///
 /// Called every 1 second for each active room.
 pub fn timer_tick(room: &DdRoomInfo) -> DdTickResult {
     if !room.is_started.load(Ordering::Relaxed) {
@@ -434,8 +383,6 @@ pub enum StageAdvanceResult {
 }
 
 /// Advance to the next stage after all monsters in the current stage are killed.
-///
-/// C++ Reference: `CUser::ChangeDungeonDefenceStage()` lines 461-512
 pub fn advance_stage(room: &DdRoomInfo, stages: &[DfStageRow]) -> StageAdvanceResult {
     let difficulty = room.difficulty.load(Ordering::Relaxed);
     let current_stage = room.stage_id.load(Ordering::Relaxed);
@@ -481,8 +428,6 @@ pub fn advance_stage(room: &DdRoomInfo, stages: &[DfStageRow]) -> StageAdvanceRe
 }
 
 /// Get the spawn delay for a given difficulty and stage.
-///
-/// C++ Reference: `ChangeDungeonDefenceStage()` lines 485-511
 pub fn get_spawn_delay(difficulty: u16, stage_id: i16) -> u32 {
     match difficulty {
         1 => {
@@ -522,15 +467,11 @@ pub fn get_spawn_delay(difficulty: u16, stage_id: i16) -> u32 {
 // ── Monster Kill Processing ────────────────────────────────────────────
 
 /// Check if a monster proto ID is a valid DD monster.
-///
-/// C++ Reference: `DungeonDefenceProcess()` lines 545-570
 pub fn is_dd_monster(proto_id: u16) -> bool {
     DD_MONSTER_IDS.contains(&proto_id)
 }
 
 /// Check if a monster proto ID is a DD boss (grants Lunar Order Token).
-///
-/// C++ Reference: `DungeonDefenceProcess()` lines 617-621
 pub fn is_dd_boss(proto_id: u16) -> bool {
     BOSS_MONSTER_IDS.contains(&proto_id)
 }
@@ -549,8 +490,6 @@ pub struct DdKillReward {
 }
 
 /// Calculate rewards for a DD monster kill.
-///
-/// C++ Reference: `CNpc::DungeonDefenceProcess()` lines 539-638
 pub fn calculate_kill_reward(proto_id: u16, current_stage: i16) -> Option<DdKillReward> {
     if !is_dd_monster(proto_id) {
         return None;
@@ -581,9 +520,6 @@ pub fn calculate_kill_reward(proto_id: u16, current_stage: i16) -> Option<DdKill
 // ── Stage Counter Display ──────────────────────────────────────────────
 
 /// Build the stage counter display values for a room.
-///
-/// C++ Reference: `SendDungeonDefenceDetail()` lines 368-407
-///
 /// Returns (max_stage, display_stage) for the TEMPLE_EVENT_STAGE_COUNTER packet.
 pub fn get_stage_display(difficulty: u16, stage_id: i16) -> Option<(u8, u8)> {
     let dd_diff = match difficulty {
@@ -601,9 +537,6 @@ pub fn get_stage_display(difficulty: u16, stage_id: i16) -> Option<(u8, u8)> {
 // ── Finish Timer ───────────────────────────────────────────────────────
 
 /// Trigger the finish sequence for a DD room.
-///
-/// C++ Reference: `CUser::DungeonDefenceSendFinishTimer()` lines 516-536
-///
 /// Sets the room to finished state and configures the out timer.
 pub fn trigger_finish(room: &DdRoomInfo) {
     room.monster_beginner_spawned
@@ -616,8 +549,6 @@ pub fn trigger_finish(room: &DdRoomInfo) {
 // ── Stage Lookup ───────────────────────────────────────────────────────
 
 /// Find the current stage entry in the stage list.
-///
-/// C++ Reference: `DungeonDefenceSelectStage()` lines 411-433
 pub fn select_stage(stages: &[DfStageRow], difficulty: u16, stage_id: i16) -> Option<&DfStageRow> {
     stages
         .iter()
@@ -625,8 +556,6 @@ pub fn select_stage(stages: &[DfStageRow], difficulty: u16, stage_id: i16) -> Op
 }
 
 /// Get all monster spawns for a given stage.
-///
-/// C++ Reference: `SummonDungeonDefenceMonsters()` lines 436-457
 pub fn get_stage_monsters(monsters: &[DfMonsterRow], stage_id: i16) -> Vec<&DfMonsterRow> {
     monsters
         .iter()
@@ -637,8 +566,6 @@ pub fn get_stage_monsters(monsters: &[DfMonsterRow], stage_id: i16) -> Vec<&DfMo
 // ── Monster Coin Cleanup ───────────────────────────────────────────────
 
 /// Check if a user needs Monster Coin cleanup on DD zone enter.
-///
-/// C++ Reference: `DungeonDefenceRobItemSkills()` lines 233-238
 /// Removes all Monster Coins from the user when entering the DD zone.
 pub fn should_rob_monster_coins() -> bool {
     // Always rob monster coins on DD entry

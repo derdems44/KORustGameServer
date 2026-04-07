@@ -1,13 +1,8 @@
 //! Pet satisfaction decay tick system.
-//!
-//! C++ Reference: `User.cpp:1218-1222` — `CUser::CheckDelayedTime()` pet branch.
-//!
 //! Every 60 seconds (`PLAYER_TRAINING_INTERVAL * 4` = 15 * 4), for each online
 //! player with an active pet, decrease satisfaction by 100. When satisfaction
 //! reaches 0, the pet dies and is de-summoned.
-//!
 //! ## Constants (from C++)
-//!
 //! - `PLAYER_TRAINING_INTERVAL` = 15 seconds (`User.h:46`)
 //! - Decay interval = 15 * 4 = 60 seconds
 //! - Decay amount = -100 per tick
@@ -22,15 +17,12 @@ use tracing::debug;
 use crate::world::{WorldState, PET_DECAY_AMOUNT};
 
 /// Background tick interval for pet decay checks.
-///
 /// We check every 15 seconds (matching `PLAYER_TRAINING_INTERVAL`) but only
 /// decay if 60 seconds have elapsed for each individual session since their
 /// last decay. This allows staggered decay without a single 60s global tick.
 const PET_TICK_INTERVAL_SECS: u64 = 15;
 
 /// Pet satisfaction update sub-opcode (MODE_SATISFACTION_UPDATE).
-///
-/// C++ Reference: `PetMainHandler.cpp:276` — `MODE_SATISFACTION_UPDATE = 0x0F`
 const MODE_SATISFACTION_UPDATE: u8 = 0x0F;
 
 /// Pet mode function opcode (1).
@@ -40,7 +32,6 @@ const PET_MODE_FUNCTION: u8 = 1;
 const NORMAL_MODE: u8 = 5;
 
 /// Start the pet satisfaction decay background task.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
 pub fn start_pet_tick_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -53,8 +44,6 @@ pub fn start_pet_tick_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()
 }
 
 /// Process one pet decay tick for all sessions with active pets.
-///
-/// C++ Reference: `User.cpp:1218-1222`
 /// ```cpp
 /// if (m_bPetLastTime + (PLAYER_TRAINING_INTERVAL * 4) < UNIXTIME)
 /// {
@@ -78,7 +67,6 @@ fn process_pet_decay_tick(world: &WorldState) {
         match new_sat {
             Some(satisfaction) => {
                 // Pet is still alive — send satisfaction update packet
-                // C++ Reference: WIZ_PET << u8(1) << u8(MODE_SATISFACTION_UPDATE)
                 //                       << satisfaction << u32(nid)
                 let mut pkt = Packet::new(Opcode::WizPet as u8);
                 pkt.write_u8(PET_MODE_FUNCTION);
@@ -94,7 +82,6 @@ fn process_pet_decay_tick(world: &WorldState) {
             }
             None => {
                 // Pet died (satisfaction hit 0) — send death notification
-                // C++ Reference: `CUser::PetOnDeath()` — WIZ_PET << u8(1) << u8(5) << u8(2) << u16(1) << index
                 let mut death_pkt = Packet::new(Opcode::WizPet as u8);
                 death_pkt.write_u8(PET_MODE_FUNCTION);
                 death_pkt.write_u8(NORMAL_MODE);

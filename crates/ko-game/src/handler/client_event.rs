@@ -1,20 +1,13 @@
 //! WIZ_CLIENT_EVENT (0x52) handler — NPC click / interaction.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/NPCHandler.cpp:88-217`
-//!
 //! When a player clicks on an NPC, the client sends this packet with the
 //! NPC's runtime ID. The server validates range, stores the event NPC IDs,
 //! and dispatches to the appropriate handler (special NPC types, or quest
 //! lookup via quest_helper).
-//!
 //! ## Request (C->S)
-//!
 //! | Offset | Type   | Description |
 //! |--------|--------|-------------|
 //! | 0      | u16le  | NPC runtime ID (NID) |
-//!
 //! ## Response
-//!
 //! No direct response — triggers quest dialog (WIZ_SELECT_MSG / WIZ_QUEST)
 //! or special NPC effects (damage, items, etc.).
 
@@ -38,15 +31,12 @@ const NPC_CAPTAIN: u8 = 35;
 const NPC_RENTAL: u8 = 78;
 
 /// NPC type: Chaotic Generator (gem exchange).
-/// C++ Reference: `globals.h:186` — `NPC_CHAOTIC_GENERATOR = 137`
 const NPC_CHAOTIC_GENERATOR: u8 = 137;
 
 /// NPC type: Chaotic Generator v2 (newer type).
-/// C++ Reference: `globals.h:197` — `NPC_CHAOTIC_GENERATOR2 = 162`
 const NPC_CHAOTIC_GENERATOR2: u8 = 162;
 
 /// WIZ_ITEM_UPGRADE sub-opcode for Chaotic Generator dialog.
-/// C++ Reference: `packets.h:834` — `ITEM_BIFROST_REQ = 4`
 const ITEM_BIFROST_REQ: u8 = 4;
 
 /// NPC type: King election NPC.
@@ -60,8 +50,6 @@ const NPC_TREASURY: u8 = 80;
 const NPC_EVENT_MANAGER: u8 = 174;
 
 /// Handle WIZ_CLIENT_EVENT from the client.
-///
-/// C++ Reference: `CUser::ClientEvent()` in `NPCHandler.cpp:88-217`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -73,7 +61,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         None => return Ok(()),
     };
 
-    // C++ Reference: User.cpp:603 reads uint16, passes to ClientEvent()
     // ClientEvent() at NPCHandler.cpp:95 does GetNpcPtr((int16)sNpcID, ...) — NO NPC_BAND addition.
     // Client sends the full NPC runtime ID (already includes NPC_BAND).
     let npc_nid = npc_nid_raw;
@@ -81,11 +68,7 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle WIZ_NPC_EVENT (0x20) from the client.
-///
-/// C++ Reference: `CUser::NpcEvent()` in `NPCHandler.cpp:601-842`
-///
 /// Packet format: `[u8 unknown] [u32 npc_nid] [i32 quest_id]`
-///
 /// Dispatches by NPC type (merchant, warehouse, etc.) and falls through
 /// to quest dialog for other NPC types.
 pub async fn handle_npc_event(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
@@ -106,13 +89,12 @@ pub async fn handle_npc_event(session: &mut ClientSession, pkt: Packet) -> anyho
 }
 
 /// Core NPC interaction logic shared by WIZ_CLIENT_EVENT and WIZ_NPC_EVENT.
-///
 /// Takes the full NPC NID (NPC_BAND + offset) and dispatches by NPC type.
 async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
 
-    // Player must be alive and not busy — C++ Reference: NPCHandler.cpp:604-615
+    // Player must be alive and not busy
     // isDead() || isTrading() || isMerchanting() || isStoreOpen() || isSellingMerchant()
     //   || isBuyingMerchant() || isMining() || isFishing()
     // Note: isStoreOpen() always returns false in C++ (User.h:989)
@@ -131,7 +113,7 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
         None => return Ok(()),
     };
 
-    // Look up NPC instance — C++ Reference: NPCHandler.cpp:622-624
+    // Look up NPC instance
     // pNpc == nullptr || pNpc->isDead() || !isInRange(pNpc, MAX_NPC_RANGE)
     let npc = match world.get_npc_instance(npc_nid) {
         Some(n) => n,
@@ -168,7 +150,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
     }
 
     // Store event NPC IDs for subsequent quest/dialog interactions
-    // C++ Reference: NPCHandler.cpp:100-101
     //   m_sEventNid = (int16)sNpcID;
     //   m_sEventSid = pNpc->GetProtoID();
     let proto_id = npc.proto_id;
@@ -196,12 +177,10 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
     }
 
     // Handle special NPC types by npc_type
-    // C++ Reference: NPCHandler.cpp:159-186
     if let Some(ref t) = tmpl {
         match t.npc_type {
             NPC_ROLLINGSTONE => {
                 // Instant death — apply full HP damage
-                // C++ Reference: NPCHandler.cpp:168 — `HpChange(-GetMaxHealth(), pNpc)`
                 let damage = ch.max_hp;
                 let new_hp = (ch.hp - damage).max(0);
                 world.update_character_stats(sid, |c| {
@@ -223,7 +202,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
             }
             NPC_OBJECT_WOOD => {
                 // 80% HP damage
-                // C++ Reference: NPCHandler.cpp:175-180
                 let damage = (ch.max_hp as i32 * 80 / 100) as i16;
                 let new_hp = (ch.hp - damage).max(0);
                 world.update_character_stats(sid, |c| {
@@ -245,7 +223,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
             }
             NPC_MERCHANT | NPC_LOYALTY_MERCHANT => {
                 // Open merchant shop UI
-                // C++ Reference: NPCHandler.cpp:654-658
                 let mut shop_pkt = Packet::new(Opcode::WizTradeNpc as u8);
                 shop_pkt.write_u32(t.selling_group);
                 session.send_packet(&shop_pkt).await?;
@@ -259,7 +236,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
             }
             NPC_TINKER => {
                 // Open tinker/repair shop UI
-                // C++ Reference: NPCHandler.cpp:660-663
                 let mut shop_pkt = Packet::new(Opcode::WizRepairNpc as u8);
                 shop_pkt.write_u32(t.selling_group);
                 session.send_packet(&shop_pkt).await?;
@@ -273,7 +249,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
             }
             NPC_MARK => {
                 // Cape mark NPC — open clan cape customization UI
-                // C++ Reference: NPCHandler.cpp:666-669
                 let mut pkt = Packet::new(Opcode::WizKnightsProcess as u8);
                 pkt.write_u8(0x14); // KNIGHTS_CAPE_NPC sub-opcode
                 session.send_packet(&pkt).await?;
@@ -286,7 +261,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
             }
             NPC_RENTAL => {
                 // Rental NPC — open rental UI
-                // C++ Reference: NPCHandler.cpp:698-704
                 let mut pkt = Packet::new(Opcode::WizRental as u8);
                 pkt.write_u8(3); // RENTAL_NPC sub-opcode
                 pkt.write_u16(1); // enabled
@@ -297,7 +271,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
             }
             NPC_CAPTAIN => {
                 // Class change captain NPC
-                // C++ Reference: NPCHandler.cpp:798-801
                 let mut pkt = Packet::new(Opcode::WizClassChange as u8);
                 pkt.write_u8(0x01); // CLASS_CHANGE_REQ
                 session.send_packet(&pkt).await?;
@@ -310,7 +283,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
             }
             NPC_WAREHOUSE => {
                 // Warehouse NPC — open warehouse
-                // C++ Reference: NPCHandler.cpp:804-807
                 let mut pkt = Packet::new(Opcode::WizWarehouse as u8);
                 pkt.write_u8(0x10); // WAREHOUSE_REQ
                 session.send_packet(&pkt).await?;
@@ -323,7 +295,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
             }
             NPC_CHAOTIC_GENERATOR | NPC_CHAOTIC_GENERATOR2 => {
                 // Chaotic Generator — open gem exchange dialog
-                // C++ Reference: NPCHandler.cpp:802-804 — `SendAnvilRequest(sNpcID, ITEM_BIFROST_REQ)`
                 // S2C: WIZ_ITEM_UPGRADE [sub=ITEM_BIFROST_REQ(4)] [npc_id:u16le]
                 // Sniffer verified: session 10, id 72521 — `5b 04 b6c2 0000`
                 let mut pkt = Packet::new(Opcode::WizItemUpgrade as u8);
@@ -339,7 +310,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
             }
             NPC_ELECTION => {
                 // King election NPC — show king name
-                // C++ Reference: NPCHandler.cpp:706-716
                 let ks = world.get_king_system(ch.nation);
                 let king_name = ks.as_ref().map(|k| k.king_name.as_str()).unwrap_or("");
                 let mut pkt = Packet::new(Opcode::WizKing as u8);
@@ -358,7 +328,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
             // Falls through to quest NPC interaction below.
             NPC_TREASURY => {
                 // King treasury NPC — show tax/treasury info
-                // C++ Reference: NPCHandler.cpp:718-734
                 let ks = world.get_king_system(ch.nation);
                 let tribute = ks
                     .as_ref()
@@ -393,7 +362,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
     }
 
     // ── Quest NPC interaction ─────────────────────────────────────
-    // C++ Reference: NPCHandler.cpp:188-216 — look up quest_helper by proto_id
     if let Some(helper_indices) = world.get_quest_npc_helpers(proto_id) {
         let ch = match world.get_character_info(sid) {
             Some(c) => c,
@@ -425,7 +393,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
 
         if let Some(helper) = selected_helper {
             // Run the quest Lua script for this NPC interaction
-            // C++ Reference: NPCHandler.cpp:216
             debug!(
                 "[{}] ClientEvent: NPC proto={} matched quest helper idx={} trigger={}",
                 session.addr(),
@@ -482,7 +449,6 @@ async fn handle_npc_by_nid(session: &mut ClientSession, npc_nid: u32) -> anyhow:
 }
 
 /// Send a GM debug message via PUBLIC_CHAT (WIZ_CHAT type 7).
-///
 /// v2525 client drops WIZ_EXT_HOOK (0xE9) so GM debug mode can't be toggled.
 /// This is the v2525-compatible alternative: send debug info as chat text.
 pub fn send_gm_debug_chat(

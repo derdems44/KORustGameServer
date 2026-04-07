@@ -1,13 +1,9 @@
 //! Pet / Cypher Ring unique-item info helpers.
-//!
-//! C++ Reference:
 //! - `PetMainHandler.cpp:306` — `ShowPetItemInfo(Packet&, uint64 nSerialNum)`
 //! - `SealHandler.cpp:796`    — `ShowCyperRingItemInfo(Packet&, uint64 nSerialNum)`
-//!
 //! These two functions write variable-length data into item-slot packets.
 //! The client determines which format to parse from the item's template
 //! (`isPetItem()` → kind 151, `ITEM_CYPHER_RING` → 800112000).
-//!
 //! If the pet/seal record is not found in the DB, the fallback is `u32(0)`.
 
 use ko_db::DbPool;
@@ -21,7 +17,6 @@ pub const ITEM_CYPHER_RING: u32 = 800_112_000;
 use crate::inventory_constants::ITEM_KIND_PET;
 
 /// Write the unique-item-info field for a single item slot.
-///
 /// C++ pattern (WareHouse.cpp:82-93):
 /// ```cpp
 /// if (pItemTable.isPetItem())
@@ -58,9 +53,6 @@ pub async fn write_unique_item_info(
 }
 
 /// Write pet item info into the packet.
-///
-/// C++ Reference: `PetMainHandler.cpp:306-331`
-///
 /// Packet format (when found):
 /// ```text
 /// [u32 nIndex] [u16-string petName] [u8 petAttack] [u8 level]
@@ -105,9 +97,6 @@ async fn write_pet_item_info(world: &WorldState, pool: &DbPool, serial_id: i64, 
 }
 
 /// Write cypher ring (sealed character) item info into the packet.
-///
-/// C++ Reference: `SealHandler.cpp:796-820`
-///
 /// Packet format (when found):
 /// ```text
 /// [u32 uniqueID] [u16-string charName] [u8 class] [u8 level]

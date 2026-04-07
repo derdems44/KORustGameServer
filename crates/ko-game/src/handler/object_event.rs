@@ -1,16 +1,10 @@
 //! WIZ_OBJECT_EVENT (0x33) handler — interactive object processing.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/UserObjectSystem.cpp:393-457`
-//!
 //! ## Flow
-//!
 //! 1. Client sends `[u16 objectIndex] [u16 nid]` when interacting with a world object
 //! 2. Server looks up the object event by index in the zone's object_events
 //! 3. Dispatches based on object type (bind, warp gate, anvil, lever, etc.)
 //! 4. Sends response: `WIZ_OBJECT_EVENT + u8(object_type) + u8(success)`
-//!
 //! ## Object Types
-//!
 //! - BIND (0) / REMOVE_BIND (7): Set/clear respawn bind point
 //! - GATE (1): Gate NPC (handled server-side)
 //! - GATE_LEVER (3): Toggle gate during war/siege
@@ -33,9 +27,6 @@ use crate::zone::ObjectType;
 use crate::npc_type_constants::MAX_OBJECT_RANGE;
 
 /// Handle WIZ_OBJECT_EVENT from the client.
-///
-/// C++ Reference: `CUser::ObjectEvent(Packet & pkt)` in `UserObjectSystem.cpp:393-457`
-///
 /// Packet format (incoming): `[u16 objectIndex] [u16 nid]`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
@@ -92,7 +83,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Range check: player must be close enough to the object
-    // C++ Reference: `isInRange(pEvent->fPosX, pEvent->fPosZ, MAX_OBJECT_RANGE)`
     let dx = pos.x - event.pos_x;
     let dz = pos.z - event.pos_z;
     let dist = (dx * dx + dz * dz).sqrt();
@@ -106,7 +96,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     match obj_type {
         Some(ObjectType::Bind) | Some(ObjectType::RemoveBind) => {
             // Bind/Unbind: set or clear respawn point
-            // C++ Reference: `CUser::BindObjectEvent()` in UserObjectSystem.cpp:175-187
             // Nation check
             let nation = world
                 .get_character_info(sid)
@@ -118,7 +107,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // Store or clear bind point
-            // C++ Reference: UserObjectSystem.cpp:181-184
             //   if (pEvent->sType == OBJECT_REMOVE_BIND) m_sBind = -1; else m_sBind = pEvent->sIndex;
             if obj_type == Some(ObjectType::RemoveBind) {
                 // Clear bind point
@@ -129,7 +117,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                 });
             } else {
                 // Validate bind point before setting:
-                // C++ Reference: User.cpp:3850-3854 — byLife must be 1, sIndex must not be 101/201
                 // sIndex 101 = Karus homecoming gate, 201 = Elmorad homecoming gate
                 // These are filtered at Home-use time in C++, we filter at bind-set time for safety.
                 if event.by_life != 1 || event.s_index == 101 || event.s_index == 201 {
@@ -162,7 +149,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ObjectType::WarpGate) => {
             // Warp gate: open warp list UI
-            // C++ Reference: `CUser::WarpListObjectEvent()` in UserObjectSystem.cpp:378-391
             let nation = world
                 .get_character_info(sid)
                 .map(|ch| ch.nation)
@@ -173,7 +159,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // Opposing-nation zone check: cannot use warp gates in enemy territory.
-            // C++ Reference: UserObjectSystem.cpp:381-383
             //   `(GetZoneID() != GetNation() && GetZoneID() <= Nation::ELMORAD)`
             // Zone 1 = Karus, Zone 2 = Elmorad — if player is in opposing nation's zone, deny.
             if pos.zone_id <= 2 && pos.zone_id != nation as u16 {
@@ -186,7 +171,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             if !sent {
                 send_fail(session, event.obj_type as u8).await?;
             } else {
-                // C++ Reference: UserObjectSystem.cpp:390 — set warp-loop prevention flag.
                 world.set_check_warp_zone_change(sid, true);
                 debug!(
                     "[{}] ObjectEvent: WARP_GATE group={}",
@@ -198,7 +182,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ObjectType::Anvil) => {
             // Anvil: open upgrade UI
-            // C++ Reference: `CUser::SendAnvilRequest(nid)` in User.cpp:4021
             let mut result = Packet::new(Opcode::WizItemUpgrade as u8);
             result.write_u8(1); // ITEM_UPGRADE_REQ opcode
             result.write_u16(nid);
@@ -209,7 +192,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         Some(ObjectType::Gate) => {
             // Gate: handled by NPC system, just send success
-            // C++ Reference: OBJECT_GATE case in UserObjectSystem.cpp:408-411
             // Gates use the same bind logic in C++
             let gate_nation = world
                 .get_character_info(sid)
@@ -229,7 +211,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         Some(ObjectType::GateLever) | Some(ObjectType::WoodLever) => {
             // Gate lever / wood lever: toggle a gate NPC open/closed during war or siege.
             //
-            // C++ Reference: `CUser::GateLeverObjectEvent()` in `UserObjectSystem.cpp:288-341`
             //
             // Requirements:
             // - Lever NPC must exist (nid from packet)
@@ -243,7 +224,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             let clan_id = world.get_session_clan_id(sid);
 
             // Validate lever NPC exists
-            // C++ Reference: `UserObjectSystem.cpp:295`
             //   pNpc = g_pMain->GetNpcPtr(nid, GetZoneID())
             let lever_npc = match world.get_npc_instance(nid as u32) {
                 Some(n) => n,
@@ -254,7 +234,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             };
 
             // Validate gate NPC exists and is a gate type
-            // C++ Reference: `UserObjectSystem.cpp:299-301`
             let gate_proto = event.control_npc as u16;
             let gate_npc = match world.find_npc_in_zone(gate_proto, pos.zone_id) {
                 Some(n) => n,
@@ -281,7 +260,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                     send_fail(session, event.obj_type as u8).await?;
                 } else {
                     // Toggle lever and gate
-                    // C++ Reference: `UserObjectSystem.cpp:316-319`
                     let lever_new = if lever_npc.gate_open == 0 { 1 } else { 0 };
                     let gate_new = if gate_npc.gate_open == 0 { 1 } else { 0 };
                     world.send_gate_flag(lever_npc.nid, lever_new);
@@ -294,7 +272,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                 }
             } else if pos.zone_id == ZONE_BIFROST || (world.is_war_open() && zone.is_war_zone()) {
                 // Bifrost or battle zones with war open
-                // C++ Reference: `UserObjectSystem.cpp:322-337`
                 // Nation check for non-Bifrost zones
                 if pos.zone_id != ZONE_BIFROST
                     && lever_npc.nation != 0
@@ -320,7 +297,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         Some(ObjectType::FlagLever) => {
             // Flag lever: capture flag during battle.
             //
-            // C++ Reference: `CUser::FlagObjectEvent()` in `UserObjectSystem.cpp:346-376`
             //
             // Requirements:
             // - Lever NPC must exist
@@ -333,7 +309,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                 .unwrap_or(0);
 
             // Validate lever NPC and flag NPC exist
-            // C++ Reference: `UserObjectSystem.cpp:349-358`
             let flag_proto = event.control_npc as u16;
             let flag_npc = world.find_npc_in_zone(flag_proto, pos.zone_id);
 
@@ -347,14 +322,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                         send_fail(session, event.obj_type as u8).await?;
                     } else {
                         // Reset both objects (flag captured)
-                        // C++ Reference: `UserObjectSystem.cpp:364-365`
                         //   pNpc->SendGateFlag(0);
                         //   pFlagNpc->SendGateFlag(0);
                         world.send_gate_flag(lever_npc.nid, 0);
                         world.send_gate_flag(flag_npc_arc.nid, 0);
 
                         // Increment flag counter and check for victory
-                        // C++ Reference: `UserObjectSystem.cpp:368-375`
                         //   g_pMain->m_bKarusFlag++ / m_bElmoradFlag++
                         //   g_pMain->BattleZoneVictoryCheck()
                         let victory = world.increment_war_flag(flag_nation);
@@ -380,7 +353,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         Some(ObjectType::Wood) => {
             // Burning wood/log lever — toggles associated gate NPCs during war.
             //
-            // C++ Reference: `CUser::LogLeverBuringLog()` in `UserObjectSystem.cpp:190-236`
             //
             // Finds all NPC instances matching `event.control_npc` proto_id in the zone
             // and toggles their gate state via SendGateFlag.
@@ -396,7 +368,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                     send_fail(session, event.obj_type as u8).await?;
                 } else {
                     // Find all gate NPCs matching control_npc proto_id and toggle them
-                    // C++ Reference: `UserObjectSystem.cpp:213-232`
                     let gate_proto = event.control_npc as u16;
                     let gate_npcs = world.find_all_npcs_in_zone(gate_proto, pos.zone_id);
                     for gate_npc in &gate_npcs {
@@ -405,7 +376,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                     }
 
                     // Also toggle the lever NPC itself
-                    // C++ Reference: `UserObjectSystem.cpp:235`
                     //   pNpc->SendGateFlag((pNpc->m_byGateOpen == 0 ? 1 : 0));
                     let lever_proto = event.s_index as u16;
                     if let Some(lever_npc) = world.find_npc_in_zone(lever_proto, pos.zone_id) {
@@ -434,7 +404,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         Some(ObjectType::KrowazGate) => {
             // Krowaz key gate — requires a specific key item to pass through.
             //
-            // C++ Reference: `CUser::KrowazGateEvent()` in `UserObjectSystem.cpp:239-286`
             //
             // Gate types and required keys:
             // - "Blue Key Gate"  → ITEM_BLUE_KEY  (310045000)
@@ -464,7 +433,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             };
 
             // Gate must be closed (gate_open == 0) to be opened
-            // C++ Reference: `UserObjectSystem.cpp:251` — `pGateNpc->isGateOpen()`
             if gate_npc.gate_open != 0 {
                 send_fail(session, event.obj_type as u8).await?;
                 return Ok(());
@@ -504,7 +472,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
             if success {
                 // Toggle gate open and broadcast to nearby players
-                // C++ Reference: `UserObjectSystem.cpp:257-278`
                 //   pGateNpc->SendGateFlag((pGateNpc->m_byGateOpen == 0 ? 1 : 0));
                 let new_state = if gate_npc.gate_open == 0 { 1 } else { 0 };
                 world.send_gate_flag(gate_npc.nid, new_state);
@@ -540,9 +507,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Distribute flag victory rewards to the winning nation's players.
-///
-/// C++ Reference: `CGameServerDlg::BattleZoneVictoryCheck()` in `BattleSystem.cpp:606-658`
-///
 /// Rewards (only to winning nation players in their home zone):
 /// - 100,000 gold + 5,000 EXP
 /// - Captain: 500 NP (king) or 300 NP (non-king)
@@ -567,11 +531,9 @@ async fn flag_victory_rewards(world: &crate::world::WorldState, winner_nation: u
             None => continue,
         };
 
-        // C++: pTUser->GetNation() != m_bVictory → skip
         if info.nation != winner_nation {
             continue;
         }
-        // C++: pTUser->GetZoneID() != pTUser->GetNation() → skip
         // Zone 1 = Karus home, Zone 2 = Elmorad home
         let pos = match world.get_position(sid) {
             Some(p) => p,
@@ -598,7 +560,6 @@ async fn flag_victory_rewards(world: &crate::world::WorldState, winner_nation: u
         }
 
         // Victory emotion: StateChangeServerDirect(4, 12)
-        // C++ Reference: BattleSystem.cpp:656 — broadcasts to region
         let mut emotion_pkt = Packet::new(Opcode::WizStateChange as u8);
         emotion_pkt.write_u32(sid as u32);
         emotion_pkt.write_u8(4); // bType = emotion
@@ -608,8 +569,6 @@ async fn flag_victory_rewards(world: &crate::world::WorldState, winner_nation: u
 }
 
 /// Send an object event failure response.
-///
-/// C++ Reference: `UserObjectSystem.cpp:452-456`
 /// Format: `WIZ_OBJECT_EVENT + u8(object_type) + u8(0)`
 async fn send_fail(session: &mut ClientSession, obj_type: u8) -> anyhow::Result<()> {
     let mut pkt = Packet::new(Opcode::WizObjectEvent as u8);
@@ -728,7 +687,6 @@ mod tests {
     #[test]
     fn test_zone_constants_for_gate_logic() {
         // Delos zone and Bifrost zone IDs used in gate lever logic
-        // C++ Reference: Define.h:140-141 — ZONE_DELOS=30, ZONE_BIFROST=31
         assert_eq!(ZONE_DELOS, 30);
         assert_eq!(ZONE_BIFROST, 31);
     }
@@ -737,7 +695,6 @@ mod tests {
 
     #[test]
     fn test_krowaz_key_item_ids() {
-        // C++ Reference: Define.h:339-341
         const ITEM_BLUE_KEY: u32 = 310_045_000;
         const ITEM_RED_KEY: u32 = 310_046_000;
         const ITEM_BLACK_KEY: u32 = 310_047_000;
@@ -823,7 +780,6 @@ mod tests {
 
     // ── Sprint 318: Bind point validation (by_life + sIndex) ────────
 
-    /// C++ Reference: User.cpp:3850-3854 — bind points require byLife == 1
     /// and sIndex must NOT be 101 (Karus homecoming) or 201 (Elmorad homecoming).
     #[test]
     fn test_bind_point_by_life_valid() {
@@ -872,7 +828,6 @@ mod tests {
 
     #[test]
     fn test_opposing_nation_zone_blocks_warp_gate() {
-        // C++ Reference: UserObjectSystem.cpp:381-383
         // Karus player (nation=1) in Elmorad zone (zone_id=2) → BLOCKED
         let zone_id: u16 = 2;
         let nation: u8 = 1;

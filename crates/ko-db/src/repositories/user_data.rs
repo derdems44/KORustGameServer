@@ -1,6 +1,4 @@
 //! User data persistence repository — genie, daily ops, loot settings, seal exp, return data.
-//!
-//! C++ Reference: `CDBAgent::LoadGenieData`, `CDBAgent::UpdateGenieData`,
 //!                various `USER_*` table operations.
 
 use sqlx::PgPool;
@@ -25,7 +23,6 @@ impl<'a> UserDataRepository<'a> {
 
     /// Load genie data for a user account.
     ///
-    /// C++ Reference: `CDBAgent::LoadGenieData` — loads genie_time, options blob, first_using flag.
     pub async fn load_genie_data(
         &self,
         user_id: &str,
@@ -41,7 +38,6 @@ impl<'a> UserDataRepository<'a> {
 
     /// Save (upsert) genie data for a user account.
     ///
-    /// C++ Reference: `CDBAgent::UpdateGenieData` — called on disconnect and zone change.
     pub async fn save_genie_data(
         &self,
         user_id: &str,

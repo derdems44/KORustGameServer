@@ -1,9 +1,5 @@
 //! WIZ_PARTY (0x2F) handler -- party system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/PartyHandler.cpp`
-//!
 //! ## Sub-opcodes (from `packets.h:364-379`)
-//!
 //! | Code | Name               | Description                      |
 //! |------|--------------------|----------------------------------|
 //! | 0x01 | PARTY_CREATE       | Leader creates party + invites   |
@@ -17,15 +13,11 @@
 //! | 0x1E | PARTY_COMMAND_PROMATE | Transfer command leadership    |
 //! | 0x1F | PARTY_TARGET_NUMBER| Set party target marker          |
 //! | 0x20 | PARTY_ALERT        | Party alert signal               |
-//!
 //! ## PARTY_CREATE Client -> Server
-//!
 //! ```text
 //! [u8 sub_opcode=0x01] [u16 name_len] [bytes target_name] [i8 party_type]
 //! ```
-//!
 //! ## PARTY_INSERT Server -> Client (member info)
-//!
 //! ```text
 //! [u8 PARTY_INSERT=0x03] [u16 result]
 //! If result == 1 (success):
@@ -35,15 +27,11 @@
 //!   [i16 max_mp] [i16 mp] [u8 nation] [u8 0]
 //!   [u32 target_number_id] [i8 party_type] [u8 loyalty_rank]
 //! ```
-//!
 //! ## PARTY_PERMIT Server -> Client (invitation)
-//!
 //! ```text
 //! [u8 PARTY_PERMIT=0x02] [u32 leader_sid] [u16 name_len] [bytes leader_name]
 //! ```
-//!
 //! ## PARTY_HPCHANGE (sub-opcode 0x06 inside WIZ_PARTY)
-//!
 //! ```text
 //! [u8 PARTY_HPCHANGE=0x06] [u32 sid] [i16 max_hp] [i16 hp] [i16 max_mp] [i16 mp]
 //! ```
@@ -63,40 +51,25 @@ use crate::zone::SessionId;
 
 // ── Party sub-opcode constants ──────────────────────────────────────────────
 
-/// C++ Reference: `packets.h:364`
 const PARTY_CREATE: u8 = 0x01;
-/// C++ Reference: `packets.h:365`
 const PARTY_PERMIT: u8 = 0x02;
-/// C++ Reference: `packets.h:366`
 pub(crate) const PARTY_INSERT: u8 = 0x03;
-/// C++ Reference: `packets.h:367`
 const PARTY_REMOVE: u8 = 0x04;
-/// C++ Reference: `packets.h:368`
 const PARTY_DELETE: u8 = 0x05;
-/// C++ Reference: `packets.h:369`
 const PARTY_HPCHANGE: u8 = 0x06;
-/// C++ Reference: `packets.h:370`
 /// Sent to party members when a member levels up.
 pub(crate) const PARTY_LEVELCHANGE: u8 = 0x07;
-/// C++ Reference: `packets.h:371`
 /// Sent to party members when a member changes class (job change).
 pub(crate) const PARTY_CLASSCHANGE: u8 = 0x08;
-/// C++ Reference: `packets.h:372`
 /// Used by `send_user_status_update` (regene.rs, buff_tick.rs) to broadcast
 /// poison/DOT/disease/blind status changes to party members.
 pub(crate) const PARTY_STATUSCHANGE: u8 = 0x09;
-/// C++ Reference: `packets.h:375`
 const PARTY_PROMOTE: u8 = 0x1C;
-/// C++ Reference: `packets.h:379`
 const PARTY_COMMAND_PROMATE: u8 = 0x1E;
-/// C++ Reference: `packets.h:377`
 const PARTY_TARGET_NUMBER: u8 = 0x1F;
-/// C++ Reference: `packets.h:378`
 const PARTY_ALERT: u8 = 0x20;
 
 /// Check if a zone allows cross-nation party formation.
-///
-/// C++ Reference: `Unit.h:85-104` — `isPartnerPartyZone()`
 /// Returns true for Moradon, arenas, Forgotten Temple, Under Castle,
 /// Stone zones, Delos Castellan, Draki Tower, Old Moradon, and Eslant zones.
 fn is_partner_party_zone(zone_id: u16) -> bool {
@@ -152,18 +125,12 @@ const PARTY_ERR_GENERIC: i16 = -7;
 /// Cannot form party in this zone.
 const PARTY_ERR_ZONE_RESTRICTED: i16 = -9;
 /// Missing seeking party item (914057000).
-///
-/// C++ Reference: `PartyHandler.cpp:115` — returned when party_type==2 and target lacks item.
 const PARTY_ERR_SEEKING_ITEM: i16 = -10;
 
 /// Item required for seeking party participation.
-///
-/// C++ Reference: `PartyHandler.cpp:114` — `CheckExistItem(914057000, 1)`
 const SEEKING_PARTY_ITEM: u32 = 914057000;
 
 /// Handle WIZ_PARTY (0x2F) from the client.
-///
-/// C++ Reference: `CUser::PartySystemProcess` in `PartyHandler.cpp:19-57`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -203,9 +170,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Check if the level difference between two players is acceptable for partying.
-///
-/// C++ Reference: `PartyHandler.cpp:171-177`
-///
 /// Level check passes if EITHER condition is true:
 /// - Target level is within +-8 of inviter level
 /// - Target level is within 0.67x to 1.5x of inviter level
@@ -227,8 +191,6 @@ fn is_level_compatible(level_a: u8, level_b: u8) -> bool {
 }
 
 /// Check if a zone restricts party formation.
-///
-/// C++ Reference: `PartyHandler.cpp:99-105`
 fn is_party_restricted_zone(zone_id: u16) -> bool {
     matches!(
         zone_id,
@@ -237,14 +199,11 @@ fn is_party_restricted_zone(zone_id: u16) -> bool {
 }
 
 /// Check if level restriction should be relaxed for this zone.
-///
-/// C++ Reference: `PartyHandler.cpp:169`
 fn is_level_check_relaxed_zone(zone_id: u16) -> bool {
     matches!(zone_id, ZONE_BORDER_DEFENSE_WAR | ZONE_JURAID_MOUNTAIN)
 }
 
 /// Send a PARTY_INSERT error response to the caller.
-///
 /// C++ wire format: `WIZ_PARTY [u8 PARTY_INSERT] [i16 error_code]`
 fn send_party_error(world: &WorldState, sid: SessionId, error_code: i16) {
     let mut pkt = Packet::new(Opcode::WizParty as u8);
@@ -254,9 +213,6 @@ fn send_party_error(world: &WorldState, sid: SessionId, error_code: i16) {
 }
 
 /// Build a PARTY_INSERT member info packet.
-///
-/// C++ Reference: `PartyHandler.cpp:432-448` (AgreeToJoinTheParty)
-///
 /// ```text
 /// [u8 PARTY_INSERT] [u16 1] [u32 sid] [u8 index_hint]
 /// [u16 name_len] [bytes name] [i16 max_hp] [i16 hp] [u8 level] [u16 class]
@@ -286,13 +242,11 @@ pub(crate) fn build_party_member_info(
     pkt.write_u8(0); // padding
     pkt.write_u32(target_number_id as i32 as u32); // NumberTargetID
     pkt.write_i8(party_type);
-    // C++ Reference: User.cpp:4922 — GetLoyaltySymbolRank()
     pkt.write_i8(loyalty_rank);
     pkt
 }
 
 /// Get character info + loyalty symbol rank in a single DashMap read.
-///
 /// Avoids the pattern `get_character_info(sid)` + `get_loyalty_symbol_rank(sid)`
 /// which acquires two separate DashMap locks on the same session.
 fn get_char_with_loyalty(world: &WorldState, sid: SessionId) -> Option<(CharacterInfo, i8)> {
@@ -314,8 +268,6 @@ fn get_char_with_loyalty(world: &WorldState, sid: SessionId) -> Option<(Characte
 }
 
 /// Build a PARTY_HPCHANGE packet for a party member.
-///
-/// C++ Reference: `CUser::SendPartyHPUpdate` in `User.cpp:2646-2656`
 pub fn build_party_hp_update(ch: &CharacterInfo) -> Packet {
     let mut pkt = Packet::new(Opcode::WizParty as u8);
     pkt.write_u8(PARTY_HPCHANGE);
@@ -328,10 +280,7 @@ pub fn build_party_hp_update(ch: &CharacterInfo) -> Packet {
 }
 
 /// Broadcast party HP updates for a member to the entire party.
-///
 /// Called when a member's HP changes (damage, heal, regen).
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:196-199`
 pub fn broadcast_party_hp(world: &WorldState, sid: SessionId) {
     let party_id = match world.get_party_id(sid) {
         Some(id) => id,
@@ -348,11 +297,7 @@ pub fn broadcast_party_hp(world: &WorldState, sid: SessionId) {
 }
 
 /// Build a PARTY_CLASSCHANGE packet for a party member.
-///
 /// Sent to all party members when a member changes class (job change).
-///
-/// C++ Reference: `NPCHandler.cpp:501-508` — `ClassChange()` notifies party
-///
 /// ```text
 /// [u8 PARTY_CLASSCHANGE=0x08] [u32 sid] [u16 new_class]
 /// ```
@@ -365,10 +310,7 @@ pub fn build_party_class_change(sid: SessionId, new_class: u16) -> Packet {
 }
 
 /// Broadcast party class change notification for a member to the entire party.
-///
 /// Called after a member changes class (job change, master change).
-///
-/// C++ Reference: `NPCHandler.cpp:501-508`
 pub fn broadcast_party_class_change(world: &WorldState, sid: SessionId, new_class: u16) {
     let party_id = match world.get_party_id(sid) {
         Some(id) => id,
@@ -382,10 +324,6 @@ pub fn broadcast_party_class_change(world: &WorldState, sid: SessionId, new_clas
 // ── Sub-opcode handlers ─────────────────────────────────────────────────────
 
 /// Handle PARTY_CREATE (0x01) -- leader creates a new party and invites target.
-///
-/// C++ Reference: `CUser::PartyCreateRequest` + `PartyCreateCheck`
-/// in `PartyHandler.cpp:61-202`
-///
 /// Client: `[u8 0x01] [u16 name_len] [bytes target_name] [i8 party_type]`
 async fn handle_party_create(
     session: &mut ClientSession,
@@ -433,7 +371,6 @@ async fn handle_party_create(
     }
 
     // Target must be in-game (character loaded)
-    // C++ Reference: PartyHandler.cpp:107-110 — `if (!pUser->isInGame())`
     if !world.is_session_ingame(target_sid) {
         send_party_error(&world, sid, PARTY_ERR_OFFLINE);
         return Ok(());
@@ -455,21 +392,18 @@ async fn handle_party_create(
     };
 
     // Nation check — skip for partner party zones (Moradon, arenas, etc.)
-    // C++ Reference: PartyHandler.cpp:87 — if (GetNation() != pUser->GetNation() && !isPartnerPartyZone())
     if inviter.nation != target.nation && !is_partner_party_zone(inviter_pos.zone_id) {
         send_party_error(&world, sid, PARTY_ERR_NATION);
         return Ok(());
     }
 
     // Seeking party item requirement (party_type == 2)
-    // C++ Reference: PartyHandler.cpp:113-118 — target must have item 914057000
     if party_type == 2 && !world.check_exist_item(target_sid, SEEKING_PARTY_ITEM, 1) {
         send_party_error(&world, sid, PARTY_ERR_SEEKING_ITEM);
         return Ok(());
     }
 
     // CSW Delos alliance restriction
-    // C++ Reference: PartyHandler.cpp:144-167
     if inviter_pos.zone_id == ZONE_DELOS && inviter.knights_id != target.knights_id {
         let csw = world.csw_event().read().await;
         let csw_active = csw.is_active();
@@ -477,7 +411,6 @@ async fn handle_party_create(
 
         if csw_active {
             // During CSW on Delos, cross-clan parties require alliance.
-            // C++ Reference: PartyHandler.cpp:146 — `GetClanPtr(pUser->GetClanID())`
             // If target has no clan (knights_id == 0), GetClanPtr returns null →
             // entire block is skipped → target is allowed.
             let allowed = if target.knights_id == 0 {
@@ -525,8 +458,6 @@ async fn handle_party_create(
     }
 
     // Level check (relaxed in certain zones, same clan, or chicken mode).
-    // C++ Reference: PartyHandler.cpp:169-178 — same-clan or chicken bypass level check.
-    // C++ Reference: PartyHandler.cpp:170 — `if (!m_bIsChicken && !pUser->m_bIsChicken && ...)`
     let inviter_is_chicken = inviter.level < 30;
     let target_is_chicken = target.level < 30;
     let same_clan = inviter.knights_id > 0 && inviter.knights_id == target.knights_id;
@@ -559,7 +490,6 @@ async fn handle_party_create(
     world.set_party_invitation(target_sid, party_id, sid);
 
     // Send PARTY_PERMIT to target: [u8 PARTY_PERMIT] [u32 leader_sid] [dbyte leader_name]
-    // C++ Reference: PartyHandler.cpp:200 — Packet(WIZ_PARTY) defaults to DByte (u16 length prefix)
     let mut permit_pkt = Packet::new(Opcode::WizParty as u8);
     permit_pkt.write_u8(PARTY_PERMIT);
     permit_pkt.write_u32(sid as u32);
@@ -567,7 +497,6 @@ async fn handle_party_create(
     world.send_to_session_owned(target_sid, permit_pkt);
 
     // Broadcast party leader 'P' symbol to nearby players
-    // C++ Reference: PartyHandler.cpp:197 — `StateChangeServerDirect(6, 1)`
     if let Some((pos, event_room)) = world.with_session(sid, |h| (h.position, h.event_room)) {
         let leader_sc = crate::handler::regene::build_state_change_broadcast(
             sid as u32,
@@ -593,10 +522,6 @@ async fn handle_party_create(
 }
 
 /// Handle PARTY_INSERT (0x03) -- invite a player to an existing party.
-///
-/// C++ Reference: `CUser::PartyInvitationRequest` + `PartyInvitationCheck`
-/// in `PartyHandler.cpp:205-328`
-///
 /// Client: `[u8 0x03] [u16 name_len] [bytes target_name] [i8 party_type]`
 fn handle_party_invite(
     session: &mut ClientSession,
@@ -666,7 +591,6 @@ fn handle_party_invite(
     }
 
     // Target must be in-game (character loaded)
-    // C++ Reference: PartyHandler.cpp:261-264 — `if (!pUser->isInGame())`
     if !world.is_session_ingame(target_sid) {
         send_party_error(&world, sid, PARTY_ERR_OFFLINE);
         return Ok(());
@@ -700,14 +624,12 @@ fn handle_party_invite(
     };
 
     // Nation check — skip for partner party zones (Moradon, arenas, etc.)
-    // C++ Reference: PartyHandler.cpp:237-239
     if inviter.nation != target.nation && !is_partner_party_zone(inviter_pos.zone_id) {
         send_party_error(&world, sid, PARTY_ERR_NATION);
         return Ok(());
     }
 
     // Seeking party item requirement (party_type == 2 or inviter's party_type == 2)
-    // C++ Reference: PartyHandler.cpp:267-272 — `PartyType == 2 || m_sUserPartyType == 2`
     let inviter_party_type = world.with_session(sid, |h| h.party_type).unwrap_or(0);
     if (party_type == 2 || inviter_party_type == 2)
         && !world.check_exist_item(target_sid, SEEKING_PARTY_ITEM, 1)
@@ -729,8 +651,6 @@ fn handle_party_invite(
     }
 
     // Level check (relaxed in certain zones, same clan, or chicken mode).
-    // C++ Reference: PartyHandler.cpp:288-297 — same-clan or chicken bypass level check.
-    // C++ Reference: PartyHandler.cpp:289 — `if (!m_bIsChicken && !pUser->m_bIsChicken && ...)`
     let inviter_is_chicken = inviter.level < 30;
     let target_is_chicken = target.level < 30;
     let same_clan = inviter.knights_id > 0 && inviter.knights_id == target.knights_id;
@@ -748,7 +668,6 @@ fn handle_party_invite(
     world.set_party_invitation(target_sid, party_id, sid);
 
     // Send PARTY_PERMIT to target
-    // C++ Reference: PartyHandler.cpp:326 — Packet(WIZ_PARTY) defaults to DByte (u16 length prefix)
     let mut permit_pkt = Packet::new(Opcode::WizParty as u8);
     permit_pkt.write_u8(PARTY_PERMIT);
     permit_pkt.write_u32(sid as u32);
@@ -764,9 +683,6 @@ fn handle_party_invite(
 }
 
 /// Handle PARTY_PERMIT (0x02) -- accept or decline party invitation.
-///
-/// C++ Reference: `CUser::PartyInsertOrCancel` in `PartyHandler.cpp:331-349`
-///
 /// Client: `[u8 0x02] [u8 accept_flag]`
 fn handle_party_permit(
     session: &mut ClientSession,
@@ -788,7 +704,6 @@ fn handle_party_permit(
 
     if accept == 0 {
         // Declined -- notify leader
-        // C++ Reference: `CUser::DoNotAcceptJoiningTheParty` in `PartyHandler.cpp:519-551`
         let party = match world.get_party(party_id) {
             Some(p) => p,
             None => return Ok(()),
@@ -811,7 +726,6 @@ fn handle_party_permit(
     }
 
     // Accepted: join the party
-    // C++ Reference: `CUser::AgreeToJoinTheParty` in `PartyHandler.cpp:352-516`
 
     let party = match world.get_party(party_id) {
         Some(p) => p,
@@ -851,7 +765,6 @@ fn handle_party_permit(
     }
 
     // Propagate leader's party_type to the joiner
-    // C++ Reference: PartyHandler.cpp — m_sUserPartyType propagates on accept
     let leader_party_type = world
         .with_session(leader_sid_check, |h| h.party_type)
         .unwrap_or(0);
@@ -889,9 +802,6 @@ fn handle_party_permit(
 }
 
 /// Handle PARTY_REMOVE (0x04) -- kick a member or leave the party.
-///
-/// C++ Reference: `CUser::PartyNemberRemove` in `PartyHandler.cpp:681-757`
-///
 /// Client: `[u8 0x04] [u16 target_sid]`
 fn handle_party_remove(
     session: &mut ClientSession,
@@ -927,7 +837,6 @@ fn handle_party_remove(
     }
 
     // Check if only 2 members remain -- if so, disband entirely
-    // C++ Reference: `PartyHandler.cpp:728-736`
     let member_count_without_target = party
         .active_members()
         .iter()
@@ -968,8 +877,6 @@ fn handle_party_remove(
 }
 
 /// Handle PARTY_DELETE (0x05) -- disband the entire party.
-///
-/// C++ Reference: `CUser::PartyisDelete` in `PartyHandler.cpp:554-601`
 fn handle_party_delete(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -1000,7 +907,6 @@ fn handle_party_delete_internal(world: &WorldState, _requester_sid: SessionId, p
     let members = world.disband_party(party_id);
 
     // Remove party leader 'P' symbol from old leader
-    // C++ Reference: PartyHandler.cpp:599 — `StateChangeServerDirect(6, 0)`
     if let Some(lsid) = leader_sid {
         if let Some(pos) = world.get_position(lsid) {
             let sc = crate::handler::regene::build_state_change_broadcast(
@@ -1028,9 +934,6 @@ fn handle_party_delete_internal(world: &WorldState, _requester_sid: SessionId, p
 }
 
 /// Handle PARTY_PROMOTE (0x1C) -- transfer leadership.
-///
-/// C++ Reference: `CUser::PartyLeaderPromote` in `PartyHandler.cpp:604-678`
-///
 /// Client: `[u8 0x1C] [u16 new_leader_sid]`
 fn handle_party_promote(
     session: &mut ClientSession,
@@ -1070,7 +973,6 @@ fn handle_party_promote(
     }
 
     // Update party leader 'P' symbols — remove from old, set on new
-    // C++ Reference: PartyHandler.cpp:645,649
     //   `StateChangeServerDirect(6, 0)` on old leader
     //   `StateChangeServerDirect(6, 1)` on new leader
     if let Some((pos, event_room)) = world.with_session(sid, |h| (h.position, h.event_room)) {
@@ -1106,7 +1008,6 @@ fn handle_party_promote(
     }
 
     // Transfer command leadership to new leader
-    // C++ Reference: PartyHandler.cpp:645-650 — swap command leader on promote
     world.update_party(party_id, |party| {
         if party.command_leader_sid == Some(sid) {
             party.command_leader_sid = Some(new_leader_sid);
@@ -1114,7 +1015,6 @@ fn handle_party_promote(
     });
 
     // Broadcast the new leader info with index_hint=100 (reset to leader)
-    // C++ Reference: `PartyHandler.cpp:652-668`
     let target_number_id = party.target_number_id;
     if let Some((new_leader_ch, lr)) = get_char_with_loyalty(&world, new_leader_sid) {
         let info_pkt = build_party_member_info(&new_leader_ch, 100, target_number_id, 0, lr);
@@ -1140,9 +1040,6 @@ fn handle_party_promote(
 }
 
 /// Handle PARTY_TARGET_NUMBER (0x1F) -- set party target marker.
-///
-/// C++ Reference: `CUser::PartyTargetNumber` in `PartyHandler.cpp:800-819`
-///
 /// Client: `[u8 0x1F] [i16 target_id] [u32 effect_id] [i8 success]`
 fn handle_target_number(
     session: &mut ClientSession,
@@ -1151,7 +1048,6 @@ fn handle_target_number(
     let world = session.world().clone();
     let sid = session.session_id();
 
-    // C++ Reference: PartyHandler.cpp:805 — 850ms shared cooldown
     {
         let blocked = world
             .with_session(sid, |h| {
@@ -1166,7 +1062,6 @@ fn handle_target_number(
         });
     }
 
-    // C++ Reference: PartyHandler.cpp:809 — `isDead()` check
     if world.is_player_dead(sid) {
         return Ok(());
     }
@@ -1180,7 +1075,6 @@ fn handle_target_number(
         None => return Ok(()),
     };
 
-    // C++ Reference: PartyHandler.cpp:809 — only command leader can set target
     let party = match world.get_party(party_id) {
         Some(p) => p,
         None => return Ok(()),
@@ -1205,9 +1099,6 @@ fn handle_target_number(
 }
 
 /// Handle PARTY_ALERT (0x20) -- party alert signal.
-///
-/// C++ Reference: `CUser::PartyAlert` in `PartyHandler.cpp:760-778`
-///
 /// Client: `[u8 0x20] [u8 sub_opcode] [u32 effect_id]`
 fn handle_party_alert(
     session: &mut ClientSession,
@@ -1216,7 +1107,6 @@ fn handle_party_alert(
     let world = session.world().clone();
     let sid = session.session_id();
 
-    // C++ Reference: PartyHandler.cpp:770 — 850ms shared cooldown
     {
         let blocked = world
             .with_session(sid, |h| {
@@ -1231,7 +1121,6 @@ fn handle_party_alert(
         });
     }
 
-    // C++ Reference: PartyHandler.cpp:773 — `isDead()` check
     if world.is_player_dead(sid) {
         return Ok(());
     }
@@ -1244,7 +1133,6 @@ fn handle_party_alert(
         None => return Ok(()),
     };
 
-    // C++ Reference: PartyHandler.cpp:773 — only command leader can send alerts
     let party = match world.get_party(party_id) {
         Some(p) => p,
         None => return Ok(()),
@@ -1262,9 +1150,6 @@ fn handle_party_alert(
 }
 
 /// Handle PARTY_COMMAND_PROMATE (0x1E) -- transfer command leadership.
-///
-/// C++ Reference: `CUser::PartyCommand` in `PartyHandler.cpp:781-797`
-///
 /// Client: `[u8 0x1E] [i16 member_sid]`
 fn handle_party_command(
     session: &mut ClientSession,
@@ -1273,7 +1158,6 @@ fn handle_party_command(
     let world = session.world().clone();
     let sid = session.session_id();
 
-    // C++ Reference: PartyHandler.cpp:784 — 850ms shared cooldown
     {
         let blocked = world
             .with_session(sid, |h| {
@@ -1301,7 +1185,6 @@ fn handle_party_command(
         None => return Ok(()),
     };
 
-    // C++ Reference: PartyHandler.cpp:789 — only command leader can transfer command
     if !party.is_command_leader(sid) {
         return Ok(());
     }
@@ -1311,7 +1194,6 @@ fn handle_party_command(
     }
 
     // Transfer command leadership to target
-    // C++ Reference: PartyHandler.cpp:792-793 — swap m_bPartyCommandLeader
     world.update_party(party_id, |party| {
         party.command_leader_sid = Some(target_sid);
     });
@@ -2153,7 +2035,6 @@ mod tests {
         let _party_b = world.create_party(3).unwrap();
 
         // Handler gating: check is_in_party BEFORE calling add_party_member
-        // C++ Reference: PartyBBS.cpp:91 — if (pUser->isInParty()) return;
         let already_in_party = world.is_in_party(2);
         assert!(
             already_in_party,
@@ -2234,7 +2115,6 @@ mod tests {
     // ── Sprint 248: Same-clan exemption tests ────────────────────────
 
     /// Same-clan members should bypass level check.
-    /// C++ Reference: PartyHandler.cpp:170 — `(!isInClan() || GetClanID() != pUser->GetClanID())`
     #[test]
     fn test_same_clan_bypasses_level_check() {
         // Two players with same knights_id bypass level check
@@ -2271,28 +2151,24 @@ mod tests {
     // ── Sprint 264: Seeking party item + CSW Delos alliance ──────────
 
     /// Seeking party item constant should be 914057000.
-    /// C++ Reference: PartyHandler.cpp:114
     #[test]
     fn test_seeking_party_item_constant() {
         assert_eq!(SEEKING_PARTY_ITEM, 914057000);
     }
 
     /// Seeking party error code should be -10.
-    /// C++ Reference: PartyHandler.cpp:115
     #[test]
     fn test_seeking_party_error_code() {
         assert_eq!(PARTY_ERR_SEEKING_ITEM, -10);
     }
 
     /// ZONE_DELOS constant should be 30.
-    /// C++ Reference: Define.h
     #[test]
     fn test_zone_delos_constant() {
         assert_eq!(ZONE_DELOS, 30);
     }
 
     /// Seeking party error packet should have correct format.
-    /// C++ Reference: PartyHandler.cpp:113-118
     #[test]
     fn test_seeking_party_error_packet_format() {
         let world = WorldState::new();
@@ -2323,7 +2199,6 @@ mod tests {
     }
 
     /// CSW Delos: cross-clan party without alliance should get error -3.
-    /// C++ Reference: PartyHandler.cpp:144-167
     #[test]
     fn test_csw_delos_cross_clan_no_alliance_rejected() {
         use crate::world::{CswEventState, CswOpStatus, KnightsInfo};
@@ -2353,7 +2228,6 @@ mod tests {
     }
 
     /// CSW Delos: same-clan party should be allowed even during CSW.
-    /// C++ Reference: PartyHandler.cpp:149 — `GetClanID() != pUser->GetClanID()`
     #[test]
     fn test_csw_delos_same_clan_allowed() {
         // Same clan → the cross-clan check is skipped
@@ -2368,7 +2242,6 @@ mod tests {
     // ── Sprint 296: Clanless target CSW Delos fix ──────────────────
 
     /// CSW Delos: clanless target should be allowed (C++ GetClanPtr(0) returns null → block skipped).
-    /// C++ Reference: PartyHandler.cpp:146 — `CKnights * pKnights = g_pMain->GetClanPtr(pUser->GetClanID())`
     #[test]
     fn test_csw_delos_clanless_target_allowed() {
         // When target has no clan (knights_id == 0), C++ GetClanPtr returns null,
@@ -2392,7 +2265,6 @@ mod tests {
     }
 
     /// Genie active trade check constant.
-    /// C++ Reference: TradeHandler.cpp:82 — `m_bGenieStatus`
     #[test]
     fn test_genie_active_blocks_trade() {
         let world = WorldState::new();
@@ -2489,7 +2361,6 @@ mod tests {
 
     // ── Sprint 282: Party 850ms shared cooldown ──────────────────────────
 
-    /// C++ Reference: PartyHandler.cpp — m_lasttargetnumbertime shared across
     /// PartyTargetNumber, PartyAlert, and PartyCommand (850ms cooldown).
     #[test]
     fn test_party_target_number_cooldown_constant() {
@@ -2516,7 +2387,6 @@ mod tests {
 
     // ── Sprint 320: Party target isInGame validation ────────────────
 
-    /// C++ Reference: PartyHandler.cpp:107-110 — target must be isInGame().
     /// PARTY_ERR_OFFLINE (-6) should be used for offline targets.
     #[test]
     fn test_party_err_offline_code() {
@@ -2572,7 +2442,6 @@ mod tests {
 
     // ── Sprint 320: StateChange party leader symbol ─────────────────
 
-    /// C++ Reference: PartyHandler.cpp:197 — `StateChangeServerDirect(6, 1)`
     /// Party leader 'P' symbol is broadcast with state_change type=6, buff=1.
     #[test]
     fn test_party_leader_state_change_packet_format() {
@@ -2591,7 +2460,6 @@ mod tests {
         // buff = show
     }
 
-    /// C++ Reference: PartyHandler.cpp:599 — `StateChangeServerDirect(6, 0)`
     /// Removing party leader symbol on disband.
     #[test]
     fn test_party_leader_remove_state_change_packet() {
@@ -2618,7 +2486,6 @@ mod tests {
 
     // ── Sprint 321: Chicken mode party level bypass ─────────────────
 
-    /// C++ Reference: PartyHandler.cpp:170 — `m_bIsChicken` = level < 30.
     /// Chicken players bypass level compatibility check.
     #[test]
     fn test_chicken_mode_bypasses_level_check() {

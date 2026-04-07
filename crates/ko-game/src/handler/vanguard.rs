@@ -1,14 +1,9 @@
 //! WIZ_VANGUARD (0xB6) handler -- Wanted Event System.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/WandetEvent.cpp`
-//!
 //! ## Sub-opcodes
-//!
 //! | Value | Name            | Description                              |
 //! |-------|-----------------|------------------------------------------|
 //! | 1     | Register        | Player registers for the Wanted event    |
 //! | 2     | UserList/Move   | Server sends wanted user list / movement |
-//!
 //! The Wanted Event selects random players in PK zones and marks them
 //! as "wanted". Killing a wanted player earns loyalty and items.
 //! Registration is via WIZ_VANGUARD sub-opcode 1.
@@ -45,9 +40,6 @@ mod move_sub {
 use crate::world::{NATION_ELMORAD, NATION_KARUS};
 
 /// Handle incoming WIZ_VANGUARD (0xB6) packet.
-///
-/// C++ Reference: `CUser::WantedProcess()` in `WandetEvent.cpp:294-308`
-///
 /// The client sends sub-opcode 1 to register for the wanted event.
 pub fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
@@ -76,9 +68,6 @@ pub fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Result<()>
 }
 
 /// Map a zone ID to a wanted event room index (0-2).
-///
-/// C++ Reference: `CGameServerDlg::wantedgetroom(uint8 zoneid)` in `WandetEvent.cpp:4-9`
-///
 /// Returns `None` if the zone is not a PK zone with a wanted event room.
 pub fn wanted_get_room(zone_id: u16) -> Option<usize> {
     match zone_id {
@@ -90,8 +79,6 @@ pub fn wanted_get_room(zone_id: u16) -> Option<usize> {
 }
 
 /// Map a wanted event room index (0-2) back to a zone ID.
-///
-/// C++ Reference: `CGameServerDlg::wantedgetzone(uint8 room)` in `WandetEvent.cpp:11-16`
 pub fn wanted_get_zone(room: usize) -> Option<u16> {
     match room {
         0 => Some(ZONE_RONARK_LAND),
@@ -102,15 +89,11 @@ pub fn wanted_get_zone(room: usize) -> Option<u16> {
 }
 
 /// Build a WIZ_VANGUARD position broadcast packet for a wanted player.
-///
-/// C++ Reference: `CUser::WantedEventUserisMove()` in `WandetEvent.cpp:245-250`
-///
 /// Packet format:
 /// ```text
 /// WIZ_VANGUARD(0xB6) << u8(0x02) << u8(0x02) << u8(0x01) << u8(0x00)
 ///                     << u16(x) << u16(z) << string(name)
 /// ```
-///
 /// Sent to the enemy nation in the same zone so they can see the wanted
 /// player's position on their minimap.
 pub fn build_wanted_position_packet(x: u16, z: u16, name: &str) -> Packet {
@@ -126,9 +109,6 @@ pub fn build_wanted_position_packet(x: u16, z: u16, name: &str) -> Packet {
 }
 
 /// Build a WIZ_VANGUARD user list packet for broadcasting wanted player names.
-///
-/// C++ Reference: `CGameServerDlg::NewWantedEventUserListSend()` in `WandetEvent.cpp:99-131`
-///
 /// Packet format:
 /// ```text
 /// WIZ_VANGUARD(0xB6) << u8(0x02) << u8(0x01) << u8(count)
@@ -146,9 +126,6 @@ pub fn build_wanted_user_list_packet(names: &[String]) -> Packet {
 }
 
 /// Broadcast wanted player positions to the enemy nation in a given zone.
-///
-/// C++ Reference: `CUser::WantedEventUserisMove()` in `WandetEvent.cpp:224-262`
-///
 /// For each wanted player in the zone, builds a position packet and sends it
 /// to the enemy nation. This is called periodically (every 60s) during a
 /// running wanted event.
@@ -170,17 +147,13 @@ pub fn broadcast_wanted_user_positions(world: &WorldState, zone_id: u16) {
 }
 
 /// Check all wanted event rooms and broadcast positions for active events.
-///
-/// C++ Reference: Called from the main timer loop when event status is `running`.
 /// Uses `m_WantedSystemMapShowTime` to throttle to every 60 seconds.
-///
 /// This function checks the global map-show timer and, if enough time has
 /// elapsed, iterates all 3 wanted rooms and broadcasts positions for rooms
 /// in the `Running` state.
 pub fn tick_wanted_position_broadcasts(world: &WorldState, now_unix: u64) {
     use std::sync::atomic::Ordering;
 
-    // C++ Reference: WandetEvent.cpp:243-244 — only broadcast when m_WantedSystemMapShowTime != 0
     // and elapsed > 60. When last_show == 0 (not yet initialized), skip broadcast entirely.
     let last_show = world.wanted_map_show_time.load(Ordering::Relaxed);
     if last_show == 0 {
@@ -212,18 +185,12 @@ pub fn tick_wanted_position_broadcasts(world: &WorldState, now_unix: u64) {
 }
 
 /// Wanted event item given to the killer of a wanted player.
-///
-/// C++ Reference: `WandetEvent.cpp:288` — `GiveItem("Wanted Event", 914052000, 1)`
 const WANTED_KILL_ITEM: u32 = 914052000;
 
 /// Loyalty reward for killing a wanted player (solo).
-///
-/// C++ Reference: `WandetEvent.cpp:289` — `isInParty() ? 160 : 80`
 const WANTED_KILL_LOYALTY_SOLO: u32 = 80;
 
 /// Loyalty reward for killing a wanted player (in party).
-///
-/// C++ Reference: `WandetEvent.cpp:289` — `isInParty() ? 160 : 80`
 const WANTED_KILL_LOYALTY_PARTY: u32 = 160;
 
 /// Delay in seconds before warping the killer to their nation town.
@@ -231,9 +198,6 @@ const WANTED_KILL_WARP_DELAY_SECS: u64 = 15;
 
 /// Handle the death of a wanted player: clear their wanted status,
 /// give rewards to the killer, and schedule a delayed town warp for the killer.
-///
-/// C++ Reference: `CUser::NewWantedEventLoqOut(Unit* pKiller)` in `WandetEvent.cpp:265-292`
-///
 /// Called from the combat/death handler when a wanted player is killed.
 /// - Clears `is_wanted` / `wanted_expiry_time` on the victim
 /// - Removes the victim from the wanted room list
@@ -270,7 +234,6 @@ pub fn handle_wanted_kill(world: &Arc<WorldState>, victim_sid: SessionId, killer
     world.give_item_with_expiry(killer_sid, WANTED_KILL_ITEM, 1, 0);
 
     // Give killer loyalty — double if in party
-    // C++ Reference: WandetEvent.cpp:289 — `isInParty() ? 160 : 80`
     let in_party = world.is_in_party(killer_sid);
     let loyalty_amount = if in_party {
         WANTED_KILL_LOYALTY_PARTY
@@ -299,7 +262,6 @@ pub fn handle_wanted_kill(world: &Arc<WorldState>, victim_sid: SessionId, killer
 }
 
 /// Schedule a 15-second delayed warp for the killer to their nation's town.
-///
 /// After killing a wanted player, the killer is warped back to their nation's
 /// town zone to prevent camping. Uses `tokio::spawn` with a 15s sleep.
 fn schedule_killer_town_warp(world: Arc<WorldState>, killer_sid: SessionId) {
@@ -337,8 +299,6 @@ fn schedule_killer_town_warp(world: Arc<WorldState>, killer_sid: SessionId) {
 }
 
 /// Build a WIZ_ZONE_CHANGE teleport packet for the wanted kill warp.
-///
-/// C++ Reference: `CUser::ZoneChange()` — type 3 = server-initiated teleport.
 /// Coords 0,0 = use default spawn position for the zone.
 pub fn build_wanted_warp_packet(zone_id: u16, nation: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizZoneChange as u8);
@@ -354,44 +314,27 @@ pub fn build_wanted_warp_packet(zone_id: u16, nation: u8) -> Packet {
 }
 
 /// Maximum number of players selected per nation per cycle.
-///
-/// C++ Reference: `GameDefine.h:1390` — `#define MAX_SELECTING_USER 5`
 const MAX_SELECTING_USER: usize = 5;
 
 /// Survival reward item ID.
-///
-/// C++ Reference: `WandetEvent.cpp:83` — `GiveItem("Wanted Event", 914052000, 1)`
 const WANTED_SURVIVAL_ITEM: u32 = 914052000;
 
 /// Survival NP reward.
-///
-/// C++ Reference: `WandetEvent.cpp:84` — `SendLoyaltyChange("Wanted Event", 300)`
 const WANTED_SURVIVAL_LOYALTY: i32 = 300;
 
 /// Invitation window duration in seconds.
-///
-/// C++ Reference: `WandetEvent.cpp:210` — `invitationtime = UNIXTIME + 11`
 const INVITATION_DURATION_SECS: u64 = 11;
 
 /// Initial delay before the first wanted cycle (seconds).
-///
-/// C++ Reference: `WandetEvent.cpp` — `nextselecttime = UNIXTIME + 60`
 const INITIAL_NEXT_SELECT_SECS: u64 = 60;
 
 /// List-sending phase duration in seconds.
-///
-/// C++ Reference: `WandetEvent.cpp:52` — `listtime = UNIXTIME + 10`
 const LIST_PHASE_SECS: u64 = 10;
 
 /// Running phase duration in seconds (10 minutes).
-///
-/// C++ Reference: `WandetEvent.cpp:53` — `finishtime = UNIXTIME + (10 * MINUTE)`
 const RUN_PHASE_SECS: u64 = 600;
 
 /// Handle the WIZ_VANGUARD Register sub-opcode.
-///
-/// C++ Reference: `CUser::WantedRegister()` in `WandetEvent.cpp:310-343`
-///
 /// Called when a player accepts the wanted invitation. Adds them to
 /// the room list, sets `is_wanted`, and applies the wanted buff skill.
 fn handle_wanted_register(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -475,9 +418,6 @@ fn handle_wanted_register(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Main wanted event lifecycle tick — called every second.
-///
-/// C++ Reference: `CGameServerDlg::NewWantedEventMainTimer()` in `WandetEvent.cpp:29-68`
-///
 /// State machine:
 /// - Disabled → (nextselecttime expired) → Selecting → Invitation
 /// - Invitation → (invitationtime expired, has registrants) → ListSending
@@ -587,8 +527,6 @@ pub fn tick_wanted_event_lifecycle(world: &WorldState, now: u64) {
 }
 
 /// Select random players in a PK zone and send invitation packets.
-///
-/// C++ Reference: `CGameServerDlg::NewWantedEventSelecting()` in `WandetEvent.cpp:135-222`
 fn wanted_event_selecting(world: &WorldState, room_idx: usize, zone_id: u16, now: u64) {
     // Clear any leftover lists
     {
@@ -642,8 +580,6 @@ fn wanted_event_selecting(world: &WorldState, room_idx: usize, zone_id: u16, now
 }
 
 /// Build the WIZ_VANGUARD invitation packet sent to selected players.
-///
-/// C++ Reference: `WandetEvent.cpp:200-202`
 /// ```text
 /// Packet result(WIZ_VANGUARD, uint8(0x01));
 /// result << uint8(0x01) << uint8(0x01);
@@ -657,8 +593,6 @@ fn build_wanted_invitation_packet() -> Packet {
 }
 
 /// Send the wanted user name list to the enemy nation in the zone.
-///
-/// C++ Reference: `CGameServerDlg::NewWantedEventUserListSend()` in `WandetEvent.cpp:99-131`
 fn wanted_event_user_list_send(world: &WorldState, room_idx: usize, zone_id: u16) {
     // Clone SID lists under a short lock, then resolve names without holding wanted_rooms.
     // Avoids lock-ordering risk between wanted_rooms RwLock and sessions DashMap.
@@ -689,8 +623,6 @@ fn wanted_event_user_list_send(world: &WorldState, room_idx: usize, zone_id: u16
 }
 
 /// Give survival rewards to all remaining wanted players at event end.
-///
-/// C++ Reference: `CGameServerDlg::NewWantedEventFinishing()` in `WandetEvent.cpp:70-97`
 fn wanted_event_finishing(world: &WorldState, room_idx: usize) {
     let all_sids: Vec<SessionId> = {
         let rooms = world.wanted_rooms().read();
@@ -741,8 +673,6 @@ fn wanted_event_finishing(world: &WorldState, room_idx: usize) {
 }
 
 /// Reset the wanted event room data for the next cycle.
-///
-/// C++ Reference: `CGameServerDlg::NewWantedEventResetData()` in `WandetEvent.cpp:18-27`
 fn wanted_event_reset_data(world: &WorldState, room_idx: usize, now: u64) {
     let mut rooms = world.wanted_rooms().write();
     let room = &mut rooms[room_idx];
@@ -764,7 +694,6 @@ fn now_secs() -> u64 {
 }
 
 /// Initialize the wanted event rooms at server startup.
-///
 /// Sets `next_select_time` = now + 60s for each room, and enables the system
 /// if auto_wanted is configured.
 pub fn initialize_wanted_rooms(world: &WorldState) {
@@ -785,10 +714,7 @@ pub fn initialize_wanted_rooms(world: &WorldState) {
 }
 
 /// Handle the zone change or disconnect of a wanted player (no killer).
-///
-/// C++ Reference: `CUser::NewWantedEventLoqOut()` (no pKiller argument)
 /// in `WandetEvent.cpp:265-285` and `ZoneChangeWarpHandler.cpp:289`
-///
 /// Called when a wanted player zone changes or disconnects. Clears
 /// their wanted status and removes them from the event room without
 /// awarding any killer rewards.

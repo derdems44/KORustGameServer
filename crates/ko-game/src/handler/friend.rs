@@ -1,14 +1,9 @@
 //! WIZ_FRIEND_PROCESS (0x49) handler — friend list system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/FriendHandler.cpp`
-//! C++ Reference: `KOOriginalGameServer/GameServer/DatabaseThread.cpp:1363-1429`
-//!
 //! Sub-opcodes:
 //! - 1 = FRIEND_REQUEST: Load friend list from DB + report online status
 //! - 2 = FRIEND_REPORT: Refresh online/offline status for friend list
 //! - 3 = FRIEND_ADD: Add a friend by name
 //! - 4 = FRIEND_REMOVE: Remove a friend by name
-//!
 //! Max 24 friends per player.
 
 use ko_db::repositories::friend::FriendRepository;
@@ -19,8 +14,6 @@ use crate::session::{ClientSession, SessionState};
 use crate::world::MAX_ID_SIZE;
 
 /// Maximum number of friends per player.
-///
-/// C++ Reference: `FriendHandler.cpp:3` — `#define MAX_FRIEND_COUNT 24`
 const MAX_FRIEND_COUNT: u16 = 24;
 
 /// Friend sub-opcodes from `packets.h:775-778`.
@@ -80,9 +73,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Get the online status and session ID for a friend.
-///
-/// C++ Reference: `CUser::GetFriendStatus` in `FriendHandler.cpp:95-116`
-///
 /// Returns (session_id, status):
 /// - status 0 = offline
 /// - status 1 = online, not in party
@@ -100,14 +90,10 @@ fn get_friend_status(session: &ClientSession, name: &str) -> (i32, u8) {
 }
 
 /// FRIEND_REQUEST (1): Load friend list from DB, then report online status.
-///
-/// C++ Reference: `CUser::ReqRequestFriendList` in `DatabaseThread.cpp:1386-1398`
-///
 /// Flow:
 /// 1. Load friend names from DB
 /// 2. For each friend, get online status
 /// 3. Send response in FRIEND_REPORT format
-///
 /// Response: WIZ_FRIEND_PROCESS + u8(FRIEND_REQUEST) + u16(count)
 ///           + for each: string(name) + i32(session_id) + u8(status)
 async fn handle_friend_request(session: &mut ClientSession, char_name: &str) -> anyhow::Result<()> {
@@ -136,9 +122,6 @@ async fn handle_friend_request(session: &mut ClientSession, char_name: &str) -> 
 }
 
 /// FRIEND_REPORT (2): Client sends list of friend names, server responds with status.
-///
-/// C++ Reference: `CUser::FriendReport` in `FriendHandler.cpp:68-92`
-///
 /// Client sends: u16(count) + for each: string(name)
 /// Response: WIZ_FRIEND_PROCESS + u8(FRIEND_REPORT) + u16(count)
 ///           + for each: string(name) + i32(session_id) + u8(status)
@@ -181,11 +164,6 @@ async fn handle_friend_report(
 }
 
 /// FRIEND_ADD (3): Add a friend by name.
-///
-/// C++ Reference: `CUser::FriendModify` in `FriendHandler.cpp:36-65`
-/// C++ Reference: `CUser::ReqAddFriend` in `DatabaseThread.cpp:1400-1414`
-/// C++ Reference: `CUser::RecvFriendModify` in `FriendHandler.cpp:118-136`
-///
 /// Client sends: u8(FRIEND_ADD) + string(name)
 /// Response: WIZ_FRIEND_PROCESS + u8(FRIEND_ADD) + u8(result) + string(name)
 ///           + u32(session_id) + u8(status)
@@ -247,11 +225,6 @@ async fn handle_friend_add(
 }
 
 /// FRIEND_REMOVE (4): Remove a friend by name.
-///
-/// C++ Reference: `CUser::FriendModify` in `FriendHandler.cpp:36-65`
-/// C++ Reference: `CUser::ReqRemoveFriend` in `DatabaseThread.cpp:1416-1429`
-/// C++ Reference: `CUser::RecvFriendModify` in `FriendHandler.cpp:118-136`
-///
 /// Client sends: u8(FRIEND_REMOVE) + sbyte_string(name)
 /// Response: WIZ_FRIEND_PROCESS + u8(FRIEND_REMOVE) + u8(result) + string(name)
 ///           + u32(session_id) + u8(status)
@@ -288,9 +261,6 @@ async fn handle_friend_remove(
 }
 
 /// Send a friend add/remove result packet.
-///
-/// C++ Reference: `CUser::RecvFriendModify` in `FriendHandler.cpp:118-136`
-///
 /// Response: WIZ_FRIEND_PROCESS + u8(opcode) + u8(result) + string(name) + u32(sid) + u8(status)
 async fn send_friend_modify_result(
     session: &mut ClientSession,
@@ -417,7 +387,6 @@ mod tests {
     /// Validate max friend count matches C++ FriendHandler.cpp:3.
     #[test]
     fn test_friend_max_count_matches_cpp() {
-        // C++: #define MAX_FRIEND_COUNT 24
         assert_eq!(MAX_FRIEND_COUNT, 24);
         // DB repo also has the same constant
         assert_eq!(

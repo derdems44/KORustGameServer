@@ -1,13 +1,8 @@
 //! WIZ_CAPE (0x70) handler — cape customization and purchase.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/KnightCape.cpp`
-//!
 //! Handles cape purchase (normal and ticket/castellan), colour painting,
 //! and cape updates for clans and alliances.
-//!
 //! Packet format (incoming):
 //!   opcode(u8) + cape_id(i16) + r(u8) + g(u8) + b(u8)
-//!
 //! opcode 0 = normal purchase (gold + clan points)
 //! opcode 1 = ticket purchase (castellan cape, requires item 914006000)
 
@@ -40,8 +35,6 @@ const PAINT_COST_CLAN_POINTS: u32 = 36000;
 use super::{HAVE_MAX, SLOT_MAX};
 
 /// Send a cape error response to the client.
-///
-/// C++ Reference: `CUser::SendCapeFail(int16 errorcode)`
 fn send_cape_fail(error_code: i16) -> Packet {
     let mut pkt = Packet::new(WIZ_CAPE);
     pkt.write_i16(error_code);
@@ -67,9 +60,6 @@ fn has_item_in_inventory(
 }
 
 /// Handle WIZ_CAPE from the client.
-///
-/// C++ Reference: `CUser::HandleCapeChange(Packet & pkt)` in `KnightCape.cpp:11-198`
-///
 /// Full validation flow:
 /// 1. Parse opcode (0=normal, 1=ticket), cape_id, RGB
 /// 2. State checks (in game, alive, clan leader, not busy)
@@ -109,7 +99,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Must be: in game, alive, clan leader, not busy, in a clan
-    // C++ Reference: KnightCape.cpp:19-21 — isDead, isClanLeader, isTrading, isMerchanting, isMining, isFishing
     let sid = session.session_id();
     let world = session.world();
     if ch.res_hp_type == crate::world::USER_DEAD
@@ -133,7 +122,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Must be promoted (flag >= 2)
-    // C++ Reference: KnightCape.cpp:27-28
     if clan.flag < 2 {
         session.send_packet(&send_cape_fail(-1)).await?;
         return Ok(());
@@ -141,7 +129,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
     // If in an alliance, only main or sub alliance can change capes.
     // Sub alliance can only change colour (cape_id must be < 0).
-    // C++ Reference: KnightCape.cpp:35-42
     if clan.alliance > 0 {
         if let Some(alliance) = session.world().get_alliance(clan.alliance) {
             if clan.id != alliance.main_clan && clan.id != alliance.sub_clan {
@@ -160,7 +147,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let mut is_castellan_cape = false;
 
     // Cape table validation (when selecting a new cape)
-    // C++ Reference: KnightCape.cpp:44-72
     if cape_id >= 0 {
         let cape_def = match session.world().get_knights_cape(cape_id) {
             Some(c) => c,
@@ -182,14 +168,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         }
 
         // Ticket opcode requires cape type 3 and b_ticket == 1
-        // C++ Reference: KnightCape.cpp:51-52
         if opcode == 1 && (cape_def.b_ticket != 1 || cape_def.b_type != 3) {
             session.send_packet(&send_cape_fail(-1)).await?;
             return Ok(());
         }
 
         // Ticket purchase requires the ticket item
-        // C++ Reference: KnightCape.cpp:54-55
         if opcode == 1
             && !has_item_in_inventory(session.world(), session.session_id(), CASTELLAN_TICKET_ITEM)
         {
@@ -198,21 +182,18 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         }
 
         // If clan already has castellan cape, can only change to another castellan cape
-        // C++ Reference: KnightCape.cpp:57-58
         if clan.castellan_cape && cape_def.b_type != 3 {
             session.send_packet(&send_cape_fail(-10)).await?;
             return Ok(());
         }
 
         // Ticket purchase: clan grade must be <= 3
-        // C++ Reference: KnightCape.cpp:60-61
         if opcode == 1 && clan.grade > 3 {
             session.send_packet(&send_cape_fail(-6)).await?;
             return Ok(());
         }
 
         // Normal purchase: grade and ranking check
-        // C++ Reference: KnightCape.cpp:63-65
         if opcode == 0
             && ((cape_def.by_grade > 0 && clan.grade > cape_def.by_grade as u8)
                 || (clan.flag as i16) < cape_def.by_ranking)
@@ -222,7 +203,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         }
 
         // Normal purchase: gold check
-        // C++ Reference: KnightCape.cpp:67-68
         if opcode == 0 && cape_def.n_buy_price > 0 && ch.gold < cape_def.n_buy_price as u32 {
             session.send_packet(&send_cape_fail(-7)).await?;
             return Ok(());
@@ -233,7 +213,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Paint (colour) cost
-    // C++ Reference: KnightCape.cpp:89-97 (non-1098 version)
     let applying_paint = r != 0 || g != 0 || b != 0;
     if applying_paint {
         // Grade <= 3 required for painting (non-1098 uses flag/accredited check,
@@ -246,14 +225,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Final gold check
-    // C++ Reference: KnightCape.cpp:100-101
     if opcode == 0 && ch.gold < req_coins {
         session.send_packet(&send_cape_fail(-7)).await?;
         return Ok(());
     }
 
     // Final clan points check
-    // C++ Reference: KnightCape.cpp:110-111
     if opcode == 0 && req_clan_points > 0 && clan.clan_point_fund < req_clan_points {
         session.send_packet(&send_cape_fail(-9)).await?;
         return Ok(());
@@ -262,7 +239,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     // ── Consume resources ──────────────────────────────────────────────
 
     // Remove ticket item if ticket purchase
-    // C++ Reference: KnightCape.cpp:115-116
     if cape_id >= 0
         && opcode == 1
         && !session
@@ -273,14 +249,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Deduct gold
-    // C++ Reference: KnightCape.cpp:118-119
     if opcode == 0 && req_coins > 0 && !session.world().gold_lose(session.session_id(), req_coins) {
         return Ok(());
     }
 
     // ── Apply cape change ──────────────────────────────────────────────
 
-    // C++ Reference: KnightCape.cpp:121-128
     if cape_id >= 0 {
         if is_castellan_cape {
             let cape_duration_days: u32 = if opcode == 1 { 14 } else { 15 };
@@ -302,7 +276,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Deduct clan points
-    // C++ Reference: KnightCape.cpp:131-134
     if req_clan_points > 0 {
         let new_fund = clan.clan_point_fund.saturating_sub(req_clan_points);
         session.world().update_knights(ch.knights_id, |k| {
@@ -318,7 +291,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Apply paint colours
-    // C++ Reference: KnightCape.cpp:139-148
     let final_r = if applying_paint { r } else { 0 };
     let final_g = if applying_paint { g } else { 0 };
     let final_b = if applying_paint { b } else { 0 };
@@ -381,13 +353,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Build success response ─────────────────────────────────────────
-    // C++ Reference: KnightCape.cpp:150-181
     let mut result = Packet::new(WIZ_CAPE);
     result.write_u16(1); // success
     result.write_u16(clan.alliance);
     result.write_u16(ch.knights_id);
 
-    // C++ Reference: KnightCape.cpp:152-164
     // King path: uint16(king_cape_id) + uint32(0) — NO trailing u8(0)
     // Non-king path: cape_data + u8(R) + u8(G) + u8(B) + uint8(0) trailing
     let is_king = session.world().is_king(ch.nation, &ch.name);
@@ -413,7 +383,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     session.send_packet(&result).await?;
 
     // ── Send KNIGHTS_UPDATE to all clan members ────────────────────────
-    // C++ Reference: CKnights::SendUpdate() in KnightCape.cpp:251-283
     let mut update_pkt = Packet::new(WIZ_KNIGHTS_PROCESS);
     update_pkt.write_u8(KNIGHTS_UPDATE);
     update_pkt.write_u16(updated_clan.id);
@@ -435,7 +404,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         .send_to_knights_members(ch.knights_id, Arc::new(update_pkt), None);
 
     // If in alliance and is alliance leader, update all alliance clans.
-    // C++ Reference: `CKnights::SendAllianceUpdate()` in `KnightCape.cpp:286-306`
     if clan.alliance > 0 && clan.alliance == clan.id {
         if let Some(alliance) = session.world().get_alliance(clan.alliance) {
             if alliance.sub_clan > 0 {
@@ -686,7 +654,6 @@ mod tests {
 
     // ── Sprint 311: King cape response ─────────────────────────────────
 
-    /// C++ Reference: KnightCape.cpp:158-165
     /// King players get king cape IDs (97=Karus, 98=Elmorad) instead of clan cape.
     #[test]
     fn test_king_cape_ids() {
@@ -701,7 +668,6 @@ mod tests {
 
     #[test]
     fn test_king_cape_packet_format() {
-        // C++ Reference: KnightCape.cpp:152-157
         // King cape: [i16 king_cape_id] [u32(0)] — NO trailing u8(0)
         let mut result = Packet::new(WIZ_CAPE);
         result.write_u16(1); // success
@@ -726,7 +692,6 @@ mod tests {
 
     #[test]
     fn test_normal_cape_has_trailing_byte() {
-        // C++ Reference: KnightCape.cpp:162-163
         // Normal cape: [u16 cape] [u8 R] [u8 G] [u8 B] [u8(0)]
         let mut result = Packet::new(WIZ_CAPE);
         result.write_u16(1); // success
@@ -765,7 +730,7 @@ mod tests {
         }
     }
 
-    /// Castellan ticket item ID matches C++ reference.
+    /// Castellan ticket item ID matches expected value.
     #[test]
     fn test_castellan_ticket_item_id() {
         assert_eq!(CASTELLAN_TICKET_ITEM, 914006000);

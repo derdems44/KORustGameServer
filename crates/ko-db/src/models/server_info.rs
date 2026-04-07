@@ -1,6 +1,4 @@
 //! Server info model — maps to `game_server_list` PostgreSQL table.
-//!
-//! C++ Reference: `KOOriginalGameServer/LoginServer/Define.h` (_SERVER_INFO struct)
 
 use sqlx::FromRow;
 
@@ -25,7 +23,6 @@ pub struct ServerInfo {
     pub elmorad_notice: String,
     /// Current online player count (updated every 120s by background task).
     ///
-    /// C++ Reference: `CONCURRENT.zone1_count`
     #[sqlx(default)]
     pub concurrent_users: i32,
 }

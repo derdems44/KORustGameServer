@@ -1,15 +1,11 @@
 //! Knights cape models — maps to `knights_cape`, `knights_cape_castellan_bonus`,
 //! `knights_csw_opt`, and `user_knightdata` PostgreSQL tables.
-//!
-//! C++ Reference:
 //! - `CKnightsCapeSet` in `KnightsCapeSet.h` — cape definitions
 //! - `CCapeCastellanBonusSet` in `CapeCastellanBonusSet.h` — castellan bonuses
 //! - `KNIGHTS_CSW_OPT` — castle siege war configuration
 //! - `USER_KNIGHTDATA` — per-user clan membership data
 
 /// A single knights cape definition row.
-///
-/// C++ equivalent: `CKnightsCapeSet` fields.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct KnightsCapeRow {
     /// Cape index (primary key).
@@ -31,8 +27,6 @@ pub struct KnightsCapeRow {
 }
 
 /// Castellan cape bonus definition.
-///
-/// C++ equivalent: `CCapeCastellanBonusSet` fields.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct KnightsCapeCastellanBonusRow {
     /// Bonus type (primary key, 1 or 2).
@@ -82,8 +76,6 @@ pub struct KnightsCapeCastellanBonusRow {
 }
 
 /// Castle Siege War configuration options (single row).
-///
-/// C++ Reference: CSW configuration parameters.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct KnightsCswOptRow {
     /// Auto-increment ID.
@@ -121,8 +113,6 @@ pub struct KnightsCswOptRow {
 }
 
 /// Per-user clan membership data.
-///
-/// C++ Reference: Loaded during server startup to populate knight member details.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserKnightDataRow {
     /// Clan ID this user belongs to.

@@ -7,7 +7,6 @@ impl WorldState {
 
     /// Check if a player is currently in an active trade.
     ///
-    /// C++ Reference: `CUser::isTrading()` — `m_sExchangeUser != -1`
     pub fn is_trading(&self, sid: SessionId) -> bool {
         self.sessions
             .get(&sid)
@@ -59,7 +58,6 @@ impl WorldState {
     }
     /// Reset all trade state for a single session.
     ///
-    /// C++ Reference: `CUser::ExchangeFinish()`
     pub fn reset_trade(&self, sid: SessionId) {
         if let Some(mut h) = self.sessions.get_mut(&sid) {
             h.trade_state = TRADE_STATE_NONE;
@@ -101,7 +99,6 @@ impl WorldState {
     }
     /// Give back all exchange items to a player (cancel/fail).
     ///
-    /// C++ Reference: `CUser::ExchangeGiveItemsBack()`
     pub fn exchange_give_items_back(&self, sid: SessionId) {
         let items = {
             let handle = match self.sessions.get(&sid) {
@@ -142,7 +139,6 @@ impl WorldState {
 
     /// Check if a player is in any merchant state.
     ///
-    /// C++ Reference: `CUser::isMerchanting()` — `GetMerchantState() != MERCHANT_STATE_NONE`
     pub fn is_merchanting(&self, sid: SessionId) -> bool {
         self.sessions
             .get(&sid)
@@ -151,7 +147,6 @@ impl WorldState {
     }
     /// Check if a player is currently mining.
     ///
-    /// C++ Reference: `CUser::isMining()` in `User.h`
     pub fn is_mining(&self, sid: SessionId) -> bool {
         self.sessions
             .get(&sid)
@@ -160,7 +155,6 @@ impl WorldState {
     }
     /// Check if a player is currently fishing.
     ///
-    /// C++ Reference: `CUser::isFishing()` in `User.h`
     pub fn is_fishing(&self, sid: SessionId) -> bool {
         self.sessions
             .get(&sid)
@@ -373,7 +367,6 @@ impl WorldState {
 
     /// Check if a session is in offline merchant mode.
     ///
-    /// C++ Reference: `Socket.h:101` — `isOfflineStatus()`
     pub fn is_offline_status(&self, sid: SessionId) -> bool {
         self.sessions
             .get(&sid)
@@ -383,7 +376,6 @@ impl WorldState {
 
     /// Activate offline status for a merchant session.
     ///
-    /// C++ Reference: `OfflineMerchantSystem.cpp` — `GetOfflineStatus(_choffstatus::ACTIVE, ...)`
     ///
     /// Checks the CFAIRY slot for a valid offline merchant item, then sets the
     /// offline flag, type, and timer.  Returns `true` if activation succeeded.
@@ -427,7 +419,6 @@ impl WorldState {
 
     /// Deactivate offline status for a session.
     ///
-    /// C++ Reference: `OfflineMerchantSystem.cpp` — `GetOfflineStatus(_choffstatus::DEACTIVE, ...)`
     pub fn deactivate_offline_status(&self, sid: SessionId) {
         if let Some(mut h) = self.sessions.get_mut(&sid) {
             h.is_offline = false;
@@ -438,7 +429,6 @@ impl WorldState {
 
     /// Get the remaining offline minutes for a session.
     ///
-    /// C++ Reference: `CUser::GetOffMerchantTime()` — returns `m_bOfflineTimeCheck`
     pub fn get_offline_remaining_minutes(&self, sid: SessionId) -> u16 {
         self.sessions
             .get(&sid)
@@ -449,7 +439,6 @@ impl WorldState {
     /// Tick offline merchants — decrement remaining minutes for all offline sessions
     /// whose check interval has elapsed.
     ///
-    /// C++ Reference: `User.cpp:1174-1192` — offline tick inside `CUser::Update()`
     ///
     /// Returns a list of session IDs whose offline time has expired (should be
     /// disconnected).

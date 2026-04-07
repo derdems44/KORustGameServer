@@ -47,8 +47,6 @@ pub struct Knights {
 }
 
 /// A knights alliance entry (maps to `knights_alliance` table).
-///
-/// C++ Reference: `_KNIGHTS_ALLIANCE` in `GameDefine.h`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct KnightsAllianceRow {
     pub s_main_alliance_knights: i16,

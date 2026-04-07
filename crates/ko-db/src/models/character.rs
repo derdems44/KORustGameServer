@@ -102,8 +102,6 @@ pub struct UserDeletedItem {
 }
 
 /// A trashed (sold) item available for repurchase (maps to `trash_item_list` table).
-///
-/// C++ Reference: `_DELETED_ITEM` in `GameDefine.h` / `TRASH_ITEMLIST` in MSSQL.
 /// Non-countable items sold to NPC merchants are stored here for 72 minutes
 /// so the player can buy them back at cost * 30.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -119,8 +117,6 @@ pub struct TrashItemRow {
 }
 
 /// A single warehouse slot (maps to `user_warehouse` table).
-///
-/// C++ Reference: `CUser::m_sWarehouseArray[WAREHOUSE_MAX]`
 /// Warehouse is per-account (not per-character).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct WarehouseItem {
@@ -137,8 +133,6 @@ pub struct WarehouseItem {
 }
 
 /// Warehouse coins (gold stored in the inn).
-///
-/// C++ Reference: `CUser::m_iBank` / `GetInnCoins()`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct WarehouseCoins {
     pub str_account_id: String,
@@ -146,8 +140,6 @@ pub struct WarehouseCoins {
 }
 
 /// VIP warehouse metadata (maps to `vip_warehouse` table).
-///
-/// C++ Reference: `CUser::m_bVIPStoragePassword`, `m_bVIPStorageVaultExpiration`,
 /// `m_bWIPStorePassowrdRequest` in `User.h`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct VipWarehouseRow {
@@ -158,8 +150,6 @@ pub struct VipWarehouseRow {
 }
 
 /// A single VIP warehouse item slot (maps to `vip_warehouse_items` table).
-///
-/// C++ Reference: `CUser::m_sVIPWarehouseArray[VIPWAREHOUSE_MAX]`
 /// VIP Warehouse is per-account (not per-character), with 48 slots.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct VipWarehouseItemRow {

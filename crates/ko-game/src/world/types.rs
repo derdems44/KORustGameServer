@@ -1,5 +1,4 @@
 //! Type definitions for WorldState -- enums, structs, and constants.
-//!
 //! Extracted from `world/mod.rs` to reduce file size.
 //! These types are re-exported from `mod.rs` via `pub use types::*;`.
 
@@ -16,48 +15,28 @@ use crate::npc::NpcId;
 use crate::zone::SessionId;
 
 /// User state: standing.
-///
-/// C++ Reference: `User.h` â€” `#define USER_STANDING 1`
 pub const USER_STANDING: u8 = 0x01;
 /// User state: sitting down.
-///
-/// C++ Reference: `User.h` â€” `#define USER_SITDOWN 2`
 pub const USER_SITDOWN: u8 = 0x02;
 /// User state: dead.
-///
-/// C++ Reference: `User.h` â€” `#define USER_DEAD 3`
 pub const USER_DEAD: u8 = 0x03;
 /// User state: interacting with monument.
-///
-/// C++ Reference: `GameDefine.h:1260` — `#define USER_MONUMENT 0x06`
 pub const USER_MONUMENT: u8 = 0x06;
 /// User state: mining.
-///
-/// C++ Reference: `GameDefine.h:1261` â€” `#define USER_MINING 0x07`
 pub const USER_MINING: u8 = 0x07;
 /// User state: fishing (flashing).
-///
-/// C++ Reference: `GameDefine.h:1262` â€” `#define USER_FLASHING 0x08`
 pub const USER_FLASHING: u8 = 0x08;
 
 /// Nation: Karus.
-///
-/// C++ Reference: `Define.h` — `#define NATION_KARUS 1`
 pub const NATION_KARUS: u8 = 1;
 
 /// Nation: El Morad.
-///
-/// C++ Reference: `Define.h` — `#define NATION_ELMORAD 2`
 pub const NATION_ELMORAD: u8 = 2;
 
 /// Maximum character level.
-///
-/// C++ Reference: `CGameServerDlg::m_byMaxLevel = 83`
 pub const MAX_LEVEL: u16 = 83;
 
 /// Premium property opcodes for looking up specific bonus values.
-///
-/// C++ Reference: `PremiumPropertyOpCodes` in `packets.h:340-348`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PremiumProperty {
     /// Gold gain bonus percent from monster drops.
@@ -72,8 +51,7 @@ pub enum PremiumProperty {
     ItemSellPercent,
 }
 
-/// NPC AI state enum â€” matches C++ `NpcState` in `globals.h:80-95`.
-///
+/// NPC AI state enum â€” matches `NpcState` in `globals.h:80-95`.
 /// Each NPC cycles through these states via the AI tick system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -96,32 +74,23 @@ pub enum NpcState {
     Back = 10,
     /// Stun debuff (sleep) â€” frozen for duration, then wakes to Fighting.
     ///
-    /// C++ Reference: `globals.h:93` â€” `NPC_SLEEPING = 11`
     Sleeping = 11,
     /// Lightning stun â€” 2 second freeze, then returns to Standing.
     ///
-    /// C++ Reference: `globals.h:94` â€” `NPC_FAINTING = 12`
     Fainting = 12,
     /// Healer NPC â€” finds and heals injured nearby friendly NPCs.
     ///
-    /// C++ Reference: `globals.h:95` â€” `NPC_HEALING = 13`
     Healing = 13,
     /// Executing a skill â€” waits for cast time, then applies effect.
     ///
-    /// C++ Reference: `globals.h:96` â€” `NPC_CASTING = 14`
     Casting = 14,
 }
 
 /// Maximum distance (squared) from spawn before NPC is leashed back.
-///
-/// C++ Reference: `NpcDefines.h:65` -- `NPC_MAX_MOVE_RANGE2 200`
 pub const NPC_MAX_LEASH_RANGE: f32 = 200.0;
 
 /// Mutable per-NPC runtime AI state.
-///
 /// Stored in `WorldState::npc_ai` DashMap, keyed by NpcId.
-///
-/// C++ Reference: Various fields from `CNpc` class (`Npc.h`)
 #[derive(Debug, Clone)]
 pub struct NpcAiState {
     /// Current AI state.
@@ -138,7 +107,6 @@ pub struct NpcAiState {
     pub target_id: Option<SessionId>,
     /// Current NPC target (for NPC-vs-NPC combat: guards attacking monsters).
     ///
-    /// C++ Reference: `Npc.cpp:6197-6220` â€” guards/monsters/guard-summons can target other NPCs.
     /// When set, `target_id` should be `None` â€” the NPC is fighting another NPC, not a player.
     pub npc_target_id: Option<NpcId>,
     /// Remaining delay before next state tick (in milliseconds).
@@ -149,7 +117,6 @@ pub struct NpcAiState {
     pub regen_time_ms: u64,
     /// Whether this NPC is aggressive (will attack on sight).
     ///
-    /// C++ Reference: `ATROCITY_ATTACK_TYPE = 1`
     pub is_aggressive: bool,
     /// Zone ID this NPC belongs to.
     pub zone_id: u16,
@@ -159,90 +126,70 @@ pub struct NpcAiState {
     pub region_z: u16,
     /// Timestamp (tick ms) when sleeping/fainting ends.
     ///
-    /// C++ Reference: `CNpc::m_tFaintingTime`
     pub fainting_until_ms: u64,
     /// Previous AI state before entering CASTING.
     ///
-    /// C++ Reference: `CNpc::m_OldNpcState`
     pub old_state: NpcState,
     /// Skill ID currently being cast (0 = none).
     ///
-    /// C++ Reference: `CNpc::m_nActiveSkillID`
     pub active_skill_id: u32,
     /// Target ID for the skill being cast (-1 = none).
     ///
-    /// C++ Reference: `CNpc::m_sActiveTargetID`
     pub active_target_id: i32,
     /// Cast time of active skill in ms (0 = none).
     ///
-    /// C++ Reference: `CNpc::m_sActiveCastTime`
     pub active_cast_time_ms: u64,
     /// Whether this NPC has pack behavior (calls friends when attacked).
     ///
-    /// C++ Reference: `CNpc::m_bHasFriends`
     pub has_friends: bool,
     /// Family type for group AI â€” same-family NPCs assist each other.
     ///
-    /// C++ Reference: `CNpcTable::m_byFamilyType`
     pub family_type: u8,
     /// Skill cooldown timestamp (tick ms) â€” prevents magic spam.
     ///
-    /// C++ Reference: `CNpc::m_sSkillCoolDown[0]`
     pub skill_cooldown_ms: u64,
     /// Nation of the NPC (1=Karus, 2=Elmorad, 0=neutral).
     ///
-    /// C++ Reference: `CNpc::m_byGroup`
     pub nation: u8,
     /// Whether this NPC (type 191 tower) is currently owned/mounted by a player.
     ///
-    /// C++ Reference: `CNpc::m_isTowerOwner`
     pub is_tower_owner: bool,
     /// NPC attack type â€” 0 = TENDER (passive), 1 = ATROCITY (aggressive).
     ///
-    /// C++ Reference: `NpcDefines.h:137-139` â€” `TENDER_ATTACK_TYPE = 0`, `ATROCITY_ATTACK_TYPE = 1`
     /// TENDER monsters only attack when they (or their pack) are damaged first.
     /// ATROCITY monsters attack players on sight.
     pub attack_type: u8,
     /// Tick timestamp (ms) of last combat interaction (damage dealt/received).
     ///
-    /// C++ Reference: `CNpc::m_Target.m_tLastDamageTime` — if 12 seconds pass without
     /// any combat activity, the NPC disengages from TRACING and returns to STANDING.
     pub last_combat_time_ms: u64,
     /// Duration in seconds â€” if > 0, NPC will die after this many seconds.
     ///
-    /// C++ Reference: `CNpc::m_sDuration` in `NpcThread.cpp:190-194`
     /// Used for summoned/event NPCs that should automatically despawn.
     pub duration_secs: u16,
     /// Tick timestamp (ms) when NPC was spawned (for duration check).
     ///
-    /// C++ Reference: `CNpc::m_iSpawnedTime`
     pub spawned_at_ms: u64,
     /// Tick timestamp (ms) of last HP regen tick.
     ///
-    /// C++ Reference: `CNpc::m_fHPChangeTime` in `NpcThread.cpp:186-188`
     pub last_hp_regen_ms: u64,
     /// Gate open/close state: 0=closed, 1=open, 2=open (event-forced).
     ///
-    /// C++ Reference: `CNpc::m_byGateOpen` in `Npc.h:194`
     pub gate_open: u8,
     /// Wood object cooldown counter â€” incremented each standing tick when open.
     ///
-    /// C++ Reference: `CNpc::WoodCooldownClose` in `Npc.h:210`
     pub wood_cooldown_count: u32,
     /// UTC second counter for boss magic patterns (magic_attack == 3).
     ///
-    /// C++ Reference: `CNpc::m_sUtcSecond` â€” incremented each 1-second boss tick,
     /// reset at cycle-specific thresholds per boss proto ID.
     pub utc_second: u32,
 
     // â”€â”€ Pathfinding fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Computed A* path waypoints (world coordinates). Empty = no active path.
     ///
-    /// C++ Reference: `CNpc::m_pPoint[]` â€” up to MAX_PATH_LINE waypoints.
     pub path_waypoints: Vec<(f32, f32)>,
     /// Current index into `path_waypoints` â€” the next waypoint to move toward.
     ///
-    /// C++ Reference: `CNpc::m_iAniFrameCount`
     pub path_index: usize,
     /// Target X position when the current path was computed.
     /// Used to detect when the target has moved enough to warrant recomputation.
@@ -251,28 +198,22 @@ pub struct NpcAiState {
     pub path_target_z: f32,
     /// Whether the current path was computed via A* (true) or direct line (false).
     ///
-    /// C++ Reference: `CNpc::m_bPathFlag` â€” true = IsNoPathFind (direct), false = PathFind (A*)
     /// Note: C++ naming is inverted; m_bPathFlag=true means *no* pathfinding was used.
     pub path_is_direct: bool,
 
     // ── Movement destination (for incremental step movement) ─────────
     /// Destination X for current MOVING state.
     ///
-    /// C++ Reference: `CNpc::m_fEndPoint_X`
     pub dest_x: f32,
     /// Destination Z for current MOVING state.
     ///
-    /// C++ Reference: `CNpc::m_fEndPoint_Y` (C++ uses Y for the Z axis)
     pub dest_z: f32,
     /// Pattern frame counter — cycles: 0=random, 1=random, 2=return to spawn.
     ///
-    /// C++ Reference: `CNpc::m_iPatternFrame` — keeps monsters near spawn.
     pub pattern_frame: u8,
 }
 
-/// Map C++ `m_byActType` (DB value) to NPC attack type used by the AI.
-///
-/// C++ Reference: `Npc.cpp:4692-4715` â€” `CNpc::InitType()`
+/// Map `m_byActType` (DB value) to NPC attack type used by the AI.
 ///   - `act_type 1,2,3,4` â†’ `TENDER_ATTACK_TYPE (0)` â€” passive, only fights back
 ///   - `default`          â†’ `ATROCITY_ATTACK_TYPE (1)` â€” aggressive, attacks on sight
 pub(crate) fn map_act_type(act_type: u8) -> u8 {
@@ -283,9 +224,6 @@ pub(crate) fn map_act_type(act_type: u8) -> u8 {
 }
 
 /// Check if an NPC type is a gate/object type that needs gate AI logic.
-///
-/// C++ Reference: `Npc.h:446-457` â€” `CNpc::isGate()`
-///
 /// Gate types: NPC_GATE(50), NPC_PHOENIX_GATE(51), NPC_SPECIAL_GATE(52),
 /// NPC_VICTORY_GATE(53), NPC_OBJECT_WOOD(54), NPC_GATE_LEVER(55),
 /// NPC_KARUS_MONUMENT(121), NPC_HUMAN_MONUMENT(122), NPC_GATE2(150),
@@ -298,19 +236,13 @@ pub(crate) fn is_gate_npc_type(npc_type: u8) -> bool {
 }
 
 /// Returns `true` if `npc_type` is a guard NPC that should have AI.
-///
-/// C++ Reference: `Npc.h:397-399` — `isGuard()`:
 ///   NPC_GUARD(11), NPC_PATROL_GUARD(12), NPC_STORE_GUARD(13).
-///
-/// C++ Reference: `Npc.h:407-409` — `isGuardTower()`:
 ///   NPC_GUARD_TOWER1(14), NPC_GUARD_TOWER2(15).
 pub(crate) fn is_guard_npc_type(npc_type: u8) -> bool {
     matches!(npc_type, 11..=15)
 }
 
 /// Per-magic-type cooldown entry.
-///
-/// C++ Reference: `GameDefine.h:78-87` — `_type_cooldown`
 #[derive(Debug, Clone)]
 pub struct TypeCooldown {
     /// When this type was last cast (tick-based).
@@ -327,15 +259,14 @@ pub struct SessionHandle {
     pub character: Option<CharacterInfo>,
     /// Current position in the world.
     pub position: Position,
-    /// Facing direction (set by WIZ_ROTATE). C++ `m_sDirection`.
+    /// Facing direction (set by WIZ_ROTATE). `m_sDirection`.
     pub direction: i16,
     /// Last time the session received a valid packet (monotonic).
     ///
-    /// C++ Reference: `KOSocket::m_lastResponse` — updated in `OnRead()` after
     /// successful decryption.  Used by `Timer_UpdateSessions` for the 10-minute
     /// loading timeout check.
     pub last_response_time: Instant,
-    /// True while a zone change is in progress (C++ `m_bWarp`).
+    /// True while a zone change is in progress
     /// Blocks movement processing until the zone change completes.
     pub zone_changing: bool,
     /// When zone_changing was set to `true`.  Used to auto-clear the flag
@@ -344,87 +275,69 @@ pub struct SessionHandle {
     /// Set when player interacts with a warp gate; cleared on first move with speed > 0,
     /// on warp failure, or on successful zone change completion.
     ///
-    /// C++ Reference: `m_bCheckWarpZoneChange` in `User.h:441`
     pub check_warp_zone_change: bool,
     /// Private chat target session ID, set by WIZ_CHAT_TARGET.
     ///
-    /// C++ Reference: `m_sPrivateChatUser` in `User.h`
     pub private_chat_target: Option<SessionId>,
     /// Current Z-target ID (player or NPC), set by WIZ_TARGET_HP.
     ///
-    /// C++ Reference: `KOSocket::m_targetID` â€" set in `CUser::SendTargetHP`.
     pub target_id: u32,
-    /// Pending clan invitation (C++ `m_bKnightsReq`). 0 = no pending invite.
+    /// Pending clan invitation (`m_bKnightsReq`). 0 = no pending invite.
     pub pending_knights_invite: u16,
     /// Pending gate keeper tax amount. 0 = no pending tax.
     /// Set when server sends WIZ_PREMIUM2 init, cleared on confirm/cancel.
     pub pending_gate_tax: u32,
     /// Active type-4 buffs/debuffs keyed by buff_type.
     ///
-    /// C++ Reference: `Unit::m_buffMap` â€” `std::map<uint8, _BUFF_TYPE4_INFO>`
     pub buffs: HashMap<i32, ActiveBuff>,
     /// Saved magic map for buff persistence: skill_id -> expiry timestamp (ms).
     ///
-    /// C++ Reference: `CUser::m_savedMagicMap` â€” `std::map<uint32, uint64>`
     /// Only skills with ID > 500000 are persisted (scroll buffs).
     pub saved_magic_map: HashMap<u32, u64>,
     /// Active type-3 DOT/HOT effects (max `MAX_TYPE3_REPEAT` slots).
     ///
-    /// C++ Reference: `Unit::m_durationalSkills[MAX_TYPE3_REPEAT]`
     pub durational_skills: Vec<DurationalSkill>,
     /// Inventory slots (equipment + bag + cospre + magic bags).
     ///
-    /// C++ Reference: `CUser::m_sItemArray[INVENTORY_TOTAL]`
     /// Index 0-13: equipment slots, 14-41: inventory bag, 42-76: cospre/magic bags.
     pub inventory: Vec<UserItemSlot>,
     /// Computed equipment stats (updated by SetUserAbility).
     ///
-    /// C++ Reference: `m_sTotalHit`, `m_sTotalAc`, `m_sItemWeight`, etc. in `User.h`
     pub equipped_stats: EquippedStats,
 
     // â”€â”€ Quest State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Per-player quest progress: quest_id -> UserQuestInfo.
     ///
-    /// C++ Reference: `CUser::m_sQuestMap`
     pub quests: HashMap<u16, UserQuestInfo>,
     /// Per-player daily quest progress: quest_index -> UserDailyQuestRow.
     ///
-    /// C++ Reference: `CUser::m_sDailyQuestMap`
     pub daily_quests: HashMap<i16, UserDailyQuestRow>,
     /// NPC the player is currently interacting with (runtime NPC ID).
     ///
-    /// C++ Reference: `CUser::m_sEventNid`
     pub event_nid: i16,
     /// Proto ID of the NPC being interacted with (for Lua/quest convenience).
     ///
-    /// C++ Reference: `CUser::m_sEventSid`
     pub event_sid: i16,
     /// Current quest helper ID for NPC dialog (Lua script).
     ///
-    /// C++ Reference: `CUser::m_nQuestHelperID`
     pub quest_helper_id: u32,
     /// Selected reward index from SelectMsg dialog.
     ///
-    /// C++ Reference: `CUser::bySelectedReward` (NPCHandler.cpp:534,552)
     /// Stored as a member variable; read by `RunQuestExchange` for `item_exchange_exp` lookup.
     pub by_selected_reward: i8,
     /// Select message flag (dialog type from Lua).
     ///
-    /// C++ Reference: `CUser::m_bSelectMsgFlag`
     pub select_msg_flag: u8,
     /// Stored event IDs for each dialog button (MAX_MESSAGE_EVENT=12).
     ///
-    /// C++ Reference: `CUser::m_iSelMsgEvent[MAX_MESSAGE_EVENT]`
     pub select_msg_events: [i32; 12],
 
     // â”€â”€ Warehouse (Inn) State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Warehouse item slots (per-account, 192 slots = 8 pages * 24 items).
     ///
-    /// C++ Reference: `CUser::m_sWarehouseArray[WAREHOUSE_MAX]`
     pub warehouse: Vec<UserItemSlot>,
     /// Gold stored in the warehouse (inn coins).
     ///
-    /// C++ Reference: `CUser::m_iBank` / `GetInnCoins()`
     pub inn_coins: u32,
     /// Whether the warehouse data has been loaded from DB for this session.
     pub warehouse_loaded: bool,
@@ -432,19 +345,15 @@ pub struct SessionHandle {
     // â”€â”€ VIP Warehouse State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// VIP warehouse item slots (per-account, 48 slots).
     ///
-    /// C++ Reference: `CUser::m_sVIPWarehouseArray[VIPWAREHOUSE_MAX]`
     pub vip_warehouse: Vec<UserItemSlot>,
     /// VIP warehouse 4-digit PIN password.
     ///
-    /// C++ Reference: `CUser::m_bVIPStoragePassword`
     pub vip_password: String,
     /// Whether a password is set (0=no, 1=yes).
     ///
-    /// C++ Reference: `CUser::m_bWIPStorePassowrdRequest`
     pub vip_password_request: u8,
     /// Vault key expiration (unix timestamp, 0=not activated).
     ///
-    /// C++ Reference: `CUser::m_bVIPStorageVaultExpiration`
     pub vip_vault_expiry: u32,
     /// Whether VIP warehouse data has been loaded from DB.
     pub vip_warehouse_loaded: bool,
@@ -452,101 +361,84 @@ pub struct SessionHandle {
     // ── Knight Return Symbol ────────────────────────────────────────
     /// Return symbol status (0=inactive, >0=active).
     ///
-    /// C++ Reference: `CUser::ReturnSymbolisOK` (uint32)
     pub return_symbol_ok: u32,
     /// Return symbol expiry (unix timestamp, 0=none).
     ///
-    /// C++ Reference: `CUser::ReturnSymbolTime` (int64)
     pub return_symbol_time: i64,
     /// Whether the shopping mall UI is currently open.
     ///
-    /// C++ Reference: `m_bStoreOpen` in `User.h`
     pub store_open: bool,
 
     // â”€â”€ Trade (Exchange) State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    /// Trade status (C++ `m_sTradeStatue`: 1=None, 2=Sender, 3=Target, 4=Trading, 5=Deciding).
+    /// Trade status (`m_sTradeStatue`: 1=None, 2=Sender, 3=Target, 4=Trading, 5=Deciding).
     pub trade_state: u8,
-    /// The other player's session ID in the trade (C++ `m_sExchangeUser`).
+    /// The other player's session ID in the trade
     pub exchange_user: Option<SessionId>,
-    /// Items listed for trade by this player (C++ `m_ExchangeItemList`).
+    /// Items listed for trade by this player
     pub exchange_items: Vec<ExchangeItem>,
-    /// Whether this player sent the trade request (C++ `m_isRequestSender`).
+    /// Whether this player sent the trade request
     pub is_request_sender: bool,
 
     // â”€â”€ Merchant State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    /// Merchant state (C++ `m_bMerchantState`: -1=None, 0=Selling, 1=Buying).
+    /// Merchant state (`m_bMerchantState`: -1=None, 0=Selling, 1=Buying).
     ///
-    /// C++ Reference: `User.h:66-68`
     pub merchant_state: i8,
-    /// True while setting up a selling merchant (C++ `m_bSellingMerchantPreparing`).
+    /// True while setting up a selling merchant
     pub selling_merchant_preparing: bool,
-    /// True while setting up a buying merchant (C++ `m_bBuyingMerchantPreparing`).
+    /// True while setting up a buying merchant
     pub buying_merchant_preparing: bool,
-    /// Items in the merchant shop (C++ `m_arMerchantItems[MAX_MERCH_ITEMS]`).
+    /// Items in the merchant shop
     pub merchant_items: [MerchData; MAX_MERCH_ITEMS],
-    /// Session ID of the player currently browsing this shop (C++ `m_sPlookerSocketID`).
+    /// Session ID of the player currently browsing this shop
     pub merchant_looker: Option<SessionId>,
-    /// Session ID of the merchant shop this player is browsing (C++ `m_sMerchantsSocketID`).
+    /// Session ID of the merchant shop this player is browsing
     pub browsing_merchant: Option<SessionId>,
 
     // â”€â”€ Ranking State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Daily loyalty earned from PK (reset periodically).
     ///
-    /// C++ Reference: `CUser::m_PlayerKillingLoyaltyDaily`
     pub pk_loyalty_daily: u32,
     /// Premium bonus loyalty earned from PK.
     ///
-    /// C++ Reference: `CUser::m_PlayerKillingLoyaltyPremiumBonus`
     pub pk_loyalty_premium_bonus: u16,
     /// Personal rank (1-based, from DB/ranking system).
     ///
-    /// C++ Reference: `CUser::m_bPersonalRank`
     pub personal_rank: u8,
     /// Knights (clan) rank (1-based, from DB/ranking system).
     ///
-    /// C++ Reference: `CUser::m_bKnightsRank`
     pub knights_rank: u8,
 
     // â”€â”€ Achievement State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Per-player achievement progress: achieve_id -> UserAchieveInfo.
     ///
-    /// C++ Reference: `CUser::m_AchieveMap`
     pub achieve_map: HashMap<u16, UserAchieveInfo>,
     /// Achievement summary stats (play time, kills, deaths, medals, titles).
     ///
-    /// C++ Reference: `CUser::m_AchieveInfo`
     pub achieve_summary: AchieveSummary,
     /// Unix timestamp when this session entered the game (for play_time tracking).
     ///
-    /// C++ Reference: `CUser::m_bAchieveLoginTime`
     pub achieve_login_time: u32,
     /// Active timed challenge: achieve_id -> expiration unix timestamp.
     ///
-    /// C++ Reference: `CUser::m_AchieveTimedMap`
     pub achieve_timed: HashMap<u16, u32>,
     /// Whether a timed challenge is currently active.
     ///
-    /// C++ Reference: `CUser::AchieveChalengeCount`
     pub achieve_challenge_active: bool,
     /// Stat bonuses from equipped skill title [STR, STA, DEX, INT, CHA, Attack, Defence].
     ///
-    /// C++ Reference: `CUser::m_sStatAchieveBonuses[ACHIEVE_STAT_COUNT]`
     pub achieve_stat_bonuses: [i16; 7],
 
     // â”€â”€ Challenge (Duel) State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Non-zero when this player is the challenger (sent the request).
     /// Stores the cancel sub-opcode (PVP=2, CVC=7).
     ///
-    /// C++ Reference: `CUser::m_bRequestingChallenge`
     pub requesting_challenge: u8,
     /// Non-zero when this player is the challengee (received the request).
     /// Stores the reject sub-opcode (PVP=4, CVC=9).
     ///
-    /// C++ Reference: `CUser::m_bChallengeRequested`
     pub challenge_requested: u8,
     /// Session ID of the challenge partner (-1 = none).
     ///
-    /// C++ Reference: `CUser::m_sChallengeUser`
     pub challenge_user: i16,
 
     // â”€â”€ GM / Moderation State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -554,154 +446,123 @@ pub struct SessionHandle {
     /// EXP lost on the most recent death. Used by resurrection skills (Type5)
     /// to restore a percentage of lost EXP via `bExpRecover`.
     ///
-    /// C++ Reference: `User.h:494` — `m_iLostExp`
     /// Set in `OnDeath`, reset to 0 on regene.
     pub lost_exp: i64,
     /// Session ID of the player who killed this player, or -1 for PvE death.
     /// Resurrection skill EXP recovery only works when `who_killed_me == -1`.
     ///
-    /// C++ Reference: `User.h:493` — `m_sWhoKilledMe`
     /// Set to killer SID on PvP death, -1 on NPC/environment death.
     /// Reset to -1 on regene and zone change.
     pub who_killed_me: i16,
 
     /// Whether the player is muted (cannot send chat messages).
     ///
-    /// C++ Reference: `CUser::m_bMute` â€” set by GM +mute command
     pub is_muted: bool,
     /// Attack disabled until this UNIX timestamp. 0 = enabled, u32::MAX = permanent.
     ///
-    /// C++ Reference: `m_attacktimestatus` in `User.h:270`
     pub attack_disabled_until: u32,
     /// Timestamp of last chat message (for flood detection).
     ///
-    /// C++ Reference: CUser::FloodCheck in ChatHandler.cpp
     pub last_chat_time: Instant,
     /// Number of chat messages sent in the current 1-second window.
     pub chat_flood_count: u8,
     /// Timestamp of last `/town` (WIZ_HOME) use, for 1200s cooldown.
     ///
-    /// C++ Reference: `CUser::m_TownTime` in User.h
     pub last_town_time: Instant,
     /// Session ID of the last GM the player PM'd (for rate limiting).
     ///
-    /// C++ Reference: `CUser::m_gmsendpmid` in User.h:177
     pub gm_send_pm_id: u16,
     /// Cooldown expiry for GM PM rate limit (10 minutes when switching GMs).
     ///
-    /// C++ Reference: `CUser::m_gmsendpmtime` in User.h:178
     pub gm_send_pm_time: Instant,
 
     // â”€â”€ Mining & Fishing State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Whether the player is currently mining.
     ///
-    /// C++ Reference: `CUser::m_bMining`
     pub is_mining: bool,
     /// Whether the player is currently fishing.
     ///
-    /// C++ Reference: `CUser::m_bFishing`
     pub is_fishing: bool,
     /// Next auto-mining tick timestamp (unix seconds).
     ///
-    /// C++ Reference: `CUser::m_AutoMiningSystem` — set to `UNIXTIME + 5` per tick.
     pub auto_mining_time: u64,
     /// Next auto-fishing tick timestamp (unix seconds).
     ///
-    /// C++ Reference: `CUser::m_AutoFishingSystem` — set to `UNIXTIME + 5` per tick.
     pub auto_fishing_time: u64,
     /// Bifrost piece exchange cooldown (1500ms).
     ///
-    /// C++ Reference: `CUser::m_BeefExchangeTime` — `UNIXTIME2 + 1500`
     pub beef_exchange_time: Instant,
     /// Event room ID this player is in (1-based, 0 = not in any event room).
     ///
-    /// C++ Reference: `CUser::m_sEventRoom` — used for Monster Stone room isolation.
     /// When a player activates a Monster Stone, this is set to `room_id + 1`.
     /// Combat, NPC visibility, and broadcasts are filtered by this field.
     pub event_room: u16,
     /// Whether the player is looking for a party (set by StateChange Type 2).
     ///
-    /// C++ Reference: `CUser::m_bNeedParty` — toggled via WIZ_STATE_CHANGE type=2.
     pub need_party: u8,
     /// Party leader flag, set via StateChange type=6.
     ///
-    /// C++ Reference: `CUser::m_bPartyLeader`
     pub party_leader: u8,
     /// Party type: 0=normal, 2=Full Moon Rift.
     ///
-    /// C++ Reference: `CUser::m_sUserPartyType` — set during party creation
     /// with the client-provided type. DD entry requires type 2.
     pub party_type: i8,
     /// Whether this player has an active Monster Stone room.
     ///
-    /// C++ Reference: `CUser::m_sMonsterStoneStatus` — set `true` when a
     /// Monster Stone room is activated, `false` on room exit/reset.
     /// Used as a guard in attack/magic handlers for event room isolation.
     pub monster_stone_status: bool,
     /// Draki Tower daily entrance limit (max 3, decremented on each entry).
     ///
-    /// C++ Reference: `CUser::m_bDrakiEnteranceLimit`
     pub draki_entrance_limit: u8,
     /// Draki Tower room ID this player is in (0 = not in Draki Tower).
     ///
-    /// C++ Reference: derived from `GetEventRoom()` + `m_MonsterDrakiTowerList.GetData()`
     pub draki_room_id: u16,
     /// Whether this player has been assigned to an event room during the Running phase.
     ///
-    /// C++ Reference: `CUser::m_bEventJoined` — set `true` when the event manager
     /// places the player into an active event room instance.
     pub joined_event: bool,
     /// Whether this is the player's final event join (no re-entry after death).
     ///
-    /// C++ Reference: `CUser::m_bIsFinalJoinedEvent` — prevents re-entry to
     /// the same event instance if the player has been eliminated.
     pub is_final_joined_event: bool,
     /// Timestamp of last mining/fishing attempt (for 5s cooldown).
     ///
-    /// C++ Reference: `CUser::m_tLastMiningAttempt`
     pub last_mining_attempt: Instant,
 
     /// Timestamp of last item upgrade attempt (for UPGRADE_DELAY cooldown).
     ///
-    /// C++ Reference: `CUser::m_tUpgradeDelay` — 2-second cooldown between upgrades.
     pub last_upgrade_time: Instant,
     /// Session upgrade attempt counter (capped at `UserMaxUpgradeCount`).
     ///
-    /// C++ Reference: `CUser::m_sUserUpgradeCount` — default max 30.
     pub upgrade_count: u8,
 
     /// Timestamp of last potion use (for 2400ms cooldown).
     ///
-    /// C++ Reference: `CUser::t_timeLastPotionUse` in `User.h:35`
     /// Interval: `PLAYER_POTION_REQUEST_INTERVAL = 2400ms`
     pub last_potion_time: Instant,
 
     /// Shared 850ms cooldown for party target/alert/command operations.
     ///
-    /// C++ Reference: `CUser::m_lasttargetnumbertime` in `User.h:212`
     /// Used by `PartyTargetNumber`, `PartyAlert`, and `PartyCommand`.
     pub last_target_number_time: Instant,
 
     /// Team colour for PvP events (soccer, arenas).
     ///
-    /// C++ Reference: `CUser::m_teamColour` in `User.h:103-110`
     /// Values: 0=None, 1=Blue, 2=Red, 3=Outside, 4=Map
     pub team_colour: u8,
 
     //â”€â”€ Attack Rate Limit State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Earliest time the next R-attack is allowed (server-side rate limit).
     ///
-    /// C++ Reference: `CUser::m_lastrattacktime` in `User.h:531`
     /// Set to `now + 900ms` after each valid attack.
     pub last_attack_time: Option<Instant>,
     /// Per-skill cooldown map: skill_id -> expiry Instant.
     ///
-    /// C++ Reference: CUser::m_sCoolDownList
     /// Skills with sReCastTime > 0 are tracked here after MAGIC_EFFECTING.
     pub skill_cooldowns: HashMap<u32, Instant>,
     /// Per-type cooldown map: magic_type -> TypeCooldown.
     ///
-    /// C++ Reference: `CUser::m_sMagicTypeCooldownList`
     /// Prevents casting skills of the same type too rapidly.
     /// Key = bType[0] or bType[1] (0-9, plus synthetic key 10 for type3 with t_1==-1).
     pub magic_type_cooldowns: HashMap<u8, TypeCooldown>,
@@ -709,81 +570,67 @@ pub struct SessionHandle {
     // ── Cast Position Validation ────────────────────────────────────────
     /// Skill ID saved during MAGIC_CASTING for position validation.
     ///
-    /// C++ Reference: `CUser::pUserMagicUsed.castID`
     pub cast_skill_id: u32,
     /// X position saved during MAGIC_CASTING.
     ///
-    /// C++ Reference: `CUser::pUserMagicUsed.castX`
     pub cast_x: f32,
     /// Z position saved during MAGIC_CASTING.
     ///
-    /// C++ Reference: `CUser::pUserMagicUsed.castZ`
     pub cast_z: f32,
 
     /// Movement-during-cast failure flag (AnimatedSkill validation).
     /// Set to true if player moves during MAGIC_CASTING phase.
     /// Causes subsequent FLYING/EFFECTING phases to fail.
     ///
-    /// C++ Reference: `CUser::pUserMagicUsed.bCastFailed`
     pub cast_failed: bool,
 
     /// Last Type 2 animated skill cast timestamp (milliseconds).
     ///
-    /// C++ Reference: `CUser::pUserMagicUsed.status.m_castusetime`
     pub last_type2_cast_time: u64,
 
     /// Last Type 2 animated skill ID cast.
     ///
-    /// C++ Reference: `CUser::pUserMagicUsed.status.skillid`
     pub last_type2_skill_id: u32,
 
     /// Mage Armor reflect element type (0=none, 5=Fire, 6=Ice, 7=Lightning).
     ///
-    /// C++ Reference: `Unit.h:551` — `m_bReflectArmorType`
     /// Set by BUFF_TYPE_MAGE_ARMOR (25) via `pSkill.sSkill % 100`.
     /// Consumed on first hit (one-time reflect).
     pub reflect_armor_type: u8,
 
     /// Dagger defense amount modifier (default 100 = full defense).
     ///
-    /// C++ Reference: `Unit.h:476` — `m_byDaggerRAmount`
     /// Reduced by Eskrima debuff (BUFF_TYPE_DAGGER_BOW_DEFENSE, 45).
     /// Used in `GetACDamage()`: `damage -= damage * (m_sDaggerR * amount / 100) / 250`
     pub dagger_r_amount: u8,
 
     /// Bow defense amount modifier (default 100 = full defense).
     ///
-    /// C++ Reference: `Unit.h:482` — `m_byBowRAmount`
     /// Reduced by Eskrima debuff (BUFF_TYPE_DAGGER_BOW_DEFENSE, 45).
     /// Used in `GetACDamage()`: `damage -= damage * (m_sBowR * amount / 100) / 250`
     pub bow_r_amount: u8,
 
     /// Whether skill-buff mirror damage is active (Minak's Thorn).
     ///
-    /// C++ Reference: `Unit.h` — `m_bMirrorDamage`
     /// Set by BUFF_TYPE_MIRROR_DAMAGE_PARTY (44).
     pub mirror_damage: bool,
 
     /// Mirror damage type: true = reflect to attacker, false = split among party.
     ///
-    /// C++ Reference: `Unit.h` — `m_bMirrorDamageType`
     /// true for skill 492028, false otherwise.
     pub mirror_damage_type: bool,
 
     /// Mirror damage percentage (0-100).
     ///
-    /// C++ Reference: `Unit.h` — `m_byMirrorAmount`
     /// Formula: `mirrorDamage = (m_byMirrorAmount * amount) / 100`
     pub mirror_amount: u8,
 
     // â"€â"€ Trap / Speed Hack State â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     /// Last time this player took trap area damage.
     ///
-    /// C++ Reference: `CUser::m_tLastTrapAreaTime`
     pub last_trap_time: Instant,
     /// Last validated position for speed hack detection.
     ///
-    /// C++ Reference: `CUser::m_LastX`, `CUser::m_LastZ`
     pub speed_last_x: f32,
     /// Last validated Z position for speed hack detection.
     pub speed_last_z: f32,
@@ -791,130 +638,103 @@ pub struct SessionHandle {
     // â”€â”€ Movement Validation State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Consecutive speed-hack violation count (3 = warp Home).
     ///
-    /// C++ Reference: `_MOVE::caughtcount` in `GameDefine.h:4642`
     pub speed_hack_count: u8,
     /// Previous echo value from last move packet (-1 = initial).
     ///
-    /// C++ Reference: `_MOVE::oldecho` in `GameDefine.h:4640`
     pub move_old_echo: i8,
     /// Previous speed value from last move packet.
     ///
-    /// C++ Reference: `_MOVE::oldspeed` in `GameDefine.h:4641`
     pub move_old_speed: i16,
     /// Expiry time for the caught-time window (echo anomaly detection).
     ///
-    /// C++ Reference: `_MOVE::caughttime` in `GameDefine.h:4639`
     pub move_caught_time: Instant,
     /// Previous destination X (Ã—10) for distance/speed ratio correction.
     ///
-    /// C++ Reference: `CUser::m_oldwillx`
     pub move_old_will_x: u16,
     /// Previous destination Z (Ã—10) for distance/speed ratio correction.
     ///
-    /// C++ Reference: `CUser::m_oldwillz`
     pub move_old_will_z: u16,
     /// Previous destination Y (Ã—10) for distance/speed ratio correction.
     ///
-    /// C++ Reference: `CUser::m_oldwilly`
     pub move_old_will_y: u16,
 
     // â”€â”€ Pet State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Active pet data (None if no pet summoned).
     ///
-    /// C++ Reference: `CUser::m_PettingOn` (PET_DATA pointer)
     pub pet_data: Option<PetState>,
     /// Unix timestamp of the last pet satisfaction decay check.
     ///
-    /// C++ Reference: `CUser::m_bPetLastTime` â€” used in `CheckDelayedTime()`.
     /// Pet satisfaction decays by 100 every `PLAYER_TRAINING_INTERVAL * 4` (60s).
     pub last_pet_decay_time: u64,
 
     // ── Cosmetic Visibility Flags ────────────────────────────────────
     /// Whether the player is hiding their cosmetic items (costume).
     ///
-    /// C++ Reference: `CUser::m_bIsHidingCospre` — toggled via WIZ_HELMET
     pub is_hiding_cospre: bool,
     /// Whether the player is hiding their helmet cosmetic.
     ///
-    /// C++ Reference: `CUser::m_bIsHidingHelmet` — toggled via WIZ_HELMET
     pub is_hiding_helmet: bool,
     /// Whether the ITEM_OREADS fairy is currently equipped in COSP_FAIRY slot.
     ///
-    /// C++ Reference: `CUser::m_bFairyCheck` — blocks auto-loot when true
     pub fairy_check: bool,
     /// Whether a robin loot item is equipped in SHOULDER slot (pos 5).
     ///
-    /// C++ Reference: `CUser::m_bAutoLoot` — enables auto-loot on monster death.
     /// Robin items: 950680000, 850680000, 510000000, 520000000
     pub auto_loot: bool,
 
     // â”€â”€ Wanted Event State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Whether this player is a wanted target in the current event.
     ///
-    /// C++ Reference: `CUser::m_iswanted`
     pub is_wanted: bool,
     /// Wanted event expiry time (unix timestamp, 0 = not active).
     ///
-    /// C++ Reference: `CUser::m_iswantedtime`
     pub wanted_expiry_time: u32,
 
     // â”€â”€ Premium State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Account ID for this session (needed for premium periodic save).
     ///
-    /// C++ Reference: `CUser::m_strAccountID`
     pub account_id: String,
     /// Active premium subscriptions: premium_type -> expiration unix timestamp.
     ///
-    /// C++ Reference: `CUser::m_PremiumMap` â€” `PremiumMap` keyed by premium type
     pub premium_map: HashMap<u8, u32>,
     /// Currently active premium type (0 = NO_PREMIUM).
     ///
-    /// C++ Reference: `CUser::m_bPremiumInUse`
     pub premium_in_use: u8,
     /// Clan premium type (0 = none, 13 = CLAN_PREMIUM).
     ///
-    /// C++ Reference: `CUser::m_bClanPremiumInUse`
     pub clan_premium_in_use: u8,
     /// Counter for how many switch premiums have been loaded this session.
     ///
-    /// C++ Reference: `CUser::m_switchPremiumCount`
     pub switch_premium_count: u8,
     /// Account status (1 = premium active, 0 = none).
     ///
-    /// C++ Reference: `CUser::m_bAccountStatus`
     pub account_status: u8,
 
     // â”€â”€ Repurchase (Trash Item) State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Items sold to NPC merchants that can be bought back (max 10,000).
     ///
-    /// C++ Reference: `CUser::m_sDeletedItemMap` â€” `CSTLMap<_DELETED_ITEM>`
     pub deleted_items: Vec<DeletedItemEntry>,
     /// Display index mapping for current repurchase browse session.
     /// Maps display_index (u8) -> position in `deleted_items` vec.
     ///
-    /// C++ Reference: `CUser::m_DeleteItemList` â€” `std::map<uint16, uint16>`
     pub delete_item_list: HashMap<u8, usize>,
 
     // â”€â”€ Chat Room State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Index of the chat room the player is currently in (0 = not in a room).
     ///
-    /// C++ Reference: `CUser::m_ChatRoomIndex` â€” initialized to -1 (uint16)
     pub chat_room_index: u16,
 
     // â”€â”€ PM Block State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Whether the player is blocking private messages.
     ///
-    /// C++ Reference: `CUser::m_bBlockPrivateChat`
     pub block_private_chat: bool,
 
     // â”€â”€ Perk State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Perk levels per type (13 types, 0-based index).
     ///
-    /// C++ Reference: `_PERKS_DATA::perkType[PERK_COUNT]`
     pub perk_levels: [i16; 13],
     /// Unspent perk points.
     ///
-    /// C++ Reference: `_PERKS_DATA::remPerk`
     pub rem_perk: i16,
 
     // ── Soul State (v2525) ──────────────────────────────────────────────
@@ -989,13 +809,11 @@ pub struct SessionHandle {
     // â”€â”€ Tower (Siege / NPC) State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Runtime NPC ID of the tower the player is currently mounted on (-1 = none).
     ///
-    /// C++ Reference: `CUser::m_TowerOwnerID`
     pub tower_owner_id: i32,
 
     // â”€â”€ Stealth / Invisibility State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    /// Current invisibility type (C++ `m_bInvisibilityType`).
+    /// Current invisibility type
     ///
-    /// C++ Reference: `globals.h:757-762` â€” `InvisibilityType` enum:
     /// - `INVIS_NONE` (0): not invisible
     /// - `INVIS_DISPEL_ON_MOVE` (1): stealth breaks on movement
     /// - `INVIS_DISPEL_ON_ATTACK` (2): stealth breaks on attack only
@@ -1003,7 +821,6 @@ pub struct SessionHandle {
 
     /// Stealth duration end time (unix epoch seconds). 0 = no timed stealth.
     ///
-    /// C++ Reference: `_BUFF_TYPE9_INFO::tEndTime` in `GameDefine.h:4785`
     /// Set when `ExecuteType9()` applies stealth: `UNIXTIME + pType->sDuration`.
     /// Checked in `Type9Duration()` (UserDurationSkillSystem.cpp:224-240):
     /// when `tEndTime != -1 && UNIXTIME >= tEndTime`, calls `Type9Cancel()`.
@@ -1012,104 +829,81 @@ pub struct SessionHandle {
     // â”€â”€ Blink (Respawn Invulnerability) State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Blink expiry timestamp (unix epoch seconds). 0 = not blinking.
     ///
-    /// C++ Reference: `CUser::m_tBlinkExpiryTime` â€” set in `BlinkStart()`,
     /// checked in `BlinkTimeCheck()` and NPC AI targeting.
     /// While blinking, the player is invulnerable and invisible to NPC AI.
     /// Duration: `BLINK_TIME` (10 seconds) from `Define.h:72`.
     pub blink_expiry_time: u64,
     /// Whether the player can use skills (false during blink).
     ///
-    /// C++ Reference: `Unit::m_bCanUseSkills` â€” set to false during
     /// `BlinkStart()`, restored to true in `BlinkTimeCheck()` or when
     /// blink ends and player is transformed.
     pub can_use_skills: bool,
     /// Whether the player can use potions (false during no-potion debuff).
     ///
-    /// C++ Reference: `Unit::m_bCanUsePotions` — set to false by
     /// `BUFF_TYPE_NO_POTIONS` (153), restored to true on expiry.
     pub can_use_potions: bool,
     /// Whether the player is in Kaul transformation (BUFF_TYPE 154).
     ///
-    /// C++ Reference: `Unit::m_bIsKaul` — blocks attack and /town.
     pub is_kaul: bool,
     /// Whether the player is in Undead state (BUFF_TYPE 155).
     ///
-    /// C++ Reference: `Unit::m_bIsUndead` — converts healing to damage.
     pub is_undead: bool,
     /// Current abnormal type (transform / GM visibility state).
     ///
-    /// C++ Reference: `CUser::m_bAbnormalType`
     /// Values: 0 = ABNORMAL_INVISIBLE, 1 = ABNORMAL_NORMAL, 2+ = transform IDs.
     pub abnormal_type: u32,
     /// Saved abnormal type before Kaul/Snowman transformation, restored on expiry.
     ///
-    /// C++ Reference: `CUser::m_nOldAbnormalType`
     pub old_abnormal_type: u32,
     /// Whether the player is blinded (BUFF_TYPE 156/21/20).
     ///
-    /// C++ Reference: `Unit::m_bIsBlinded` — prevents targeting.
     pub is_blinded: bool,
     /// Whether physical damage is fully blocked (BUFF_TYPE 157).
     ///
-    /// C++ Reference: `Unit::m_bBlockPhysical` — Imir's Roar effect.
     pub block_physical: bool,
     /// Whether magical damage is fully blocked (BUFF_TYPE 158).
     ///
-    /// C++ Reference: `Unit::m_bBlockMagic` — Logos Horn effect, also set by FREEZE.
     pub block_magic: bool,
     /// Whether the player is in Devil transformation (BUFF_TYPE 49).
     ///
-    /// C++ Reference: `CUser::m_bIsDevil` — Kurian Devil Form.
     pub is_devil: bool,
     /// Current size visual effect from BUFF_TYPE_SIZE (3).
     ///
-    /// C++ Reference: `MagicProcess.cpp:558-586` — Bezoar/Cake/Scroll size.
     /// Values: 0=none, 2=GIANT, 3=DWARF, 6=GIANT_TARGET, 9=special.
     pub size_effect: u32,
     /// Whether the player can teleport (default true, set false by NO_RECALL 150).
     ///
-    /// C++ Reference: `Unit::m_bCanTeleport` — blocks WIZ_HOME / warp gates.
     pub can_teleport: bool,
     /// Whether the player can use stealth (default true, set false by PROHIBIT_INVIS 26).
     ///
-    /// C++ Reference: `Unit::m_bCanStealth` — prevents stealth activation.
     pub can_stealth: bool,
     /// Whether curses are blocked (BUFF_TYPE 29).
     ///
-    /// C++ Reference: `Unit::m_bBlockCurses` — Counter Curse.
     pub block_curses: bool,
     /// Whether curses are reflected (BUFF_TYPE 30).
     ///
-    /// C++ Reference: `Unit::m_bReflectCurses` — Curse Refraction.
     pub reflect_curses: bool,
     /// Whether skills cast instantly (BUFF_TYPE 23).
     ///
-    /// C++ Reference: `Unit::m_bInstantCast` — removes casting time.
     pub instant_cast: bool,
     /// Accumulated drop/NP/noah scroll bonus amount (BUFF_TYPE 169).
     ///
-    /// C++ Reference: `CUser::m_drop_scroll_amount` — rate multiplier.
     pub drop_scroll_amount: i16,
     /// Weapons visually disabled (BUFF_TYPE 32).
     ///
-    /// C++ Reference: `CUser::m_bWeaponsDisabled` — weapon cancellation.
     pub weapons_disabled: bool,
     /// Mana absorb percentage from Outrage/Frenzy/Mana Shield (BUFF_TYPE 31).
     ///
-    /// C++ Reference: `Unit::m_bManaAbsorb` — % of incoming damage absorbed as MP.
     pub mana_absorb: u8,
     /// Mana absorb hit counter (BUFF_TYPE 31 with absorb==15).
     ///
-    /// C++ Reference: `Unit::AbsorbCount` — decremented per hit, blocks absorb at 0.
     pub absorb_count: u8,
     /// Magic damage reduction percentage (100 = no reduction, 70 = 30% reduction).
     ///
-    /// C++ Reference: `Unit::m_bMagicDamageReduction` — BUFF_TYPE_RESIS_AND_MAGIC_DMG (27).
     pub magic_damage_reduction: u8,
 
     /// Percentage resistance multipliers (100 = normal, 70 = 30% resistance reduction).
     ///
-    /// C++ Reference: `Unit::m_bPctFireR` etc. — set by BUFF_TYPE_DECREASE_RESIST (24).
     pub pct_fire_r: u8,
     pub pct_cold_r: u8,
     pub pct_lightning_r: u8,
@@ -1119,56 +913,46 @@ pub struct SessionHandle {
 
     /// EXP gain bonus from BUFF_TYPE_EXPERIENCE (11) buffs.
     ///
-    /// C++ Reference: `CUser::m_sExpGainbuff11Amount` — percentage added to XP.
     pub exp_gain_buff11: u16,
 
     /// EXP gain bonus from BUFF_TYPE_VARIOUS_EFFECTS (33) buffs.
     ///
-    /// C++ Reference: `CUser::m_sExpGainbuff33Amount` — percentage added to XP.
     pub exp_gain_buff33: u16,
 
     /// NP (loyalty) bonus from BUFF_TYPE_VARIOUS_EFFECTS (33).
     ///
-    /// C++ Reference: `CUser::m_bSkillNPBonus` — flat bonus added to NP gain.
     pub skill_np_bonus_33: u8,
 
     /// NP (loyalty) bonus from BUFF_TYPE_LOYALTY_AMOUNT (42).
     ///
-    /// C++ Reference: `CUser::m_bSkillNPBonus` — flat bonus added to NP gain.
     pub skill_np_bonus_42: u8,
 
     /// JackPot type: 0=none, 1=EXP, 2=Noah, 3=both (unused in C++).
     ///
-    /// C++ Reference: `CUser::m_jackpotype` — set by BUFF_TYPE_JACKPOT (77) skills 501570/501571/501572.
     pub jackpot_type: u8,
 
     /// NP gain percentage multiplier from BUFF_TYPE_LOYALTY (15).
     ///
-    /// C++ Reference: `CUser::m_bNPGainAmount` — default 100 (no change).
     /// Applied as: `np = base_np * np_gain_amount / 100`.
     pub np_gain_amount: u8,
 
     /// Gold gain percentage multiplier from BUFF_TYPE_NOAH_BONUS (16).
     ///
-    /// C++ Reference: `CUser::m_bNoahGainAmount` — default 100 (no change).
     /// Applied as: `gold = gold * noah_gain_amount / 100`.
     pub noah_gain_amount: u8,
 
     /// Premium merchant flag from BUFF_TYPE_PREMIUM_MERCHANT (17).
     ///
-    /// C++ Reference: `CUser::m_bPremiumMerchant` — default false.
     pub is_premium_merchant: bool,
 
     /// Carry weight buff amount from BUFF_TYPE_WEIGHT (12).
     ///
-    /// C++ Reference: `CUser::m_bMaxWeightAmount` — default 100.
     /// If > 100, the full value is added to max weight (C++ adds m_bMaxWeightAmount, not excess).
     pub weight_buff_amount: u8,
 
     // â"€â"€ Transformation (Type 6) State â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-    /// Transformation type (matches C++ `Unit::TransformationType`).
+    /// Transformation type (matches `Unit::TransformationType`).
     ///
-    /// C++ Reference: `Unit::m_transformationType` â€” set in `ExecuteType6()`,
     /// cleared in `Type6Cancel()`.
     /// - 0: TransformationNone
     /// - 1: TransformationMonster
@@ -1177,38 +961,31 @@ pub struct SessionHandle {
     pub transformation_type: u8,
     /// Visual transform ID (NPC proto_id to render).
     ///
-    /// C++ Reference: `Unit::m_sTransformID` â€” set in `ExecuteType6()`.
     pub transform_id: u16,
     /// Skill ID that caused the transformation.
     ///
-    /// C++ Reference: `Unit::m_sTransformSkillID` â€” set in `ExecuteType6()`.
     pub transform_skill_id: u32,
     /// Timestamp when transformation started (milliseconds since epoch).
     ///
-    /// C++ Reference: `Unit::m_tTransformationStartTime` â€” set to `UNIXTIME2`
     /// (milliseconds) in `ExecuteType6()`.
     pub transformation_start_time: u64,
     /// Transformation duration in milliseconds.
     ///
-    /// C++ Reference: `Unit::m_sTransformationDuration` â€” set to
     /// `duration * 1000` in `ExecuteType6()`.
     pub transformation_duration: u64,
 
     // â”€â”€ Zone Reward State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// PvP kill count in the current zone session (reset on zone change).
     ///
-    /// C++ Reference: `CUser::m_KillCount` â€” incremented on each PvP kill
     /// in a PK zone, used to check `kill_count % reward.KillCount == 0`.
     pub pvp_kill_count: u16,
     /// Per-entry next-reward timestamps for zone online rewards.
     ///
-    /// C++ Reference: `CUser::m_ZoneOnlineReward` â€” each entry has `usingtime`
     /// that tracks when the next reward fires.
     /// Vec index matches the global `zone_online_rewards` Vec.
     pub zone_online_reward_timers: Vec<u64>,
     /// Next online cash reward timestamp (absolute UNIX seconds).
     ///
-    /// C++ Reference: `CUser::m_bOnlineCashTime` — set to 0 in constructor,
     /// first check passes immediately since `UNIXTIME > 0`.
     /// Reset to `UNIXTIME + (onlinecashtime * MINUTE)` after each grant.
     pub online_cash_next_time: u64,
@@ -1216,102 +993,81 @@ pub struct SessionHandle {
     // â”€â”€ Genie State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Whether the genie (lamp) is currently active.
     ///
-    /// C++ Reference: `CUser::m_bGenieActive`
     pub genie_active: bool,
     /// Absolute UNIX timestamp when genie time expires.
     ///
-    /// C++ Reference: `CUser::m_1098GenieTime` — absolute timestamp.
     /// Remaining seconds = `genie_time_abs.saturating_sub(now)`.
     pub genie_time_abs: u32,
     /// Last genie check timestamp (unix seconds).
     ///
-    /// C++ Reference: `CUser::m_tGenieTimeNormal`
     pub genie_check_time: u64,
     /// Whether genie data has been loaded from DB (prevents saving 0 before load).
     pub genie_loaded: bool,
     /// Genie configuration options blob (256 bytes).
     ///
-    /// C++ Reference: `CUser::m_GenieOptions`
     pub genie_options: Vec<u8>,
 
     // ── Training State ───────────────────────────────────────────────────────────
     /// Accumulated training XP reward total.
     ///
-    /// C++ Reference: `CUser::m_iTotalTrainingExp`
     pub total_training_exp: u32,
     /// Last training reward timestamp (unix seconds).
     ///
-    /// C++ Reference: `CUser::m_lastTrainingTime`
     pub last_training_time: u64,
 
     // â”€â”€ Flash Time State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Remaining flash time in minutes (decremented every PLAYER_FLASH_INTERVAL).
     ///
-    /// C++ Reference: `CUser::m_flashtime`
     pub flash_time: u32,
     /// Flash stack count (0-10, each stack adds 10% bonus).
     ///
-    /// C++ Reference: `CUser::m_flashcount`
     pub flash_count: u8,
     /// Flash bonus type: 1=EXP, 2=DC(drop), 3=WAR(loyalty).
     ///
-    /// C++ Reference: `CUser::m_flashtype`
     pub flash_type: u8,
     /// Active flash EXP bonus percentage (0-100).
     ///
-    /// C++ Reference: `CUser::m_FlashExpBonus`
     pub flash_exp_bonus: u8,
     /// Active flash drop/DC bonus percentage (0-100).
     ///
-    /// C++ Reference: `CUser::m_FlashDcBonus`
     pub flash_dc_bonus: u8,
     /// Active flash war/loyalty bonus (0-10).
     ///
-    /// C++ Reference: `CUser::m_FlashWarBonus`
     pub flash_war_bonus: u8,
     /// Last flash check timestamp (unix seconds).
     ///
-    /// C++ Reference: `CUser::m_flashchecktime`
     pub flash_check_time: u64,
 
     // â”€â”€ Burning / Flame State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Flame level (0-3). Each level gives XP/drop/NP/money bonuses.
     ///
-    /// C++ Reference: `CUser::m_bFlamelevel`
     pub flame_level: u16,
     /// Next flame level-up time (unix seconds). 0 = inactive.
     ///
-    /// C++ Reference: `CUser::m_bFlameTime`
     pub flame_time: u64,
 
     // ── Offline Merchant State ──────────────────────────────────────────
     /// Whether this session is in offline merchant mode.
     ///
-    /// C++ Reference: `Socket.h:101` — `isOfflineStatus()` / `m_sOfflineStatus`
     /// When true, the session stays in memory with merchant open but no TCP
     /// connection.  Other players can still buy items from this merchant.
     pub is_offline: bool,
     /// Offline character type (merchant, genie, mining, fishing).
     ///
-    /// C++ Reference: `GameDefine.h:390-395` — `offcharactertype` enum
     pub offline_type: OfflineCharacterType,
     /// Remaining offline minutes (decremented every 60 s).
     ///
-    /// C++ Reference: `CUser::m_bOfflineTimeCheck` — initialized to 1400 (~23.3 h)
     pub offline_remaining_minutes: u16,
     /// Next offline check time (`Instant` for monotonic timing).
     ///
-    /// C++ Reference: `CUser::m_bOfflineCheck` — `UNIXTIME + 60`
     pub offline_next_check: Option<Instant>,
 
     // ── Knight Cash (KC) / TL Balance ─────────────────────────────────────
     /// Knight Cash (KC) balance — loaded from `tb_user.cash_point` on login.
     ///
-    /// C++ Reference: `CUser::m_nKnightCash`
     pub knight_cash: u32,
     /// TL (real-money) balance — loaded from `tb_user.bonus_cash_point` on login.
     ///
-    /// C++ Reference: `CUser::m_nTLBalance`
     pub tl_balance: u32,
 
     // ── Collection Race State ──────────────────────────────────────────────
@@ -1320,91 +1076,73 @@ pub struct SessionHandle {
     /// Incremented when the player kills a monster whose proto_id matches one
     /// of `pCollectionRaceEvent.m_bProtoID[i]`.
     ///
-    /// C++ Reference: `_COLLECTION_RACE_EVENT_USER::KillCount[3]` in `GameDefine.h:4130`
     pub cr_kill_counts: [u16; 3],
     /// Whether this player has completed the Collection Race this round.
     ///
     /// Once set to true, further kills do not advance the counter.
     ///
-    /// C++ Reference: `_COLLECTION_RACE_EVENT_USER::m_bCheckFinish` in `GameDefine.h:4131`
     pub cr_check_finish: bool,
 
     // ── Tag Name System ──────────────────────────────────────────────────────
     /// Player tag name (title displayed above character name).
     ///
-    /// C++ Reference: `CUser::mytagname` — defaults to empty or "-"
     pub tagname: String,
     /// Tag name colour packed as COLORREF (r | g<<8 | b<<16).
     ///
-    /// C++ Reference: `CUser::m_tagnamergb`
     pub tagname_rgb: i32,
 
     // ── PUS Refund System ────────────────────────────────────────────────────
     /// In-memory refundable purchase map: serial → PusRefundEntry.
     ///
-    /// C++ Reference: `CUser::m_PusRefundMap`
     pub pus_refund_map: std::collections::HashMap<u64, crate::handler::pus_refund::PusRefundEntry>,
     /// Last refund attempt timestamp (UNIX seconds) — rate limit cooldown.
     ///
-    /// C++ Reference: `CUser::m_pusrefundtime`
     pub pus_refund_last_time: u64,
 
     // ── PPCard Cooldown ────────────────────────────────────────────────────
     /// Last PPCard redemption attempt time — 5-minute (300s) cooldown.
     ///
-    /// C++ Reference: `CUser::PPCardTime` — `PPCARD_TIME` seconds between attempts.
     pub ppcard_cooldown: Instant,
 
     // ── Extended Hook (Anti-Cheat / Extended) ─────────────────────────────────────────
     /// Last heartbeat (xALIVE 0xA6) timestamp (UNIX seconds).
     ///
-    /// C++ Reference: `CUser::ExtHook_LASTCHECK`
     pub ext_last_heartbeat: u64,
     /// Last support ticket timestamp (UNIX seconds) — rate limit cooldown.
     ///
-    /// C++ Reference: `CUser::ExtHook_LASTSUPPORT`
     pub ext_last_support: u64,
     /// Last chat-seen timestamp (UNIX seconds).
     ///
-    /// C++ Reference: `CUser::m_LastSeen[2]`
     pub ext_last_seen: u64,
 
     // ── Extended Hook Fields (Sprint 493) ──────────────────────────────────
     /// Whether the temp items list has been sent this session (one-shot).
     ///
-    /// C++ Reference: `CUser::TempItemsControl`
     pub temp_items_sent: bool,
 
     /// List of item IDs blocked from chest loot.
     ///
-    /// C++ Reference: `CUser::mChestBlockItem`
     pub chest_block_items: Vec<u32>,
 
     // ── Daily Rank Stats (Sprint 552) ────────────────────────────────────
     /// Total gold earned from merchant sales.
     ///
-    /// C++ Reference: `_USER_DAILY_RANK::GMTotalSold`
     pub dr_gm_total_sold: u64,
     /// Total monster kills.
     ///
-    /// C++ Reference: `_USER_DAILY_RANK::MHTotalKill`
     pub dr_mh_total_kill: u64,
     /// Total crafting/exchange successes.
     ///
-    /// C++ Reference: `_USER_DAILY_RANK::SHTotalExchange`
     pub dr_sh_total_exchange: u64,
     /// Total chaos war first-place wins.
     ///
-    /// C++ Reference: `_USER_DAILY_RANK::CWCounterWin`
     pub dr_cw_counter_win: u64,
     /// Total blessing event counter.
     ///
-    /// C++ Reference: `_USER_DAILY_RANK::UPCounterBles`
     pub dr_up_counter_bles: u64,
 }
 
-/// Offline character type (C++ `offcharactertype` in `GameDefine.h:390`).
-///
+/// Offline character type (`offcharactertype` in `GameDefine.h:390`).
 /// Determines which item is required in the CFAIRY slot and what automation
 /// the offline session performs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1421,43 +1159,28 @@ pub enum OfflineCharacterType {
 }
 
 /// Offline merchant item — standard (must be in CFAIRY slot).
-///
-/// C++ Reference: `Define.h:355` — `OFFLINE_MERCHANT_ITEM`
 pub const OFFLINE_MERCHANT_ITEM: u32 = 924_041_913;
 
 /// Merchant + auto-fishing item.
-///
-/// C++ Reference: `Define.h:367` — `MERCHANT_AUTO_FISHING`
 pub const MERCHANT_AUTO_FISHING: u32 = 700_099_755;
 
 /// Merchant + auto-mining item.
-///
-/// C++ Reference: `Define.h:366` — `MERCHANT_AUTO_MANING`
 pub const MERCHANT_AUTO_MANING: u32 = 700_049_758;
 
 /// Default offline duration in minutes (~23.3 hours).
-///
-/// C++ Reference: `OfflineMerchantSystem.cpp:33` — `m_bOfflineTimeCheck = 1400`
 pub const OFFLINE_DEFAULT_MINUTES: u16 = 1400;
 
 /// Offline check interval in seconds.
-///
-/// C++ Reference: `OfflineMerchantSystem.cpp:49` — `m_bOfflineCheck = UNIXTIME + 60`
 pub const OFFLINE_CHECK_INTERVAL_SECS: u64 = 60;
 
 /// CFAIRY absolute inventory slot index.
-///
-/// C++ Reference: `globals.h:279` — `const uint8 CFAIRY = 48`
 pub const CFAIRY_SLOT: usize = 48;
 
 /// Runtime pet state for an active/summoned pet.
-///
-/// C++ equivalent: `PET_DATA` (globals.h:621)
 #[derive(Debug, Clone)]
 pub struct PetState {
     /// Serial number of the pet item (DB primary key for `pet_user_data`).
     ///
-    /// C++ Reference: `PET_DATA::nSerial` — links to inventory item serial_num.
     pub serial_id: u64,
     /// Current pet level (1-60).
     pub level: u8,
@@ -1475,7 +1198,6 @@ pub struct PetState {
     pub mp: u16,
     /// Current mode (3=attack, 4=defence, 8=looting, 9=chat).
     ///
-    /// C++ Reference: `PET_DATA::sStateChange`
     pub state_change: u8,
     /// Pet name.
     pub name: String,
@@ -1485,7 +1207,6 @@ pub struct PetState {
     pub size: u16,
     /// Pet inventory items (4 slots).
     ///
-    /// C++ Reference: `PET_DATA::sItem[PET_INVENTORY_TOTAL]` — 4-item array
     pub items: [UserItemSlot; PET_INVENTORY_TOTAL],
     /// Whether the pet is actively attacking a target.
     pub attack_started: bool,
@@ -1494,8 +1215,6 @@ pub struct PetState {
 }
 
 /// Number of item slots in a pet's inventory.
-///
-/// C++ Reference: `shared/globals.h` — `PET_INVENTORY_TOTAL 4`
 pub const PET_INVENTORY_TOTAL: usize = 4;
 
 impl Default for PetState {
@@ -1526,7 +1245,6 @@ impl Default for PetState {
 }
 
 /// Lightweight snapshot of a session's pet state for decay tick processing.
-///
 /// Collected in bulk from `WorldState::collect_pet_decay_data()` so the
 /// pet decay system can iterate without holding DashMap references.
 #[derive(Debug, Clone)]
@@ -1544,11 +1262,8 @@ pub struct PetDecayData {
 }
 
 /// Lightweight snapshot of a session's pet attack state for the pet attack tick.
-///
 /// Collected in bulk from `WorldState::collect_pet_attack_data()` so the
 /// pet attack system can iterate without holding DashMap references.
-///
-/// C++ Reference: `CUser::PetMonAttack()` in `PetMainHandler.cpp:902-963`
 #[derive(Debug, Clone)]
 pub struct PetAttackData {
     /// Session ID of the pet owner.
@@ -1564,8 +1279,6 @@ pub struct PetAttackData {
 }
 
 /// Per-flame-level rate multipliers from the BURNING_FEATURES table.
-///
-/// C++ Reference: `BURNING_FEATURES` struct in `GameDefine.h:1103-1111`
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BurningFeatureRates {
     /// NP/loyalty rate multiplier (percentage).
@@ -1580,8 +1293,6 @@ pub struct BurningFeatureRates {
 
 /// Premium gift item entry â€” represents an item to be given as a letter when
 /// a player receives a premium of a certain type.
-///
-/// C++ Reference: `_ITEM_PREMIUM_GIFT` in `GameDefine.h:2912-2930`
 /// Loaded from MSSQL `PREMIUM_GIFT_ITEM` table.
 #[derive(Debug, Clone)]
 pub struct PremiumGiftItem {
@@ -1598,8 +1309,6 @@ pub struct PremiumGiftItem {
 }
 
 /// Wanted event status per PK zone room.
-///
-/// C++ Reference: `wantedstatus` enum in `WandetEvent.cpp`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WantedEventStatus {
     /// Event is not active (waiting for next select time).
@@ -1614,8 +1323,6 @@ pub enum WantedEventStatus {
 }
 
 /// Per-room wanted event state (3 rooms: Ronark Land, Ardream, Ronark Land Base).
-///
-/// C++ Reference: `_WANTED_MAIN` struct in `WandetEvent.cpp`
 #[derive(Debug, Clone, Default)]
 pub struct WantedEventRoom {
     /// Current event phase.
@@ -1635,38 +1342,24 @@ pub struct WantedEventRoom {
 }
 
 /// Maximum number of wanted event rooms (3 PK zones).
-///
-/// C++ Reference: `pWantedMain[3]` â€” Ronark Land, Ardream, Ronark Land Base.
 pub const MAX_WANTED_ROOMS: usize = 3;
 
 /// Pet satisfaction decay interval in seconds.
-///
-/// C++ Reference: `PLAYER_TRAINING_INTERVAL * 4` = 15 * 4 = 60 seconds.
 pub const PET_DECAY_INTERVAL_SECS: u64 = 60;
 
 /// Pet satisfaction decay amount per tick.
-///
-/// C++ Reference: `PetSatisFactionUpdate(-100)` in `User.cpp:1220`.
 pub const PET_DECAY_AMOUNT: i16 = 100;
 
 /// Wanted event position broadcast interval in seconds.
-///
-/// C++ Reference: `UNIXTIME - g_pMain->m_WantedSystemMapShowTime > 60`
 pub const WANTED_MAP_SHOW_INTERVAL_SECS: u64 = 60;
 
 /// Maximum number of items in a player merchant shop.
-///
-/// C++ Reference: `shared/globals.h:343` â€” `MAX_MERCH_ITEMS = 12`
 pub const MAX_MERCH_ITEMS: usize = 12;
 
 /// Maximum merchant advert message length.
-///
-/// C++ Reference: `shared/globals.h:346` â€” `#define MAX_MERCH_MESSAGE 40`
 pub const MAX_MERCH_MESSAGE: usize = 40;
 
 /// Item ID representing gold/coins in trades.
-///
-/// C++ Reference: `GameDefine.h:1294` â€” `#define ITEM_GOLD 900000000`
 pub const ITEM_GOLD: u32 = 900_000_000;
 
 /// Re-export COIN_MAX from inventory_constants (canonical source).
@@ -1675,67 +1368,46 @@ pub use crate::inventory_constants::COIN_MAX;
 // ── Quest pseudo-item constants ───────────────────────────────────────
 
 /// Pseudo-item: grant EXP reward.
-///
-/// C++ Reference: `GameDefine.h` — `#define ITEM_EXP 900001000`
 pub const ITEM_EXP: u32 = 900_001_000;
 
 /// Pseudo-item: grant item count (NP/coins).
-///
-/// C++ Reference: `GameDefine.h` — `#define ITEM_COUNT 900002000`
 pub const ITEM_COUNT: u32 = 900_002_000;
 
 /// Pseudo-item: grant ladder/loyalty points.
-///
-/// C++ Reference: `GameDefine.h` — `#define ITEM_LADDERPOINT 900003000`
 pub const ITEM_LADDERPOINT: u32 = 900_003_000;
 
 /// Pseudo-item: grant random reward.
-///
-/// C++ Reference: `GameDefine.h` — `#define ITEM_RANDOM 900004000`
 pub const ITEM_RANDOM: u32 = 900_004_000;
 
 /// Items in this range cannot be traded, sold, or stored.
-///
-/// C++ Reference: `GameDefine.h:1300-1301`
 pub const ITEM_NO_TRADE_MIN: u32 = 900_000_001;
 pub const ITEM_NO_TRADE_MAX: u32 = 999_999_999;
 
 /// Maximum account ID / character name length.
-///
-/// C++ Reference: `globals.h:29` — `#define MAX_ID_SIZE 20`
 pub const MAX_ID_SIZE: usize = 20;
 
 /// Maximum password length.
-///
-/// C++ Reference: `globals.h:30` — `#define MAX_PW_SIZE 28`
 pub const MAX_PW_SIZE: usize = 28;
 
 /// Race value that marks an item as untradeable.
-///
-/// C++ Reference: `GameDefine.h:1880` â€” `RACE_UNTRADEABLE = 20`
 pub const RACE_UNTRADEABLE: i32 = 20;
 
 /// Item flag constants -- these are an ENUM, NOT a bitmask.
 /// Comparisons MUST use equality (`==`), never bitwise AND (`&`).
-///
-/// C++ Reference: `shared/globals.h:369-377` -- `enum ItemFlag`
 pub const ITEM_FLAG_NONE: u8 = 0;
 pub const ITEM_FLAG_RENTED: u8 = 1;
 pub const ITEM_FLAG_CHAR_SEAL: u8 = 2;
 pub const ITEM_FLAG_DUPLICATE: u8 = 3;
 pub const ITEM_FLAG_SEALED: u8 = 4;
-/// C++ Reference: `globals.h` — `ITEM_FLAG_NOT_BOUND = 7`
 pub const ITEM_FLAG_NOT_BOUND: u8 = 7;
 pub const ITEM_FLAG_BOUND: u8 = 8;
 
 /// Merchant state constants.
-///
-/// C++ Reference: `User.h:66-68`
 pub const MERCHANT_STATE_NONE: i8 = -1;
 pub const MERCHANT_STATE_SELLING: i8 = 0;
 pub const MERCHANT_STATE_BUYING: i8 = 1;
 
-/// Trade state constants (C++ `m_sTradeStatue`).
+/// Trade state constants
 pub const TRADE_STATE_NONE: u8 = 1;
 pub const TRADE_STATE_SENDER: u8 = 2;
 pub const TRADE_STATE_TARGET: u8 = 3;
@@ -1743,13 +1415,9 @@ pub const TRADE_STATE_TRADING: u8 = 4;
 pub const TRADE_STATE_DECIDING: u8 = 5;
 
 /// Daily operation cooldown minutes (24 hours = 1440 minutes).
-///
-/// C++ Reference: `User.h` â€” `#define DAILY_OPERATIONS_MINUTE 1440`
 pub(crate) const DAILY_OPERATIONS_MINUTE: i64 = 1440;
 
 /// Daily operation type codes.
-///
-/// C++ Reference: `DailyOperationsOpCode` in `shared/packets.h:677-687`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DailyOpCode {
@@ -1781,11 +1449,8 @@ impl DailyOpCode {
 }
 
 /// Per-character daily operation timestamps.
-///
 /// Each field holds a unix timestamp (i32) of when the operation was last
 /// performed. -1 means "never performed".
-///
-/// C++ Reference: `_USER_DAILY_OP` in `GameDefine.h:3940-3968`
 #[derive(Debug, Clone)]
 pub struct UserDailyOp {
     pub chaos_map_time: i32,
@@ -1881,8 +1546,6 @@ impl UserDailyOp {
 
 /// An item in the repurchase (trash) list â€” sold non-countable items
 /// that the player can buy back within 72 minutes.
-///
-/// C++ Reference: `_DELETED_ITEM` in `GameDefine.h:4228-4235`
 #[derive(Debug, Clone)]
 pub struct DeletedItemEntry {
     /// Database row ID (for delete after buyback).
@@ -1902,8 +1565,6 @@ pub struct DeletedItemEntry {
 }
 
 /// An item placed in the exchange/trade window.
-///
-/// C++ Reference: `_EXCHANGE_ITEM` in `GameDefine.h:1778`
 #[derive(Debug, Clone)]
 pub struct ExchangeItem {
     /// Item definition number (ITEM_GOLD for coins).
@@ -1921,8 +1582,6 @@ pub struct ExchangeItem {
 }
 
 /// A single merchant shop slot.
-///
-/// C++ Reference: `_MERCH_DATA` in `shared/globals.h:670-681`
 #[derive(Debug, Clone, Default)]
 pub struct MerchData {
     /// Item definition number (0 = empty slot).
@@ -1946,8 +1605,6 @@ pub struct MerchData {
 }
 
 /// A single inventory slot's runtime data.
-///
-/// C++ Reference: `_ITEM_DATA` in `shared/globals.h:399-418`
 #[derive(Debug, Clone, Default)]
 pub struct UserItemSlot {
     /// Item definition number (0 = empty slot).
@@ -1960,7 +1617,6 @@ pub struct UserItemSlot {
     pub flag: u8,
     /// Original flag before sealing — used to restore state on unseal.
     ///
-    /// C++ Reference: `_ITEM_DATA::oFlag` — saved when ITEM_LOCK, restored on ITEM_UNLOCK.
     pub original_flag: u8,
     /// Serial number for uniqueness tracking.
     pub serial_num: u64,
@@ -1971,7 +1627,6 @@ pub struct UserItemSlot {
 impl UserItemSlot {
     /// Compute the remaining rental time in minutes for packet display.
     ///
-    /// C++ Reference: `_ITEM_DATA::sRemainingRentalTime` — sent as u16 in item
     /// info packets. The value is `(nExpirationTime - UNIXTIME) / 60` when the
     /// item has an expiry; otherwise 0.
     pub fn remaining_rental_minutes(&self) -> u16 {
@@ -1980,8 +1635,6 @@ impl UserItemSlot {
 }
 
 /// Compute the remaining rental time in minutes from an expiry unix timestamp.
-///
-/// C++ Reference: `_ITEM_DATA::sRemainingRentalTime` — `(nExpirationTime - UNIXTIME) / 60`
 /// Returns 0 if no expiry or already expired. Caps at `u16::MAX` (≈ 45 days).
 pub fn remaining_rental_minutes(expire_time: u32) -> u16 {
     if expire_time == 0 {
@@ -1999,8 +1652,6 @@ pub fn remaining_rental_minutes(expire_time: u32) -> u16 {
 }
 
 /// Subset of character data needed for broadcasting to other players.
-///
-/// C++ Reference: `CUser::GetUserInfo` in `UserInfoSystem.cpp:264-324`
 #[derive(Debug, Clone, Default)]
 pub struct CharacterInfo {
     pub session_id: SessionId,
@@ -2023,12 +1674,10 @@ pub struct CharacterInfo {
     pub mp: i16,
     /// Maximum SP (Kurian stamina points â€” 0 for non-Kurian classes).
     ///
-    /// C++ Reference: `User.h` â€” `short m_MaxSp`
     /// Beginner(13)=100, Novice(14)=150, Master(15)=200
     pub max_sp: i16,
     /// Current SP (Kurian stamina points).
     ///
-    /// C++ Reference: `User.h` â€” `int16 m_sSp`
     pub sp: i16,
     /// Equipment items for visual display (14 equipped slots).
     pub equipped_items: [u32; 14],
@@ -2056,10 +1705,9 @@ pub struct CharacterInfo {
     pub free_points: u16,
 
     // â”€â”€ Skill points â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    /// Skill point array (C++ `m_bstrSkill[10]`).
+    /// Skill point array
     /// Index 0 = free skill points, 5-8 = skill categories.
     ///
-    /// C++ Reference: `User.h:208` â€” `uint8 m_bstrSkill[10]`
     pub skill_points: [u8; 10],
 
     // â”€â”€ Gold, Loyalty & authority â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -2067,11 +1715,9 @@ pub struct CharacterInfo {
     pub gold: u32,
     /// Nation Points (loyalty / NP).
     ///
-    /// C++ Reference: `CUser::m_iLoyalty`
     pub loyalty: u32,
     /// Monthly Nation Points.
     ///
-    /// C++ Reference: `CUser::m_iLoyaltyMonthly`
     pub loyalty_monthly: u32,
     /// Authority level (0 = GM, 1 = player).
     pub authority: u8,
@@ -2089,40 +1735,33 @@ pub struct CharacterInfo {
     // â”€â”€ Experience â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Total experience points.
     ///
-    /// C++ Reference: `User.h` â€” `m_iExp`
     pub exp: u64,
 
     /// XP required to level up from current level.
     ///
-    /// C++ Reference: `User.h` â€” `m_iMaxExp`
     pub max_exp: i64,
 
     // â”€â”€ EXP seal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Whether the EXP seal is active (XP goes to sealed pool).
     ///
-    /// C++ Reference: `User.h:373` â€” `uint8 bExpSealStatus`
     pub exp_seal_status: bool,
 
     /// Accumulated sealed experience points.
     ///
-    /// C++ Reference: `User.h:372` â€” `uint32 m_iSealedExp`
     pub sealed_exp: u32,
 
     // â”€â”€ Weight â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Current total weight of items in inventory.
     ///
-    /// C++ Reference: `User.h` â€” `m_sItemWeight`
     pub item_weight: i32,
 
     /// Maximum carry weight (calculated from STR/class).
     ///
-    /// C++ Reference: `User.h` â€” `m_sMaxWeight`
     pub max_weight: i32,
 
     // â”€â”€ State tracking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Resting HP type (sit/stand/dead state).
     ///
-    /// C++ Reference: `User.h:440` â€” `m_bResHpType`
     /// - `USER_STANDING` (0x01): standing
     /// - `USER_SITDOWN` (0x02): sitting
     /// - `USER_DEAD` (0x03): dead
@@ -2131,12 +1770,10 @@ pub struct CharacterInfo {
     // â”€â”€ Rivalry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Session ID of the designated rival player (-1 = no rival).
     ///
-    /// C++ Reference: `User.h:325` â€” `int16 m_sRivalID`
     pub rival_id: i16,
 
     /// Unix timestamp when the rivalry expires (0 = no active rivalry).
     ///
-    /// C++ Reference: `User.h` â€” `m_tRivalExpiryTime`
     /// Duration: `RIVALRY_DURATION` (300 seconds / 5 minutes).
     pub rival_expiry_time: u64,
 
@@ -2145,24 +1782,20 @@ pub struct CharacterInfo {
     /// displayed on nearby clients via WIZ_PVP(PVPUpdateHelmet).
     /// Resets to 0 on regene / Draki regene.
     ///
-    /// C++ Reference: `User.h:329` — `uint8 m_byAngerGauge`
     pub anger_gauge: u8,
 
     // â”€â”€ Manner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Manner points (social score).
     ///
-    /// C++ Reference: `User.h` â€” `int32 m_iMannerPoint`
     pub manner_point: i32,
 
     // â”€â”€ Rebirth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Rebirth level (0 = not rebirthed).
     ///
-    /// C++ Reference: `User.h` â€” `uint8 m_bRebirthLevel`
     pub rebirth_level: u8,
 
     /// Rebirth bonus stats.
     ///
-    /// C++ Reference: `User.h:201` — `uint8 m_bRebStats[(uint8)StatType::STAT_COUNT]`
     /// Added to `GetStatBonusTotal()` alongside item/buff/achievement bonuses.
     pub reb_str: u8,
     pub reb_sta: u8,
@@ -2172,17 +1805,13 @@ pub struct CharacterInfo {
 
     /// Achievement cover title ID (displayed to nearby players).
     ///
-    /// C++ Reference: `User.h:369` — `uint16 m_sCoverTitle`
     /// Resolved from `achieve_summary.cover_id` → `achieve_main.title_id`.
     pub cover_title: u16,
 }
 
 /// Transient state values needed for the WIZ_USER_INOUT broadcast packet.
-///
 /// These come from `SessionState` and are NOT persisted in `CharacterInfo`
 /// because they change at runtime (party, devil form, direction, hiding, etc.).
-///
-/// C++ Reference: `UserInfoSystem.cpp:264-506` — fields written alongside `GetUserInfo`.
 #[derive(Debug, Clone, Default)]
 pub struct BroadcastState {
     /// `m_bNeedParty` — 1 = looking for party (WIZ_STATE_CHANGE type=2)
@@ -2207,14 +1836,10 @@ pub struct BroadcastState {
     pub is_in_genie: u8,
     /// `ReturnSymbolisOK` — Knight return symbol status (u32).
     ///
-    /// C++ Reference: `CUser::ReturnSymbolisOK`
     pub return_symbol_ok: u32,
 }
 
 /// Per-player quest progress entry.
-///
-/// C++ Reference: `_USER_QUEST_INFO` (GameDefine.h:103)
-///
 /// Quest states:
 /// - 0: not started
 /// - 1: ongoing
@@ -2227,13 +1852,10 @@ pub struct UserQuestInfo {
     pub quest_state: u8,
     /// Kill counts for each of the 4 monster groups.
     ///
-    /// C++ Reference: `_USER_QUEST_INFO::m_bKillCounts[QUEST_MOB_GROUPS]`
     pub kill_counts: [u8; 4],
 }
 
 /// Per-player achievement progress entry.
-///
-/// C++ Reference: `_USER_ACHIEVE_INFO` (GameDefine.h:1838)
 #[derive(Debug, Clone, Default)]
 pub struct UserAchieveInfo {
     /// Achievement status: 0=ChallengeIncomplete, 1=Incomplete, 4=Finished, 5=Completed.
@@ -2243,8 +1865,6 @@ pub struct UserAchieveInfo {
 }
 
 /// Per-player achievement summary data.
-///
-/// C++ Reference: `_ACHIEVE_INFO` members in `User.h`
 #[derive(Debug, Clone, Default)]
 pub struct AchieveSummary {
     /// Total play time in seconds.
@@ -2270,7 +1890,6 @@ pub struct AchieveSummary {
 }
 
 /// Lightweight snapshot of session data for regen tick processing.
-///
 /// Collected in bulk to avoid holding DashMap refs across async boundaries.
 #[derive(Debug, Clone)]
 pub struct RegenData {
@@ -2294,7 +1913,6 @@ pub struct RegenData {
     pub pro_skill4: u8,
     /// Blink (respawn invulnerability) expiry as UNIX timestamp.
     ///
-    /// C++ Reference: `User.cpp:957` — `if (!isBlinking())` guards HP/MP regen.
     /// When `blink_expiry_time > now`, the player is blinking and should not regen.
     pub blink_expiry_time: u64,
     /// Whether the player is undead (heal → damage inversion).
@@ -2306,9 +1924,6 @@ pub struct RegenData {
 }
 
 /// Active buff/debuff applied to a session.
-///
-/// C++ Reference: `_BUFF_TYPE4_INFO` in `GameDefine.h:4764`
-///
 /// Tracks the skill that created this buff, which stat modifiers it applies,
 /// and when it expires. Keyed by `buff_type` in the session's buff map.
 #[derive(Debug, Clone)]
@@ -2317,7 +1932,6 @@ pub struct ActiveBuff {
     pub skill_id: u32,
     /// Buff type from `MagicType4Row::buff_type` â€” used as the map key.
     ///
-    /// C++ Reference: `_BUFF_TYPE4_INFO::m_bBuffType`
     pub buff_type: i32,
     /// Session ID of the caster who applied this buff.
     pub caster_sid: SessionId,
@@ -2372,22 +1986,20 @@ pub struct ActiveBuff {
     pub hit_rate: i32,
     /// Evasion/avoid rate modifier.
     pub avoid_rate: i32,
-    /// Flat weapon damage bonus (C++ `m_bAddWeaponDamage`).
+    /// Flat weapon damage bonus
     ///
     /// Set by BUFF_TYPE_WEAPON_DAMAGE (13) — added to weapon power in SetUserAbility.
     pub weapon_damage: i32,
-    /// AC reduction source amount (C++ `m_sACSourAmount`).
+    /// AC reduction source amount
     ///
     /// Set by BUFF_TYPE_ATTACK_SPEED_ARMOR (18) when sAC < 0 — subtracted from target AC
     /// in physical damage formula.
     pub ac_sour: i32,
     /// Whether this buff's duration has already been extended once.
     ///
-    /// C++ Reference: `_BUFF_TYPE4_INFO::m_bDurationExtended` — prevents repeated extensions.
     pub duration_extended: bool,
     /// Whether this is a friendly buff (true) or hostile debuff (false).
     ///
-    /// C++ Reference: `_BUFF_TYPE4_INFO::m_bIsBuff` — set from `pSkill->bMoral < MORAL_ENEMY`.
     /// Used to determine if cure packets should be sent on expiry.
     pub is_buff: bool,
 }
@@ -2405,13 +2017,9 @@ impl ActiveBuff {
 }
 
 /// Maximum number of durational skill (DOT/HOT) slots per unit.
-///
-/// C++ Reference: `GameDefine.h` â€” `#define MAX_TYPE3_REPEAT 40`
 pub const MAX_TYPE3_REPEAT: usize = 40;
 
-/// Active DOT/HOT effect on a unit â€” mirrors C++ `Unit::MagicType3`.
-///
-/// C++ Reference: `Unit.h` â€” `struct MagicType3`
+/// Active DOT/HOT effect on a unit â€” mirrors `Unit::MagicType3`.
 /// Each durational skill occupies a slot in the `durational_skills` array.
 /// The `dot_tick` system processes these every 2 seconds.
 #[derive(Debug, Clone)]
@@ -2445,8 +2053,6 @@ impl DurationalSkill {
 }
 
 /// Scheduled NPC respawn — queued when a monster with a respawn chain dies.
-///
-/// C++ Reference: `Npc.cpp:909-915` — `SpawnEventNpc(pSummon->iborn, ..., deadtime*MINUTE)`
 /// Processed by the NPC AI tick; when `spawn_at` passes, the NPC is spawned.
 #[derive(Debug, Clone)]
 pub struct ScheduledRespawn {
@@ -2463,8 +2069,6 @@ pub struct ScheduledRespawn {
 }
 
 /// JackPot configuration loaded from DB — probability thresholds for multiplier tiers.
-///
-/// C++ Reference: `_JACKPOT_SETTING` struct (GameDefine.h:188).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct JackPotSetting {
     /// Chance out of 10000 that jackpot triggers.
@@ -2485,8 +2089,6 @@ pub struct JackPotSetting {
 
 /// Active DOT effect on an NPC — mirrors player `DurationalSkill` but
 /// tracks the caster session and damage per tick against NPC HP.
-///
-/// C++ Reference: NPCs share `Unit::m_durationalSkills[]` with players.
 #[derive(Debug, Clone)]
 pub struct NpcDotSlot {
     /// Skill ID that created this effect.
@@ -2502,12 +2104,9 @@ pub struct NpcDotSlot {
 }
 
 /// Active Type4 buff/debuff on an NPC.
-///
 /// Simpler than the player `ActiveBuff` â€” NPCs only need to track
 /// duration for expiry. Stat modifications on NPCs are handled by
 /// the AI system querying active buff types.
-///
-/// C++ Reference: `_BUFF_TYPE4_INFO` in `GameDefine.h:4764`, keyed
 /// by `bBuffType` in `CNpc::m_buffMap`.
 #[derive(Debug, Clone)]
 pub struct NpcBuffEntry {
@@ -2534,18 +2133,12 @@ impl NpcBuffEntry {
 }
 
 /// Maximum number of items in a ground loot bundle.
-///
-/// C++ Reference: `GameDefine.h:3` â€” `#define NPC_HAVE_ITEM_LIST 8`
 pub const NPC_HAVE_ITEM_LIST: usize = 12; // v2600: sniff verified, was 8 pre-v2600
 
 /// Maximum stack count for items.
-///
-/// C++ Reference: `shared/globals.h:351` â€” `const int ITEMCOUNT_MAX = 9999`
 pub const ITEMCOUNT_MAX: u16 = 9999;
 
 /// A single item in a ground loot bundle.
-///
-/// C++ Reference: `_LOOT_ITEM` in `GameDefine.h:1681`
 #[derive(Debug, Clone, Default)]
 pub struct LootItem {
     /// Item definition number (0 = empty slot).
@@ -2557,8 +2150,6 @@ pub struct LootItem {
 }
 
 /// A ground item bundle dropped by NPCs or players.
-///
-/// C++ Reference: `_LOOT_BUNDLE` in `GameDefine.h:1752`
 #[derive(Debug, Clone)]
 pub struct GroundBundle {
     /// Unique bundle ID.
@@ -2599,17 +2190,15 @@ impl Default for GroundBundle {
 }
 
 /// Computed equipment stats from SetSlotItemValue + SetUserAbility.
-///
-/// C++ Reference: Various `m_sItem*` and `m_sTotal*` fields in `User.h`
 #[derive(Debug, Clone, Default)]
 pub struct EquippedStats {
     /// Total attack power.
     pub total_hit: u16,
     /// Total armor class.
     pub total_ac: i16,
-    /// Max weight capacity (C++ `uint32 m_sMaxWeight` in User.h:394).
+    /// Max weight capacity (`uint32 m_sMaxWeight` in User.h:394).
     pub max_weight: u32,
-    /// Current item weight (C++ `uint32 m_sItemWeight` in User.h:406).
+    /// Current item weight (`uint32 m_sItemWeight` in User.h:406).
     pub item_weight: u32,
     /// Item-based AC sum.
     pub item_ac: i16,
@@ -2664,39 +2253,39 @@ pub struct EquippedStats {
     pub equipped_item_bonuses: std::collections::BTreeMap<usize, Vec<(u8, i32)>>,
 
     // â”€â”€ XP / NP / Gold bonus multipliers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    /// Item XP bonus percent (C++ `m_bItemExpGainAmount`).
+    /// Item XP bonus percent
     pub item_exp_bonus: u8,
-    /// Item NP bonus (C++ `m_bItemNPBonus`).
+    /// Item NP bonus
     pub item_np_bonus: u8,
-    /// Item gold bonus percent (C++ `m_bItemNoahGainAmount`).
+    /// Item gold bonus percent
     pub item_gold_bonus: u8,
 
     // â”€â”€ AP / AC class bonuses â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    /// General AP bonus percent (C++ `m_byAPBonusAmount`).
+    /// General AP bonus percent
     pub ap_bonus_amount: u8,
-    /// AP bonus per class type [warrior, rogue, mage, priest] (C++ `m_byAPClassBonusAmount`).
+    /// AP bonus per class type [warrior, rogue, mage, priest]
     pub ap_class_bonus: [u8; 4],
-    /// AC bonus per class type [warrior, rogue, mage, priest] (C++ `m_byAcClassBonusAmount`).
+    /// AC bonus per class type [warrior, rogue, mage, priest]
     pub ac_class_bonus: [u8; 4],
 
     // â”€â”€ Max weight bonus (from bags + set items + capes) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    /// Bonus max weight from items (C++ `m_sMaxWeightBonus`).
+    /// Bonus max weight from items
     pub max_weight_bonus: i16,
 
-    /// All-element resistance bonus from passive skills + INT (C++ `m_bResistanceBonus`).
+    /// All-element resistance bonus from passive skills + INT
     pub resistance_bonus: i16,
 }
 
 // â”€â”€ King System Data Structures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-/// Election type constants (C++ `ElectionType` enum in `KingSystem.h:30-40`).
+/// Election type constants (`ElectionType` enum in `KingSystem.h:30-40`).
 pub const ELECTION_TYPE_NO_TERM: u8 = 0;
 pub const ELECTION_TYPE_NOMINATION: u8 = 1;
 pub const ELECTION_TYPE_PRE_ELECTION: u8 = 2;
 pub const ELECTION_TYPE_ELECTION: u8 = 3;
 pub const ELECTION_TYPE_TERM_ENDED: u8 = 7;
 
-/// King event sub-opcodes (C++ `KingEventType` enum in `packets.h:471-476`).
+/// King event sub-opcodes (`KingEventType` enum in `packets.h:471-476`).
 pub const KING_EVENT_NOAH: u8 = 1;
 pub const KING_EVENT_EXP: u8 = 2;
 pub const KING_EVENT_PRIZE: u8 = 3;
@@ -2704,21 +2293,21 @@ pub const KING_EVENT_FUGITIVE: u8 = 4;
 pub const KING_EVENT_WEATHER: u8 = 5;
 pub const KING_EVENT_NOTICE: u8 = 6;
 
-/// Main king sub-opcodes (C++ `KingType` enum in `packets.h:461-466`).
+/// Main king sub-opcodes (`KingType` enum in `packets.h:461-466`).
 pub const KING_ELECTION: u8 = 1;
 pub const KING_IMPEACHMENT: u8 = 2;
 pub const KING_TAX: u8 = 3;
 pub const KING_EVENT_OPCODE: u8 = 4;
 pub const KING_NATION_INTRO: u8 = 6;
 
-/// Election sub-opcodes (C++ `KingElectionType` enum in `packets.h:481-485`).
+/// Election sub-opcodes (`KingElectionType` enum in `packets.h:481-485`).
 pub const KING_ELECTION_SCHEDULE: u8 = 1;
 pub const KING_ELECTION_NOMINATE: u8 = 2;
 pub const KING_ELECTION_NOTICE_BOARD: u8 = 3;
 pub const KING_ELECTION_POLL: u8 = 4;
 pub const KING_ELECTION_RESIGN: u8 = 5;
 
-/// Impeachment sub-opcodes (C++ `KingImpeachmentType` enum in `packets.h:505-510`).
+/// Impeachment sub-opcodes (`KingImpeachmentType` enum in `packets.h:505-510`).
 pub const KING_IMPEACHMENT_REQUEST: u8 = 1;
 pub const KING_IMPEACHMENT_REQUEST_ELECT: u8 = 2;
 pub const KING_IMPEACHMENT_LIST: u8 = 3;
@@ -2726,32 +2315,27 @@ pub const KING_IMPEACHMENT_ELECT: u8 = 4;
 pub const KING_IMPEACHMENT_REQUEST_UI_OPEN: u8 = 8;
 pub const KING_IMPEACHMENT_ELECTION_UI_OPEN: u8 = 9;
 
-/// King's Scepter item ID (C++ `Define.h:313`).
+/// King's Scepter item ID
 pub const KING_SCEPTER: u32 = 910_074_311;
 
-/// Minimum level required to vote in king elections (C++ `MIN_LEVEL_VOTER`).
+/// Minimum level required to vote in king elections
 pub const MIN_LEVEL_VOTER: u8 = 50;
 
 /// Minimum national points (loyalty) required to vote in king elections.
-///
-/// C++ Reference: `KingSystem.cpp:7` — `#define MIN_NP_VOTER 10000`
 pub const MIN_NP_VOTER: i32 = 10_000;
 
-/// Notice board sub-opcodes (C++ `KingCandidacyBoardType` in `packets.h:498-499`).
+/// Notice board sub-opcodes (`KingCandidacyBoardType` in `packets.h:498-499`).
 pub const KING_CANDIDACY_BOARD_WRITE: u8 = 1;
 pub const KING_CANDIDACY_BOARD_READ: u8 = 2;
 
 /// Per-nation king system runtime state.
-///
-/// C++ Reference: `CKingSystem` class in `KingSystem.h`
-///
 /// Loaded from `king_system` table at startup; holds election schedule,
 /// impeachment state, active events (noah/exp), treasury, tax, and king info.
 #[derive(Debug, Clone)]
 pub struct KingSystem {
     /// Nation identifier: 1=Karus, 2=Elmorad.
     pub nation: u8,
-    /// Election type (C++ `m_byType`).
+    /// Election type
     pub election_type: u8,
 
     /// Scheduled election date.
@@ -2808,23 +2392,18 @@ pub struct KingSystem {
     pub top10_clan_set: Vec<u16>,
     /// Senator list: character name â†’ (knights_id, votes).
     ///
-    /// C++ `m_senatorList` â€” top 10 clan leaders eligible to nominate a King.
     pub senator_list: Vec<ElectionListEntry>,
     /// Candidate list: nominated candidates for King.
     ///
-    /// C++ `m_candidateList` â€” candidates voted on during election.
     pub candidate_list: Vec<ElectionListEntry>,
     /// Nomination list: who nominated whom.
     ///
-    /// C++ `m_nominationList` â€” tracks nominatorâ†’nominee relationships.
     pub nomination_list: Vec<NominationEntry>,
     /// Notice board: candidate platform statements.
     ///
-    /// C++ `m_noticeBoardMap` â€” candidate name â†’ notice text.
     pub notice_board: Vec<(String, String)>,
     /// Resigned candidate names (cannot be re-nominated).
     ///
-    /// C++ `m_resignedCandidateList`
     pub resigned_candidates: Vec<String>,
     /// New king name determined after election results.
     pub new_king_name: String,
@@ -2835,8 +2414,6 @@ pub struct KingSystem {
 }
 
 /// An entry in the senator or candidate election list.
-///
-/// C++ equivalent: `_KING_ELECTION_LIST` in `KingSystem.h:5-9`.
 #[derive(Debug, Clone)]
 pub struct ElectionListEntry {
     /// Character name of the senator/candidate.
@@ -2848,8 +2425,6 @@ pub struct ElectionListEntry {
 }
 
 /// A nomination entry: who nominated whom.
-///
-/// C++ equivalent: `_KING_NOMINATION_LIST` in `KingSystem.h:12-15`.
 #[derive(Debug, Clone)]
 pub struct NominationEntry {
     /// Character name of the nominator.
@@ -2861,8 +2436,6 @@ pub struct NominationEntry {
 // -- Castle Siege Warfare Data ------------------------------------------------
 
 /// Zone ID constants for king tariff zones.
-///
-/// C++ Reference: `Define.h:135-236`
 pub const ZONE_KARUS: u16 = 1;
 pub const ZONE_ELMORAD: u16 = 2;
 pub const ZONE_KARUS2: u16 = 5;
@@ -2880,8 +2453,6 @@ pub const ZONE_OLD_HUMAN: u16 = 28;
 pub const ZONE_OLD_MORADON: u16 = 29;
 pub const ZONE_BIFROST: u16 = 31;
 /// Base zone ID for battle zones (actual zone = ZONE_BATTLE_BASE + offset).
-///
-/// C++ Reference: `Define.h:172` â€” `#define ZONE_BATTLE_BASE 60`
 pub const ZONE_BATTLE_BASE: u16 = 60;
 pub const ZONE_BATTLE: u16 = 61;
 pub const ZONE_BATTLE2: u16 = 62;
@@ -2922,8 +2493,6 @@ pub const ZONE_CHAOS: u16 = 85;
 pub const ZONE_JURAID: u16 = 87;
 
 /// Zone ID constants for siege/tariff zones.
-///
-/// C++ Reference: `Define.h:139-164`
 pub const ZONE_MORADON: u16 = 21;
 pub const ZONE_MORADON2: u16 = 22;
 pub const ZONE_MORADON3: u16 = 23;
@@ -2936,59 +2505,35 @@ pub const ZONE_DRAGON_CAVE: u16 = 34;
 pub const ZONE_DELOS_CASTELLAN: u16 = 35;
 pub const ZONE_CAITHAROS_ARENA: u16 = 54;
 /// Isiloon Arena zone.
-///
-/// C++ Reference: `Define.h:208` — `#define ZONE_ISILOON_ARENA 93`
 pub const ZONE_ISILOON_ARENA: u16 = 93;
 /// Felankor Arena zone.
-///
-/// C++ Reference: `Define.h:209` — `#define ZONE_FELANKOR_ARENA 94`
 pub const ZONE_FELANKOR_ARENA: u16 = 94;
 /// Arena zone (for PVP/CVC duels).
-///
-/// C++ Reference: `Define.h:146` â€” `#define ZONE_ARENA 48`
 pub const ZONE_ARENA: u16 = 48;
 /// Orc Arena zone.
-///
-/// C++ Reference: `Define.h:147`
 pub const ZONE_ORC_ARENA: u16 = 51;
 /// Blood Don Arena zone.
-///
-/// C++ Reference: `Define.h:148`
 pub const ZONE_BLOOD_DON_ARENA: u16 = 52;
 /// Goblin Arena zone.
-///
-/// C++ Reference: `Define.h:149`
 pub const ZONE_GOBLIN_ARENA: u16 = 53;
 /// Forgotten Temple event zone.
-///
-/// C++ Reference: `Define.h:151`
 pub const ZONE_FORGOTTEN_TEMPLE: u16 = 55;
 
 /// Middle statue warp coordinates for Karus camp.
-///
-/// C++ Reference: `Define.h:268-269`
 pub const DODO_CAMP_WARP_X: u16 = 10540;
 pub const DODO_CAMP_WARP_Z: u16 = 11410;
 
 /// Middle statue warp coordinates for El Morad camp.
-///
-/// C++ Reference: `Define.h:270-271`
 pub const LAON_CAMP_WARP_X: u16 = 10120;
 pub const LAON_CAMP_WARP_Z: u16 = 9140;
 
 /// Random offset radius for middle statue warp.
-///
-/// C++ Reference: `Define.h:272` â€” `#define DODO_LAON_WARP_RADIUS 5`
 pub const DODO_LAON_WARP_RADIUS: u16 = 5;
 
 /// NPC special type for cycle-spawn NPCs (quest key NPCs that rotate positions).
-///
-/// C++ Reference: `NpcDefines.h:277` â€” `NpcSpecialTypeCycleSpawn = 7`
 pub const NPC_SPECIAL_TYPE_CYCLE_SPAWN: i16 = 7;
 
 /// Runtime siege warfare state cached in memory.
-///
-/// C++ Reference: `_KNIGHTS_SIEGE_WARFARE` struct in `GameDefine.h:1986-2072`.
 /// One instance per castle (castle_index=1 for Delos).
 #[derive(Debug, Clone)]
 pub struct SiegeWarfare {
@@ -3062,8 +2607,6 @@ impl Default for SiegeWarfare {
 // ── Zindan War Runtime State ────────────────────────────────────────────
 
 /// Runtime state for Zindan War (Special Event in ZONE_SPBATTLE1).
-///
-/// C++ Reference: `CGameServerDlg::pSpecialEvent` struct
 #[derive(Debug, Clone, Default)]
 pub struct ZindanWarState {
     /// Elmorad clan/team display name.
@@ -3079,8 +2622,6 @@ pub struct ZindanWarState {
 }
 
 /// CSW operational status.
-///
-/// C++ Reference: `CswOpStatus` enum in `thyke_csw.cpp`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CswOpStatus {
@@ -3093,8 +2634,6 @@ pub enum CswOpStatus {
 }
 
 /// CSW notice types sent to players.
-///
-/// C++ Reference: `CswNotice` enum in `thyke_csw.cpp`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CswNotice {
@@ -3109,8 +2648,6 @@ pub enum CswNotice {
 }
 
 /// Runtime state for castle siege warfare events.
-///
-/// C++ Reference: `CGameServerDlg::pCswEvent` struct
 /// Tracks the live war lifecycle, timers, and per-clan kill counts.
 #[derive(Debug, Clone)]
 pub struct CswEventState {
@@ -3130,9 +2667,9 @@ pub struct CswEventState {
     pub clan_kill_list: std::collections::HashMap<u16, u16>,
     /// Players registered for the CSW deathmatch (session_id set).
     pub deathmatch_players: std::collections::HashSet<u16>,
-    /// Preparation phase duration in minutes (C++ `poptions.Preparing`).
+    /// Preparation phase duration in minutes
     pub prep_minutes: u32,
-    /// War phase duration in minutes (C++ `poptions.wartime`).
+    /// War phase duration in minutes
     pub war_minutes: u32,
 }
 
@@ -3156,21 +2693,18 @@ impl Default for CswEventState {
 impl CswEventState {
     /// Whether the CSW event is currently active (preparation or war phase).
     ///
-    /// C++ Reference: `CGameServerDlg::isCswActive()`
     pub fn is_active(&self) -> bool {
         self.started && self.status != CswOpStatus::NotOperation
     }
 
     /// Whether the war phase is currently active (not just preparation).
     ///
-    /// C++ Reference: `CGameServerDlg::isCswWarActive()`
     pub fn is_war_active(&self) -> bool {
         self.started && self.status == CswOpStatus::War
     }
 
     /// Reset the CSW event state.
     ///
-    /// C++ Reference: `CGameServerDlg::CastleSiegeWarfareReset()`
     pub fn reset(&mut self) {
         self.status = CswOpStatus::NotOperation;
         self.csw_time = 0;
@@ -3183,14 +2717,12 @@ impl CswEventState {
 
     /// Register a clan in the kill tracking list (initial kill count = 0).
     ///
-    /// C++ Reference: `CUser::CastleSiegeWarfareRankRegister()`
     pub fn register_clan(&mut self, clan_id: u16) {
         self.clan_kill_list.entry(clan_id).or_insert(0);
     }
 
     /// Increment kill count for a clan.
     ///
-    /// C++ Reference: `CUser::CastleSiegeWarfarerankKillUpdate()`
     pub fn increment_clan_kills(&mut self, clan_id: u16) {
         if let Some(count) = self.clan_kill_list.get_mut(&clan_id) {
             *count += 1;
@@ -3201,8 +2733,6 @@ impl CswEventState {
 // â”€â”€ Beef Roast (Bifrost) Event State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Runtime state for the beef roast / Bifrost monument event.
-///
-/// C++ Reference: `CGameServerDlg::pBeefEvent` (`_BEEF_EVENT_STATUS`) in `BeefEventNew.cpp`
 #[derive(Debug, Clone, Default)]
 pub struct BeefEventState {
     /// Whether the beef event is currently active.
@@ -3217,28 +2747,23 @@ pub struct BeefEventState {
     pub is_farming_play: bool,
     /// UNIX timestamp when the farming phase ends (0 = not set).
     ///
-    /// C++ Reference: `BeefFarmingPlayTime` — set on monument death.
     pub farming_end_time: u64,
     /// UNIX timestamp when the loser nation can log in (0 = not set).
     ///
-    /// C++ Reference: `LoserNationSignTime` — set on monument death.
     pub loser_sign_time: u64,
     /// Whether the loser nation is allowed to enter Bifrost zone.
     ///
-    /// C++ Reference: `isLoserSign` — set when `LoserNationSignTime < UNIXTIME`.
     pub is_loser_sign: bool,
 }
 
 // â”€â”€ Ranking System Data Structures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-/// Ranking type constants (C++ `RankTypes` enum in `packets.h:706-711`).
+/// Ranking type constants (`RankTypes` enum in `packets.h:706-711`).
 pub const RANK_TYPE_PK_ZONE: u8 = 1;
 pub const RANK_TYPE_ZONE_BORDER_DEFENSE_WAR: u8 = 2;
 pub const RANK_TYPE_CHAOS_DUNGEON: u8 = 3;
 
 /// PK zone ranking entry.
-///
-/// C++ Reference: `_PLAYER_KILLING_ZONE_RANKING` in `GameDefine.h:3262-3269`
 /// Also used for Zindan War ranking (`_ZINDAN_WAR_RANKING`).
 #[derive(Debug, Clone)]
 pub struct PkZoneRanking {
@@ -3255,8 +2780,6 @@ pub struct PkZoneRanking {
 }
 
 /// Border Defence War ranking entry.
-///
-/// C++ Reference: `_BORDER_DEFENCE_WAR_RANKING` in `GameDefine.h:3254-3260`
 #[derive(Debug, Clone)]
 pub struct BdwRanking {
     /// Session ID of the player.
@@ -3270,8 +2793,6 @@ pub struct BdwRanking {
 }
 
 /// Chaos Expansion ranking entry.
-///
-/// C++ Reference: `_CHAOS_EXPANSION_RANKING` in `GameDefine.h:3246-3252`
 #[derive(Debug, Clone)]
 pub struct ChaosRanking {
     /// Session ID of the player.
@@ -3285,18 +2806,12 @@ pub struct ChaosRanking {
 }
 
 /// Maximum number of members in a party.
-///
-/// C++ Reference: `structs.h:577` â€” `#define MAX_PARTY_USERS 8`
 pub const MAX_PARTY_USERS: usize = 8;
 
 /// Maximum entries per page in the Party BBS.
-///
-/// C++ Reference: `Define.h:38` â€” `#define MAX_BBS_PAGE 22`
 pub const MAX_BBS_PAGE: usize = 22;
 
 /// A user/party entry in the party seeking bulletin board.
-///
-/// C++ Reference: `_SEEKING_PARTY_USER` in `GameDefine.h:3299-3330`
 #[derive(Debug, Clone)]
 pub struct SeekingPartyUser {
     /// Session ID of the registrant.
@@ -3324,13 +2839,9 @@ pub struct SeekingPartyUser {
 }
 
 /// Maximum number of users in a single chat room.
-///
-/// C++ Reference: ChatRoomHandler.cpp:104 â€” `if (MaxAdmissions > 200)`
 pub const MAX_CHAT_ROOM_USERS: u16 = 200;
 
 /// In-memory chat room data.
-///
-/// C++ Reference: `_CHAT_ROOM` in `shared/database/structs.h:495-529`
 #[derive(Debug, Clone)]
 pub struct ChatRoom {
     /// Unique room index.
@@ -3349,7 +2860,6 @@ pub struct ChatRoom {
     pub current_users: u16,
     /// Member list: incremental member_id -> character_name.
     ///
-    /// C++ Reference: `_CHAT_ROOM::m_UserList` (RoomUserList = std::map<uint16, string>)
     pub members: HashMap<u16, String>,
     /// Internal member ID counter (incremented on each AddUser).
     pub next_member_id: u16,
@@ -3358,14 +2868,12 @@ pub struct ChatRoom {
 impl ChatRoom {
     /// Check if the room has a password set.
     ///
-    /// C++ Reference: `_CHAT_ROOM::isPassword()`
     pub fn has_password(&self) -> bool {
         !self.password.is_empty()
     }
 
     /// Check admin status for a user (returns 2 if admin, 1 if regular member).
     ///
-    /// C++ Reference: `_CHAT_ROOM::isAdministrator()` â€” returns 1 if NOT admin, 2 if IS admin
     pub fn is_administrator(&self, name: &str) -> u8 {
         if self.administrator.eq_ignore_ascii_case(name) {
             2
@@ -3376,7 +2884,6 @@ impl ChatRoom {
 
     /// Add a user to the room. Returns false if the room is full.
     ///
-    /// C++ Reference: `_CHAT_ROOM::AddUser()`
     pub fn add_user(&mut self, name: &str) -> bool {
         if self.current_users >= self.max_users {
             return false;
@@ -3420,19 +2927,12 @@ impl ChatRoom {
 }
 
 /// Range (squared) for party XP sharing.
-///
-/// C++ Reference: `Define.h:286` â€” `#define RANGE_50M (50.0f * 50.0f)`
 pub const RANGE_50M: f32 = 50.0 * 50.0;
 
 /// Range (squared) for quest kill credit in party.
-///
-/// C++ Reference: `Define.h` — `#define RANGE_80M (80.0f * 80.0f)`
 pub const RANGE_80M: f32 = 80.0 * 80.0;
 
 /// A runtime party group.
-///
-/// C++ Reference: `_PARTY_GROUP` in `shared/database/structs.h:578-600`
-///
 /// Stores up to 8 member session IDs. Slot 0 is always the leader.
 /// Empty slots contain `None`.
 #[derive(Debug, Clone)]
@@ -3444,15 +2944,12 @@ pub struct Party {
     pub members: [Option<SessionId>; MAX_PARTY_USERS],
     /// Round-robin item routing index.
     ///
-    /// C++ Reference: `_PARTY_GROUP::bItemRouting`
     pub item_routing: u8,
     /// Target number ID for party target marking.
     ///
-    /// C++ Reference: `_PARTY_GROUP::NumberTargetID`
     pub target_number_id: i16,
     /// Command leader session ID.
     ///
-    /// C++ Reference: `CUser::m_bPartyCommandLeader` — initially the party leader.
     /// Transferred via PARTY_COMMAND_PROMATE. Only the command leader can set
     /// target numbers, send alerts, and transfer command leadership.
     pub command_leader_sid: Option<SessionId>,
@@ -3525,7 +3022,6 @@ impl Party {
 
     /// Check if a session ID is the command leader.
     ///
-    /// C++ Reference: `CUser::isPartyCommandLeader()` — `m_bPartyCommandLeader`
     pub fn is_command_leader(&self, sid: SessionId) -> bool {
         self.command_leader_sid == Some(sid)
     }
@@ -3549,8 +3045,6 @@ impl Party {
 }
 
 /// Runtime clan data cached in memory.
-///
-/// C++ Reference: `CKnights` in `Knights.h`
 #[derive(Debug, Clone, Default)]
 pub struct KnightsInfo {
     /// Clan ID.
@@ -3593,7 +3087,6 @@ pub struct KnightsInfo {
     pub mark_version: u16,
     /// Mark (symbol) image data (max 2400 bytes).
     ///
-    /// C++ Reference: `CKnights::m_Image[MAX_KNIGHTS_MARK]`
     pub mark_data: Vec<u8>,
     /// Alliance ID.
     pub alliance: u16,
@@ -3615,29 +3108,22 @@ pub struct KnightsInfo {
     pub clan_point_method: u8,
     /// Clan premium expiration (unix timestamp, 0 = none).
     ///
-    /// C++ Reference: `CKnights::sPremiumTime`
     pub premium_time: u32,
     /// Clan premium type in use (0 = none, 13 = CLAN_PREMIUM).
     ///
-    /// C++ Reference: `CKnights::sPremiumInUse`
     pub premium_in_use: u8,
     /// Online member count (runtime only, not persisted).
     ///
-    /// C++ Reference: `CKnights::m_bOnlineNembers`
     pub online_members: u16,
     /// Online NP bonus percentage (calculated from online_members).
     ///
-    /// C++ Reference: `CKnights::m_bOnlineNpCount`
     pub online_np_count: u16,
     /// Online EXP bonus percentage (calculated from online_members).
     ///
-    /// C++ Reference: `CKnights::m_bOnlineExpCount`
     pub online_exp_count: u16,
 }
 
 /// Runtime alliance data cached in memory.
-///
-/// C++ Reference: `_KNIGHTS_ALLIANCE` in `GameDefine.h`
 #[derive(Debug, Clone)]
 pub struct KnightsAlliance {
     /// Leader clan ID (also the map key).
@@ -3679,24 +3165,18 @@ pub enum RegionChangeResult {
 // ─── Bot System ───────────────────────────────────────────────────────────────
 
 /// Unique runtime ID for a spawned bot.
-///
-/// C++ Reference: `CBot::m_sSid` — socket ID above MAX_USER band.
 /// In C++, bot socket IDs start at `MAX_USER` (5000) + bot slot index.
 /// We assign IDs starting at `BOT_ID_BASE` to distinguish from player session IDs.
 pub type BotId = u32;
 
 /// Band for bot runtime IDs — bots use IDs >= BOT_ID_BASE.
-///
-/// C++ Reference: C++ bots use IDs starting from MAX_USER (5000, globals.h:24).
 /// We use a higher band (10_000) to avoid any collision with NPC IDs (NPC_BAND).
 pub const BOT_ID_BASE: u32 = 10_000;
 
-/// Bot AI state — mirrors C++ `CBot::m_BotState` values (BotHandler.h).
-///
+/// Bot AI state — mirrors `CBot::m_BotState` values (BotHandler.h).
 /// C++ defines (User.h lines 71-85):
 /// `BOT_AFK=0, BOT_MINING=1, BOT_FISHING=2, BOT_FARMER=3, BOT_FARMERS=4,
 ///  BOT_MERCHANT=5, BOT_DEAD=6, BOT_MOVE=7, BOT_MERCHANT_MOVE=8`
-///
 /// Note: Rust variant discriminants are independent of the C++ enum values
 /// and are used for internal state dispatch only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -3723,9 +3203,7 @@ pub enum BotAiState {
     Afk = 8,
 }
 
-/// User-presence state of a bot — mirrors C++ `USER_STANDING` / `USER_DEAD`.
-///
-/// C++ Reference: `CBot::m_bResHpType`
+/// User-presence state of a bot — mirrors `USER_STANDING` / `USER_DEAD`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u8)]
 pub enum BotPresence {
@@ -3739,8 +3217,6 @@ pub enum BotPresence {
 }
 
 /// Runtime mutable state for a single spawned bot.
-///
-/// C++ Reference: `CBot` class — `BotHandler.h`.
 /// Stored in `WorldState::bots`, keyed by `BotId`.
 #[derive(Debug, Clone)]
 pub struct BotInstance {
@@ -3849,22 +3325,18 @@ pub struct BotInstance {
     pub last_type4_ms: u64,
     /// Timestamp (ms) when the bot should regene after death (0 = not pending).
     ///
-    /// C++ Reference: `CBot::m_sSkillCoolDown[1]` — regene cooldown timer.
     /// Set to `tick_ms() + BOT_REGENE_DELAY_MS` when bot dies.
     pub regene_at_ms: u64,
     /// AI state to restore after regene (saved when bot dies).
     ///
-    /// C++ Reference: `CBot::Regene()` restores `m_BotState = BOT_FARMER` or `BOT_MOVE`.
     pub original_ai_state: BotAiState,
 
     // ─── Waypoint Patrol State ──────────────────────────────────────────
     /// Current patrol route ID (1–10 for Ronark, 1–5 for Ardream, 0 = none).
     ///
-    /// C++ Reference: `BotHandler.h:481` — `s_MoveProcess = myrand(1, 10)`
     pub move_route: u8,
     /// Current waypoint index within the active route (1-based).
     ///
-    /// C++ Reference: `BotHandler.h:482` — `m_MoveState`
     pub move_state: u8,
 
     // ─── Merchant State ──────────────────────────────────────────────────
@@ -3880,15 +3352,12 @@ pub struct BotInstance {
     pub cover_title: u16,
     /// Session/Bot ID of the rival (-1 = no rival).
     ///
-    /// C++ Reference: `BotHandler.h:204` — `m_sRivalID`
     pub rival_id: i16,
     /// Unix timestamp (seconds) when rivalry expires.
     ///
-    /// C++ Reference: `BotHandler.h:240` — `m_tRivalExpiryTime`
     pub rival_expiry_time: u64,
     /// Anger gauge level (0..=5). Incremented on death in PK zones.
     ///
-    /// C++ Reference: `BotHandler.h:182` — `m_byAngerGauge`
     pub anger_gauge: u8,
     /// Whether the bot is hiding helmet cosmetic.
     pub hiding_helmet: bool,
@@ -3898,18 +3367,15 @@ pub struct BotInstance {
     pub need_party: u8,
     /// Equipment visual array — 17 slots of (item_id, durability, flag).
     ///
-    /// C++ Reference: `CBot::GetUserInfo()` in `BotHandler.cpp:499-700`
     /// Slot order matches `VISUAL_SLOT_ORDER`: 8 equipped + 9 cosplay.
     pub equip_visual: [(u32, i16, u8); 17],
 
     // ─── Rankings ───────────────────────────────────────────────────────
     /// Personal rank (1-based, from DB ranking system, 0 = unranked).
     ///
-    /// C++ Reference: `CBot::m_bPersonalRank`
     pub personal_rank: u8,
     /// Knights (clan) rank (1-based, from DB ranking system, 0 = unranked).
     ///
-    /// C++ Reference: `CBot::m_bKnightsRank`
     pub knights_rank: u8,
 }
 
@@ -3931,35 +3397,30 @@ impl BotInstance {
 
     /// Returns true if this bot is a warrior class.
     ///
-    /// C++ Reference: `CBot::isWarrior()` — `JobGroupCheck(ClassWarrior)`
     pub fn is_warrior(&self) -> bool {
         matches!(self.class % 100, 1 | 5 | 6)
     }
 
     /// Returns true if this bot is a rogue class.
     ///
-    /// C++ Reference: `CBot::isRogue()` — `JobGroupCheck(ClassRogue)`
     pub fn is_rogue(&self) -> bool {
         matches!(self.class % 100, 2 | 7 | 8)
     }
 
     /// Returns true if this bot is a mage class.
     ///
-    /// C++ Reference: `CBot::isMage()` — `JobGroupCheck(ClassMage)`
     pub fn is_mage(&self) -> bool {
         matches!(self.class % 100, 3 | 9 | 10)
     }
 
     /// Returns true if this bot is a priest class.
     ///
-    /// C++ Reference: `CBot::isPriest()` — `JobGroupCheck(ClassPriest)`
     pub fn is_priest(&self) -> bool {
         matches!(self.class % 100, 4 | 11 | 12)
     }
 
     /// Returns true if this bot is in a PK zone (Ardream, Ronark Land, etc.).
     ///
-    /// C++ Reference: `CBot::isInPKZone()`
     /// C++ Define.h: ZONE_RONARK_LAND=71, ZONE_ARDREAM=72, ZONE_RONARK_LAND_BASE=73
     pub fn is_in_pk_zone(&self) -> bool {
         matches!(self.zone_id, 71..=73)
@@ -3967,7 +3428,6 @@ impl BotInstance {
 
     /// Returns true if this bot is mercanting (selling or buying).
     ///
-    /// C++ Reference: `CBot::isMerchanting()`
     pub fn is_merchanting(&self) -> bool {
         self.merchant_state != -1
     }

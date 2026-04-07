@@ -1,6 +1,4 @@
 //! Skill shortcut bar model — maps to `user_skill_shortcuts` table.
-//!
-//! C++ Reference: `USERDATA_SKILLSHORTCUT` table in MSSQL.
 //! Stores the hotbar layout as a binary blob of uint32 skill IDs.
 
 /// A single skill shortcut row — one per character.

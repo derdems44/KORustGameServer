@@ -1,6 +1,4 @@
 //! Level-up repository -- loads the level-up experience table from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `GameServer/LoadServerData.cpp` -- `LoadLevelUpTable()`
 //! - `shared/database/LevelUpTableSet.h` -- `CLevelUpTableSet`
 
@@ -21,7 +19,6 @@ impl<'a> LevelUpRepository<'a> {
     /// Load all level-up rows (bulk load at startup).
     ///
     /// Returns one row per (level, rebirth_level) combination (93 rows).
-    /// C++ Reference: `CGameServerDlg::LoadLevelUpTable()`
     pub async fn load_all(&self) -> Result<Vec<LevelUpRow>, sqlx::Error> {
         sqlx::query_as::<_, LevelUpRow>(
             "SELECT id, level, exp, rebirth_level \

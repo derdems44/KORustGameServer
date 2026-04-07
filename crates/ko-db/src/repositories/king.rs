@@ -1,6 +1,4 @@
 //! King system repository — loads and updates king system data from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `KingSystem.cpp` — `CKingSystem` loaded from `KING_SYSTEM` table
 //! - `DBAgent.cpp` — database request handlers for king events/tax/elections
 
@@ -24,7 +22,6 @@ impl<'a> KingRepository<'a> {
     ///
     /// Returns one row per nation (2 rows total: nation 1=Karus, 2=Elmorad).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadKingSystem()`
     pub async fn load_all(&self) -> Result<Vec<KingSystemRow>, sqlx::Error> {
         sqlx::query_as::<_, KingSystemRow>(
             "SELECT by_nation, by_type, s_year, by_month, by_day, by_hour, by_minute, \
@@ -44,7 +41,6 @@ impl<'a> KingRepository<'a> {
 
     /// Update king event state (noah/exp event activation).
     ///
-    /// C++ Reference: `CKingSystem::KingSpecialEvent()` DB update path
     #[allow(clippy::too_many_arguments)]
     pub async fn update_noah_event(
         &self,
@@ -77,7 +73,6 @@ impl<'a> KingRepository<'a> {
 
     /// Update EXP event state.
     ///
-    /// C++ Reference: `CKingSystem::KingSpecialEvent()` DB update path
     #[allow(clippy::too_many_arguments)]
     pub async fn update_exp_event(
         &self,
@@ -110,7 +105,6 @@ impl<'a> KingRepository<'a> {
 
     /// Update territory tariff rate.
     ///
-    /// C++ Reference: `CKingSystem::KingTaxSystem()` opcode 4
     pub async fn update_tariff(
         &self,
         nation: i16,
@@ -126,7 +120,6 @@ impl<'a> KingRepository<'a> {
 
     /// Collect territory tax (set to 0 after king collects).
     ///
-    /// C++ Reference: `CKingSystem::KingTaxSystem()` opcode 2
     pub async fn collect_territory_tax(&self, nation: i16) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE king_system SET n_territory_tax = 0 WHERE by_nation = $1")
             .bind(nation)
@@ -151,7 +144,6 @@ impl<'a> KingRepository<'a> {
 
     /// Update election status type.
     ///
-    /// C++ Reference: `CKingSystem::UpdateElectionStatus()`
     pub async fn update_election_status(
         &self,
         nation: i16,
@@ -167,7 +159,6 @@ impl<'a> KingRepository<'a> {
 
     /// Update the king name and clan after election.
     ///
-    /// C++ Reference: `CKingSystem::AssignNewKingAndSenators()`
     pub async fn update_king(
         &self,
         nation: i16,
@@ -224,7 +215,6 @@ impl<'a> KingRepository<'a> {
 
     /// Load all election list entries for a nation.
     ///
-    /// C++ Reference: `CKingElectionListSet::Fetch()`
     pub async fn load_election_list(
         &self,
         nation: i16,
@@ -240,7 +230,6 @@ impl<'a> KingRepository<'a> {
 
     /// Insert or update an election list entry (senator or candidate).
     ///
-    /// C++ Reference: `CKingSystem::UpdateElectionList()` byType: 3=senator, 4=candidate
     pub async fn upsert_election_list(
         &self,
         nation: i16,
@@ -310,7 +299,6 @@ impl<'a> KingRepository<'a> {
 
     /// Load all nomination list entries for a nation.
     ///
-    /// C++ Reference: `CKingNominationListSet::Fetch()`
     pub async fn load_nomination_list(
         &self,
         nation: i16,
@@ -366,7 +354,6 @@ impl<'a> KingRepository<'a> {
 
     /// Load all candidacy notice board entries for a nation.
     ///
-    /// C++ Reference: `CKingCandidacyNoticeBoardSet::Fetch()`
     pub async fn load_notice_board(
         &self,
         nation: i16,

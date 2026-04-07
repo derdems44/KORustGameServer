@@ -1,36 +1,24 @@
 //! WIZ_LOGIN (0x01) handler — account authentication.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/LoginHandler.cpp:71-113`
-//! C++ Reference: `KOOriginalGameServer/GameServer/DatabaseThread.cpp` (ReqAccountLogIn)
-//!
 //! ## Request Packet (Client → Server)
-//!
 //! | Offset | Type   | Value    | Description                   |
 //! |--------|--------|----------|-------------------------------|
 //! | 0      | string | account  | Account ID (u16le len + bytes)|
 //! | N      | string | password | Password (u16le len + bytes)  |
 //! | N+M    | ...    |          | Additional fields (ignored)   |
-//!
 //! ## Response Packet (Server → Client)
-//!
 //! **Success:**
-//!
 //! | Offset | Type   | Value   | Description                         |
 //! |--------|--------|---------|-------------------------------------|
 //! | 0      | i8     | 0/1/2   | Nation (0=select, 1=Karus, 2=Elmo)  |
 //! | 1      | u32le  | 0       | Reserved                            |
 //! | 5      | u8     | 6       | Reserved                            |
-//!
 //! Then a second packet (opcode 0xC0):
-//!
 //! | Offset | Type | Value | Description       |
 //! |--------|------|-------|-------------------|
 //! | 0      | i8   | 1     | Unknown           |
 //! | 1      | i8   | 2     | Unknown           |
 //! | 2      | i8   | 1     | Unknown           |
-//!
 //! **Failure:**
-//!
 //! | Offset | Type   | Value | Description     |
 //! |--------|--------|-------|-----------------|
 //! | 0      | i8     | -1    | AUTH_FAILED     |
@@ -47,8 +35,6 @@ const NATION_NONE: u8 = 0x00;
 const AUTH_FAILED: u8 = 0xFF; // -1 as i8
 
 /// Validate that account ID contains only allowed characters.
-///
-/// C++ Reference: `IOCPSocket2.cpp` — `string_is_valid()`
 /// Allowed: `a-z`, `A-Z`, `0-9`, `:`, `_`
 fn string_is_valid(s: &str) -> bool {
     s.bytes()
@@ -56,9 +42,7 @@ fn string_is_valid(s: &str) -> bool {
 }
 
 /// Handle WIZ_LOGIN from the client.
-///
 /// The game client sends this after WIZ_VERSION_CHECK, skipping WIZ_CRYPTION.
-/// C++ Reference: `LoginHandler.cpp:71-113`, `DatabaseThread.cpp:960-1038`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     // Game client goes: Connected → VersionCheck (AES key) → Login
     // The Encrypted state is no longer used (AES replaces JvCryption).
@@ -84,7 +68,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     // Data format: [acc_len:u16le][account][pw_len:u16le][password][trailing...]
     // Live test verified: data=[06 00 "myuser" 15 00 "password..."]
 
-    // C++ Reference: LoginSession.cpp:185 — validates length + string_is_valid()
     let account_id = match reader.read_string() {
         Some(s) if !s.is_empty() && s.len() <= MAX_ID_SIZE && string_is_valid(&s) => s,
         _ => {
@@ -127,10 +110,8 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         let repo = AccountRepository::new(&pool);
 
         // Kick any existing session with the same account (duplicate login).
-        // C++ Reference: `LoginHandler.cpp:25-43` — KickOutProcess disconnects old session.
         // This handles the case where a player crashes and reconnects before timeout.
         //
-        // C++ Reference: `LoginHandler.cpp:35-38` — If the old session is an offline
         // merchant, deactivate its offline status first, then disconnect it normally.
         // This closes the merchant, saves item/gold state, and frees the session.
         if let Some(old_sid) = world.find_session_by_account(&account_id) {

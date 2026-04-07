@@ -1,15 +1,8 @@
 //! WIZ_HELMET (0x87) handler — helmet and cospre visibility toggle.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:4219-4248`
-//!
 //! ## Client -> Server
-//!
 //! `[u8 hide_helmet (bool)] [u8 hide_cospre (bool)]`
-//!
 //! ## Server -> Region
-//!
 //! `[u8 hide_helmet] [u8 hide_cospre] [u32 session_id]`
-//!
 //! Toggles helmet and costume visibility. The server reads the two boolean
 //! flags, then broadcasts the state to all nearby players in the region.
 
@@ -19,8 +12,6 @@ use std::sync::Arc;
 use crate::session::{ClientSession, SessionState};
 
 /// Handle WIZ_HELMET from the client.
-///
-/// C++ Reference: `User.cpp:4219-4248` — `CUser::HandleHelmet`
 pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -30,7 +21,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     let sid = session.session_id();
 
     // Dead players cannot toggle helmet
-    // C++ Reference: User.cpp:4221 — if (isDead()) return;
     if world.is_player_dead(sid) {
         return Ok(());
     }
@@ -38,23 +28,19 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     let mut reader = PacketReader::new(&pkt.data);
 
     // Read helmet and cospre hide flags (C++ bool = 1 byte)
-    // C++ Reference: User.cpp:4225-4226
     let hide_helmet = reader.read_u8().unwrap_or(0) != 0;
     let hide_cospre = reader.read_u8().unwrap_or(0) != 0;
 
     // Persist flags in session state for use by item_move broadcast suppression.
-    // C++ Reference: User.cpp:4225-4226 — m_bIsHidingHelmet, m_bIsHidingCospre
     world.update_session(sid, |h| {
         h.is_hiding_helmet = hide_helmet;
         h.is_hiding_cospre = hide_cospre;
     });
 
     // Build broadcast packet: [u8 hide_helmet] [u8 hide_cospre] [u32 socket_id]
-    // C++ Reference: User.cpp:4224-4227
     let result = build_helmet_packet(hide_helmet, hide_cospre, sid);
 
     // Broadcast to region (3x3 grid)
-    // C++ Reference: User.cpp:4229-4232 — SendToRegion
     let (pos, event_room) = world.with_session(sid, |h| (h.position, h.event_room)).unwrap_or_default();
     world.broadcast_to_3x3(
         pos.zone_id,
@@ -67,7 +53,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
 
     // When hiding costume, send base equipment appearance updates so nearby players
     // see the player's actual armor instead of the costume overlay.
-    // C++ Reference: User.cpp:4235-4248 — UserLookChange for BREAST, LEG, GLOVE, FOOT
     if hide_cospre {
         const COSPRE_SLOTS: [u8; 4] = [1, 4, 10, 12]; // BREAST, LEG, GLOVE, FOOT
         for &slot in &COSPRE_SLOTS {
@@ -106,7 +91,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
 }
 
 /// Build a WIZ_HELMET broadcast packet for testing.
-///
 /// Wire: `[u8 hide_helmet] [u8 hide_cospre] [u32 session_id]`
 pub fn build_helmet_packet(hide_helmet: bool, hide_cospre: bool, session_id: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizHelmet as u8);

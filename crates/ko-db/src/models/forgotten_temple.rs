@@ -1,14 +1,9 @@
 //! Forgotten Temple (Monster Challenge) stage and summon models.
-//!
-//! C++ Reference: `_FORGETTEN_TEMPLE_STAGES`, `_FORGETTEN_TEMPLE_SUMMON` structs
 //!                in `GameDefine.h`
-//!
 //! FT event options (`EventOptFtRow`) and rewards (`EventRewardRow`) are defined
 //! in the shared `event_schedule` module.
 
 /// A row from the `ft_stages` table -- defines timing for each stage.
-///
-/// C++ Reference: `_FORGETTEN_TEMPLE_STAGES` in `GameDefine.h:715-733`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct FtStageRow {
     /// Primary key index.
@@ -22,8 +17,6 @@ pub struct FtStageRow {
 }
 
 /// A row from the `ft_summon_list` table -- defines monsters to spawn per stage.
-///
-/// C++ Reference: `_FORGETTEN_TEMPLE_SUMMON` in `GameDefine.h:885-912`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct FtSummonRow {
     /// Row index (not unique -- MSSQL has duplicate bIndex values).

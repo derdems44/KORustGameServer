@@ -1,17 +1,12 @@
 //! Quest text reference table models — NPC dialog menus and talk text.
-//!
-//! C++ Reference:
 //! - `GameServerDlg.cpp` — `m_QuestMenuArray`, `m_QuestTalkArray`
 //! - `shared/database/QuestMenuSet.h`, `shared/database/QuestTalkSet.h`
-//!
 //! These tables are bulk-loaded at startup and cached in WorldState for
 //! fast dialog text lookup by quest Lua scripts.
 
 /// Quest menu option from the `quest_menu` table.
-///
 /// Defines NPC dialog menu choices shown to the player.
 /// MSSQL source: `QUEST_MENU_US` (3,006 rows).
-/// C++ equivalent: `m_QuestMenuArray` keyed by `iNum`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct QuestMenuRow {
     /// Menu option ID (primary key).
@@ -21,10 +16,8 @@ pub struct QuestMenuRow {
 }
 
 /// Quest talk text from the `quest_talk` table.
-///
 /// Defines NPC dialog body text shown to the player.
 /// MSSQL source: `QUEST_TALK_US` (12,060 rows).
-/// C++ equivalent: `m_QuestTalkArray` keyed by `iNum`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct QuestTalkRow {
     /// Talk text ID (primary key).
@@ -35,7 +28,6 @@ pub struct QuestTalkRow {
 }
 
 /// Quest skill closed check entry from `quest_skills_closed_check` table.
-///
 /// Defines prerequisites for skill quest completion.
 /// MSSQL source: `QUEST_SKILLS_CLOSED_CHECK` (25 rows).
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -49,7 +41,6 @@ pub struct QuestSkillsClosedCheckRow {
 }
 
 /// Quest skill open setup entry from `quest_skills_open_set_up` table.
-///
 /// Defines conditions for opening skill quests.
 /// MSSQL source: `QUEST_SKILLS_OPEN_SET_UP` (20 rows).
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -61,7 +52,6 @@ pub struct QuestSkillsOpenSetUpRow {
 }
 
 /// Per-character skill quest progress from `quest_skills_closed_data` table.
-///
 /// Stores binary quest skill progress blob per character.
 /// MSSQL source: `QUEST_SKILLS_CLOSED_DATA` (8,343 rows — per-user).
 /// Schema-only migration; data is loaded per-character at login.

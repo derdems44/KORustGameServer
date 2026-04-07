@@ -1,19 +1,13 @@
 //! Bot AI tick system — drives spawned bot behaviour every second.
-//!
 //! # Architecture
-//!
 //! The bot AI tick runs as a background tokio task (started from `main.rs`).
 //! Each tick it iterates all active [`BotInstance`]s in [`WorldState::bots`]
 //! and advances their AI state machine.
-//!
 //! # C++ Reference
-//!
 //! In C++ each bot runs in a thread (similar to NPC threads) managed by
-//! `CGameServerDlg`. The main AI dispatch happens inside event handlers
 //! triggered by timer callbacks. We replicate this as a centralised tick
 //! rather than per-bot threads.
-//!
-//! ## Bot states (C++ `m_BotState` values, User.h lines 71-85):
+//! ## Bot states (`m_BotState` values, User.h lines 71-85):
 //! - 0 = BOT_AFK          : standing idle (AFK simulation)
 //! - 1 = BOT_MINING       : performing mining animations
 //! - 2 = BOT_FISHING      : performing fishing animations
@@ -23,9 +17,7 @@
 //! - 6 = BOT_DEAD         : bot is dead
 //! - 7 = BOT_MOVE         : walking to destination
 //! - 8 = BOT_MERCHANT_MOVE: walking then opening shop
-//!
 //! ## Tick interval
-//!
 //! C++ bots process at roughly 1-second intervals (similar to NPC AI).
 //! This matches `MONSTER_SPEED = 1500` ms in the NPC AI but bots run at 1 s.
 
@@ -47,72 +39,48 @@ use crate::world::{
 use crate::zone::{calc_region, SessionId};
 
 /// Interval for the bot AI tick loop (milliseconds).
-///
-/// C++ Reference: C++ bots tick approximately once per second.
 const BOT_AI_TICK_MS: u64 = 1_000;
 
 /// Mining/fishing animation broadcast interval (ms).
-///
-/// C++ Reference: `CBot::BotMining()` — `LastMiningCheck + (2 * MINUTE) > UNIXTIME`
 const BOT_MINING_INTERVAL_MS: u64 = 120_000; // 2 minutes
 
 /// Merchant chat broadcast interval (ms).
-///
-/// C++ Reference: `CBot::BotMerchant()` — `LastMiningCheck + (1 * MINUTE) > UNIXTIME`
 const BOT_MERCHANT_CHAT_INTERVAL_MS: u64 = 60_000; // 1 minute
 
 /// Search range for finding targets (game units).
-///
-/// C++ Reference: `BotMoveAttack.cpp:199` — `float searchRange = 45.0f`
 const BOT_SEARCH_RANGE: f32 = 45.0;
 
 /// Attack range for melee attacks (game units).
-///
-/// C++ Reference: `BotMoveAttack.cpp:578` — `float sRange = pSkill.sRange > 0 ? pSkill.sRange : 7.0f`
 /// Default 7.0 matches C++ fallback when skill has no range defined.
 const BOT_ATTACK_RANGE: f32 = 7.0;
 
 /// HP threshold (percentage) below which the bot flees.
-///
 /// When the bot's HP drops below 20% of max, it switches to flee mode.
 const BOT_FLEE_HP_PERCENT: f32 = 0.20;
 
 /// Cooldown between attacks for melee classes (warrior, rogue dagger) (ms).
-///
-/// C++ Reference: `BotMoveAttack.cpp:587` — warriors/dagger rogues use 2s cooldown.
 const BOT_ATTACK_COOLDOWN_MELEE_MS: u64 = 2_000;
 
 /// Cooldown between attacks for ranged/caster classes (rogue arrow, mage, priest) (ms).
-///
-/// C++ Reference: `BotMoveAttack.cpp:587` — arrow/mage/priest use 3s cooldown.
 const BOT_ATTACK_COOLDOWN_RANGED_MS: u64 = 3_000;
 
 /// Cooldown after no target found before rescanning (ms).
-///
-/// C++ Reference: `BotMoveAttack.cpp:185` — `m_sMoveRegionAttackTime = UNIXTIME2 + (5 * SECOND)`
 const BOT_NO_TARGET_COOLDOWN_MS: u64 = 5_000;
 
 /// Default movement step per tick for non-PK zones (game units).
-///
-/// C++ Reference: `BotChatSpawnHandler.cpp:1421` — default speed=45, step=45/10=4.5.
 /// Used only in test assertions.
 #[cfg(test)]
 const BOT_MOVE_SPEED: f32 = 4.5;
 
 /// Maximum damage cap.
-///
 use crate::attack_constants::MAX_DAMAGE;
 
 /// Rivalry duration in seconds (5 minutes).
-///
-/// C++ Reference: `GameDefine.h:1329` — `#define RIVALRY_DURATION (300)`
 const RIVALRY_DURATION_SECS: u64 = 300;
 
 use crate::handler::arena::MAX_ANGER_GAUGE;
 
 /// Bonus NP for killing a rival target.
-///
-/// C++ Reference: `GameDefine.h:1330` — `#define RIVALRY_NP_BONUS (150)`
 const RIVALRY_NP_BONUS: i32 = 150;
 
 /// Flee distance (game units) — how far the bot runs when fleeing.
@@ -122,14 +90,10 @@ const BOT_FLEE_DISTANCE: f32 = 30.0;
 const BOT_REGEN_INTERVAL_MS: u64 = 3_000;
 
 /// Self-heal cooldown (ms).
-///
-/// C++ Reference: `CBot::HpMpChange()` — called from AI tick, approximately
 /// every 5 seconds when HP is below 90%.
 const BOT_SELF_HEAL_COOLDOWN_MS: u64 = 5_000;
 
 /// Delay before a dead bot respawns (ms).
-///
-/// C++ Reference: `BotChatSpawnHandler.cpp:1388-1389` — `HandleBotState` calls
 /// `Regene()` immediately on `BOT_DEAD`, but in PK zones the bot has a
 /// 5-second cooldown (`m_sSkillCoolDown[1] = UNIXTIME + 5`).
 /// We use a 10-second regene delay for consistency across all zones.
@@ -145,7 +109,6 @@ use crate::magic_constants::{MAGIC_CASTING, MAGIC_EFFECTING, MORAL_AREA_ENEMY};
 
 // ── Class-specific bot skill tables ──────────────────────────────────────
 //
-// C++ Reference: `BotMoveAttack.cpp` — Each class has level-range-based skill
 // ID selection. Below is a simplified version using representative skills at
 // low/mid/high level brackets. The C++ code selects randomly from pools;
 // we pick a single representative per bracket for simplicity.
@@ -155,9 +118,6 @@ use crate::magic_constants::{MAGIC_CASTING, MAGIC_EFFECTING, MORAL_AREA_ENEMY};
 // subtract 1000 (C++ ardream downgrade logic).
 
 /// Warrior skill IDs by level bracket (Karus base).
-///
-/// C++ Reference: `CBot::RegionGetWarriorDamageMagic()` — `BotMoveAttack.cpp:1047-1231`
-///
 /// | Level   | Skill ID | Description              |
 /// |---------|----------|--------------------------|
 /// | 1-9     | 101001   | Basic Attack             |
@@ -203,9 +163,6 @@ fn get_warrior_skill(level: u8) -> u32 {
 }
 
 /// Rogue (Assassin dagger) skill IDs by level bracket (Karus base).
-///
-/// C++ Reference: `CBot::RegionGetAssasinDaggerDamageMagic()` — `BotMoveAttack.cpp:591-1045`
-///
 /// | Level   | Skill ID | Description              |
 /// |---------|----------|--------------------------|
 /// | 1-9     | 101001   | Basic Attack             |
@@ -231,11 +188,7 @@ fn get_rogue_skill(level: u8) -> u32 {
 }
 
 /// Rogue (Arrow) skill IDs by level bracket (Karus base).
-///
 /// Used when the bot's RIGHTHAND weapon is a bow or crossbow.
-///
-/// C++ Reference: `CBot::RegionGetAssasinArrowDamageMagic()` — `BotMoveAttack.cpp:370-589`
-///
 /// | Level   | Skill ID | Description              |
 /// |---------|----------|--------------------------|
 /// | 1-9     | 107003   | Arrow Shot               |
@@ -261,12 +214,8 @@ fn get_rogue_arrow_skill(level: u8) -> u32 {
 }
 
 /// Mage subclass offset: Flame = 0, Glacier = 100, Lightning = 200.
-///
-/// C++ Reference: `BotMoveAttack.cpp:313-327` — mage attack randomly selects
 /// one of Flame/Glacier/Lightning each attack via `myrand(1, 3)`.
 /// All three share identical skill ID pools; Glacier adds +100, Lightning +200.
-///
-/// C++ Reference: `BotMagic.cpp:3797-3798` — glacier: `sSkillID += 100`,
 /// `BotMagic.cpp` lightning: `sSkillID += 200` (except 110002/210002).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MageSubclass {
@@ -276,8 +225,6 @@ enum MageSubclass {
 }
 
 /// Randomly select a mage subclass for this attack.
-///
-/// C++ Reference: `BotMoveAttack.cpp:315` — `int nRandom = myrand(1, 3);`
 fn random_mage_subclass() -> MageSubclass {
     let mut rng = rand::thread_rng();
     match rng.gen_range(1..=3) {
@@ -288,8 +235,6 @@ fn random_mage_subclass() -> MageSubclass {
 }
 
 /// Get the mage subclass offset applied to the final skill ID.
-///
-/// C++ Reference: Flame = +0, Glacier = +100, Lightning = +200.
 fn mage_subclass_offset(sub: MageSubclass) -> u32 {
     match sub {
         MageSubclass::Flame => 0,
@@ -299,14 +244,10 @@ fn mage_subclass_offset(sub: MageSubclass) -> u32 {
 }
 
 /// Mage base skill pool by level bracket (Karus base, shared by all subclasses).
-///
-/// C++ Reference: `CBot::RegionGetFlameMageDamageMagic()` — `BotMoveAttack.cpp:1233+`
 /// All three mage subclass functions use the identical level→pool mapping.
 /// The pool contains multiple skills per bracket; we select randomly from
 /// the pool to match C++ behaviour (`myrand(0, N)` per bracket).
-///
 /// After selection, Glacier adds +100 and Lightning adds +200 to the skill ID.
-///
 /// | Level   | Pool (Karus base)                                    |
 /// |---------|------------------------------------------------------|
 /// | 1-4     | 109001, 109002                                       |
@@ -410,12 +351,9 @@ fn get_mage_base_skill(level: u8) -> u32 {
 }
 
 /// Select a mage skill with random subclass (Flame/Glacier/Lightning).
-///
-/// C++ Reference: `BotMoveAttack.cpp:313-327` — randomly picks one of three
 /// mage subclass functions per attack. All three share the same skill pool,
 /// with Glacier adding +100 and Lightning adding +200 to the final ID.
-///
-/// Exception: skill IDs 110002/210002 are NOT offset (C++ `BotMagic.cpp:3797`).
+/// Exception: skill IDs 110002/210002 are NOT offset
 fn get_mage_skill_with_subclass(level: u8) -> u32 {
     let base = get_mage_base_skill(level);
     let subclass = random_mage_subclass();
@@ -430,9 +368,6 @@ fn get_mage_skill_with_subclass(level: u8) -> u32 {
 }
 
 /// Priest skill IDs by level bracket (Karus base).
-///
-/// C++ Reference: `CBot::RegionGetPriestDamageMagic()` — `BotMoveAttack.cpp:4131-4316`
-///
 /// | Level   | Skill ID | Description              |
 /// |---------|----------|--------------------------|
 /// | 1-11    | 101001   | Basic Attack             |
@@ -473,25 +408,18 @@ fn get_priest_skill(level: u8) -> u32 {
 }
 
 /// Select a skill ID for a bot based on its class, level, nation, and weapon.
-///
-/// C++ Reference: All `RegionGet*DamageMagic()` methods in `BotMoveAttack.cpp`.
-///
 /// The C++ code:
 /// 1. Selects a base skill ID (Karus) by level bracket
 /// 2. If nation == ELMORAD, adds +100000
 /// 3. If level <= MAX_LEVEL_ARDREAM and skill_id > class_threshold, subtracts 1000
-///
 /// For rogues, weapon detection determines arrow vs dagger skills:
 /// - BOW (70) / CROSSBOW (71) → arrow skills
 /// - Otherwise → dagger skills
-///
-/// C++ Reference: `BotMoveAttack.cpp:370-590` — checks RIGHTHAND slot item kind
 pub fn select_bot_skill(bot: &BotInstance) -> u32 {
     select_bot_skill_with_weapon(bot, None)
 }
 
 /// Select a skill ID with optional weapon kind override.
-///
 /// When `world` is `Some`, the item table is consulted to detect the weapon
 /// kind from the bot's RIGHTHAND slot. When `None`, dagger skills are used
 /// as default for rogues.
@@ -499,7 +427,6 @@ pub fn select_bot_skill_with_weapon(bot: &BotInstance, world: Option<&WorldState
     let base_skill = if bot.is_warrior() {
         get_warrior_skill(bot.level)
     } else if bot.is_rogue() {
-        // C++ Reference: `BotMoveAttack.cpp:302-369` — weapon detection
         // RIGHTHAND is equip_visual[6], LEFTHAND is equip_visual[7]
         let weapon_kind = detect_rogue_weapon_kind(bot, world);
         if weapon_kind == WEAPON_KIND_BOW || weapon_kind == WEAPON_KIND_CROSSBOW {
@@ -508,7 +435,6 @@ pub fn select_bot_skill_with_weapon(bot: &BotInstance, world: Option<&WorldState
             get_rogue_skill(bot.level)
         }
     } else if bot.is_mage() {
-        // C++ Reference: `BotMoveAttack.cpp:313-327` — random Flame/Glacier/Lightning
         get_mage_skill_with_subclass(bot.level)
     } else if bot.is_priest() {
         get_priest_skill(bot.level)
@@ -518,7 +444,6 @@ pub fn select_bot_skill_with_weapon(bot: &BotInstance, world: Option<&WorldState
     };
 
     // Apply nation offset: ELMORAD skills are +100000.
-    // C++ Reference: `if (GetNation() == ELMORAD) sSkillID += 100000;`
     let mut skill_id = if bot.nation == NATION_ELMORAD {
         base_skill + 100_000
     } else {
@@ -526,7 +451,6 @@ pub fn select_bot_skill_with_weapon(bot: &BotInstance, world: Option<&WorldState
     };
 
     // Ardream downgrade: if level <= 59, downgrade advanced skills by -1000.
-    // C++ Reference: Each class method checks `GetLevel() <= MAX_LEVEL_ARDREAM`
     // and subtracts 1000 from skills above a class-specific threshold.
     if bot.level <= MAX_LEVEL_ARDREAM {
         let threshold = get_ardream_threshold(bot);
@@ -549,8 +473,6 @@ const VISUAL_RIGHTHAND_IDX: usize = 6;
 const VISUAL_LEFTHAND_IDX: usize = 7;
 
 /// Get the attack cooldown for a bot based on its class and weapon.
-///
-/// C++ Reference: `BotMoveAttack.cpp:587` — class-specific cooldowns:
 /// - Warrior / Rogue (dagger): 2 seconds
 /// - Rogue (bow/crossbow) / Mage / Priest: 3 seconds
 fn get_bot_attack_cooldown(bot: &BotInstance, world: Option<&WorldState>) -> u64 {
@@ -571,12 +493,9 @@ fn get_bot_attack_cooldown(bot: &BotInstance, world: Option<&WorldState>) -> u64
 }
 
 /// Detect the weapon kind of a rogue bot's RIGHTHAND slot.
-///
-/// C++ Reference: `BotMoveAttack.cpp:302-340` — checks `GetItem(RIGHTHAND)->m_bKind`
 /// - BOW(70) / CROSSBOW(71) → arrow skills
 /// - DAGGER(11) → dagger skills
 /// - SHIELD(60) → check LEFTHAND instead
-///
 /// Returns the item kind value, or `WEAPON_KIND_DAGGER` as fallback.
 fn detect_rogue_weapon_kind(bot: &BotInstance, world: Option<&WorldState>) -> i32 {
     let world = match world {
@@ -596,10 +515,7 @@ fn detect_rogue_weapon_kind(bot: &BotInstance, world: Option<&WorldState>) -> i3
 }
 
 /// Detect weapon kinds for both hand slots of a bot.
-///
-/// C++ Reference: `Unit::GetACDamage()` in `Unit.cpp:1861-1894` — iterates over
 /// `weaponSlots[] = { LEFTHAND, RIGHTHAND }` and looks up `pWeapon->GetKind()`.
-///
 /// Returns an array of `[Option<i32>; 2]` (LEFTHAND, RIGHTHAND) weapon kinds.
 fn detect_bot_weapon_kinds(bot: &BotInstance, world: &WorldState) -> [Option<i32>; 2] {
     let slots = [VISUAL_LEFTHAND_IDX, VISUAL_RIGHTHAND_IDX];
@@ -617,8 +533,6 @@ fn detect_bot_weapon_kinds(bot: &BotInstance, world: &WorldState) -> [Option<i32
 }
 
 /// Get the Ardream downgrade threshold for a bot's class/nation.
-///
-/// C++ Reference: Each `RegionGet*DamageMagic()` checks different thresholds:
 /// - Warrior: Karus > 106000, Elmorad > 206000
 /// - Rogue (dagger): Karus > 108000, Elmorad > 208000
 /// - Rogue (arrow): Karus > 108000, Elmorad > 208000
@@ -655,7 +569,6 @@ fn unix_now() -> u64 {
 }
 
 /// Returns the current monotonic time in milliseconds.
-///
 /// Used for timing AI ticks. C++ uses `UNIXTIME2` (millisecond resolution).
 pub fn tick_ms() -> u64 {
     SystemTime::now()
@@ -665,7 +578,6 @@ pub fn tick_ms() -> u64 {
 }
 
 /// Start the bot AI background task.
-///
 /// Spawns a tokio task that ticks all active bots every `BOT_AI_TICK_MS`.
 /// Call this once during server startup, after world tables are loaded.
 pub fn start_bot_ai_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
@@ -679,11 +591,8 @@ pub fn start_bot_ai_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> 
 }
 
 /// Process one AI tick for all active bots.
-///
 /// This iterates the `WorldState::bots` DashMap and advances each bot's
 /// state machine based on its `ai_state`.
-///
-/// C++ Reference: Bot AI is driven by timer callbacks in `CGameServerDlg`.
 pub fn tick_bots(world: &WorldState) {
     let now_unix = unix_now();
     let now_ms = tick_ms();
@@ -710,7 +619,6 @@ pub fn tick_bots(world: &WorldState) {
         }
 
         // Dead bot: check if regene timer has elapsed.
-        // C++ Reference: `HandleBotState()` — BOT_DEAD case calls `Regene()`.
         if bot.presence == BotPresence::Dead {
             if bot.regene_at_ms > 0 && now_ms >= bot.regene_at_ms {
                 bot_regene(world, bot.id, now_ms);
@@ -719,7 +627,6 @@ pub fn tick_bots(world: &WorldState) {
         }
 
         // Rivalry expiry check.
-        // C++ Reference: `BotChatSpawnHandler.cpp:1346-1347`
         if bot.rival_id >= 0 && bot.rival_expiry_time > 0 {
             let now_unix = unix_now();
             if now_unix >= bot.rival_expiry_time {
@@ -736,7 +643,6 @@ pub fn tick_bots(world: &WorldState) {
         }
 
         // Self-heal AI: if HP < 90% of max, cast heal skill.
-        // C++ Reference: `CBot::HpMpChange()` in `BotHealthHandler.cpp:341-380`
         // Cooldown: 5 seconds between heal attempts.
         if bot.hp > 0
             && bot.max_hp > 0
@@ -791,7 +697,6 @@ pub fn tick_bots(world: &WorldState) {
 // Bot Combat AI — BotMoveAttack implementation
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// C++ Reference: `BotMoveAttack.cpp` — `CBot::RegionFindAttackProcess()`
 //
 // The combat state machine works as follows:
 // 1. Find valid targets in surrounding 3x3 regions (IsValidTarget)
@@ -803,14 +708,12 @@ pub fn tick_bots(world: &WorldState) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// Calculate HP regen amount for a bot per tick.
-///
 /// Formula: `level * 2 + STA / 5`
 pub fn calc_bot_hp_regen(level: u8, sta: u8) -> i16 {
     (level as i16 * 2) + (sta as i16 / 5)
 }
 
 /// Calculate MP regen amount for a bot per tick.
-///
 /// Formula: `level * 2 + INT / 5`
 pub fn calc_bot_mp_regen(level: u8, intel: u8) -> i16 {
     (level as i16 * 2) + (intel as i16 / 5)
@@ -855,9 +758,6 @@ fn tick_bot_regen(world: &WorldState, bot: &BotInstance, now_ms: u64) {
 }
 
 /// Get zone-specific NP reward for killing a bot.
-///
-/// C++ Reference: `BotLoyalty.cpp:206-234` — zone-based loyalty_source values.
-///
 /// - Ardream (72): 32 NP
 /// - Ronark Land Base (73): 64 NP
 /// - Ronark Land (71) and other zones: 64 NP
@@ -870,9 +770,6 @@ fn get_bot_kill_np(zone_id: u16) -> i32 {
 }
 
 /// Process kill rewards when a player kills a bot.
-///
-/// C++ Reference: `CBot::OnDeathKilledPlayer()` in `BotHandler.cpp:1794-2039`
-///
 /// NP reward uses zone-specific rates (matching `LoyaltyChange` flow):
 /// - The base NP comes from `get_bot_kill_np()` (zone-based)
 /// - Rival bonus NP added if applicable (+150 NP)
@@ -889,7 +786,7 @@ fn process_bot_kill_reward(
         None => return,
     };
 
-    // Zone-specific NP reward (C++ BotLoyalty.cpp:206-234).
+    // Zone-specific NP reward
     let zone_id = world
         .get_position(killer_sid)
         .map(|p| p.zone_id)
@@ -927,9 +824,6 @@ fn process_bot_kill_reward(
 }
 
 /// Combat AI tick for Farmer/Pk bots.
-///
-/// C++ Reference: `CBot::RegionFindAttackProcess()` in `BotMoveAttack.cpp:165-214`
-///
 /// Drives the combat loop: find target, move toward it, attack when in range.
 /// If the bot's HP falls below 20%, it transitions to fleeing behaviour.
 fn tick_fighting(world: &WorldState, bot: &BotInstance, now_ms: u64) {
@@ -945,7 +839,6 @@ fn tick_fighting(world: &WorldState, bot: &BotInstance, now_ms: u64) {
     }
 
     // Throttle: respect the class-specific attack cooldown timer.
-    // C++ Reference: `BotMoveAttack.cpp:167` —
     //   `if ((m_sMoveRegionAttackTime - UNIXTIME2) < 1 * SECOND) return;`
     let cooldown = get_bot_attack_cooldown(bot, Some(world));
     if now_ms.saturating_sub(bot.last_move_ms) < cooldown {
@@ -959,7 +852,6 @@ fn tick_fighting(world: &WorldState, bot: &BotInstance, now_ms: u64) {
     match target {
         None => {
             // No valid target found — patrol along waypoint route.
-            // C++ Reference: `BotMoveAttack.cpp:185` + `BotMovement.cpp:344-428`
             // In C++, when no target is found the bot continues waypoint patrol.
             world.update_bot(bot_id, |b| {
                 b.target_id = -1;
@@ -998,7 +890,6 @@ fn tick_fighting(world: &WorldState, bot: &BotInstance, now_ms: u64) {
                 let (new_x, new_y, new_z) = move_toward_target(bot, target_x, target_y, target_z);
 
                 // Path validation: reject move if outside map boundaries.
-                // C++ Reference: `BotMovement.cpp:18-19` — `if (!IsValidPosition(X, Z, Y)) return;`
                 if !is_bot_position_valid(world, bot.zone_id, new_x, new_z) {
                     world.update_bot(bot_id, |b| {
                         b.target_id = -1;
@@ -1009,7 +900,6 @@ fn tick_fighting(world: &WorldState, bot: &BotInstance, now_ms: u64) {
                 }
 
                 // Echo state: 1=new target, 3=continuing, 0=arrived.
-                // C++ Reference: `BotMovement.cpp:110-117`
                 let arrived = {
                     let dx2 = new_x - target_x;
                     let dz2 = new_z - target_z;
@@ -1058,15 +948,11 @@ fn tick_fighting(world: &WorldState, bot: &BotInstance, now_ms: u64) {
 }
 
 /// Move a bot along its waypoint patrol route.
-///
-/// C++ Reference: `BotMovement.cpp:344-428` — `CBot::WalkCordinat()`
 /// + `MoveProcessRonarkLandTown()` / `MoveProcessArdreamLandTown()`
-///
 /// When a bot has no combat target, it walks along predefined waypoint routes.
 /// Each waypoint is reached by stepping toward it (using `move_toward_target`).
 /// When close enough, `move_state` advances. When the route is complete,
-/// a new random route is picked and the bot respawns (C++ `isReset(false)`).
-///
+/// a new random route is picked and the bot respawns
 /// Returns `true` if a waypoint movement was performed, `false` if the bot
 /// has no active route (non-PK zone, or `move_route == 0`).
 fn tick_waypoint_patrol(world: &WorldState, bot: &BotInstance, now_ms: u64) -> bool {
@@ -1086,7 +972,6 @@ fn tick_waypoint_patrol(world: &WorldState, bot: &BotInstance, now_ms: u64) -> b
             let max = bot_waypoints::route_max_waypoints(bot.zone_id, route, bot.nation);
             if state >= max {
                 // Route complete — reset and respawn.
-                // C++ Reference: `WalkCordinat()` — `isReset(false); Regene(INOUT_IN);`
                 waypoint_route_complete(world, bot, now_ms);
             } else {
                 world.update_bot(bot.id, |b| {
@@ -1115,7 +1000,6 @@ fn tick_waypoint_patrol(world: &WorldState, bot: &BotInstance, now_ms: u64) -> b
         let max = bot_waypoints::route_max_waypoints(bot.zone_id, route, bot.nation);
         if state >= max {
             // Route cycle complete — pick new route, respawn.
-            // C++ Reference: `WalkCordinat():393-399` — `isReset(false); Regene(...);`
             waypoint_route_complete(world, bot, now_ms);
         } else {
             world.update_bot(bot.id, |b| {
@@ -1137,7 +1021,6 @@ fn tick_waypoint_patrol(world: &WorldState, bot: &BotInstance, now_ms: u64) -> b
     let (new_x, new_y, new_z) = move_toward_target(bot, wp_x, bot.y, wp_z);
 
     // Path validation: reject move if destination is outside map boundaries.
-    // C++ Reference: `BotMovement.cpp:18-19` — `if (!IsValidPosition(X, Z, Y)) return;`
     if !is_bot_position_valid(world, bot.zone_id, new_x, new_z) {
         // Skip this waypoint and advance to next.
         let max = bot_waypoints::route_max_waypoints(bot.zone_id, route, bot.nation);
@@ -1187,8 +1070,6 @@ fn tick_waypoint_patrol(world: &WorldState, bot: &BotInstance, now_ms: u64) -> b
 }
 
 /// Handle completion of a waypoint route cycle.
-///
-/// C++ Reference: `WalkCordinat():393-399` — When `ZoneMoveType()` returns false:
 ///   `isReset(false)` picks a new random route + resets `m_MoveState = 1`,
 ///   then `Regene(INOUT_IN)` respawns the bot.
 fn waypoint_route_complete(world: &WorldState, bot: &BotInstance, now_ms: u64) {
@@ -1215,7 +1096,6 @@ fn waypoint_route_complete(world: &WorldState, bot: &BotInstance, now_ms: u64) {
     let new_rz = calc_region(new_z);
 
     // Step 3: Update bot — new route, new position, reset state.
-    // C++ Reference: `isReset(false)` — `s_MoveProcess = myrand(1,10); m_MoveState = 1;`
     world.update_bot(bot.id, |b| {
         b.x = new_x;
         b.z = new_z;
@@ -1246,10 +1126,7 @@ fn waypoint_route_complete(world: &WorldState, bot: &BotInstance, now_ms: u64) {
 }
 
 /// Find the nearest valid enemy for a bot to attack.
-///
-/// C++ Reference: `CBot::IsValidTarget()` in `BotMoveAttack.cpp:216-232`
-/// + `CBot::GetNearestTarget()` in `BotMoveAttack.cpp:234-250`
-///
+/// + `CBot::GetNearestTarget()`
 /// Iterates all sessions in the bot's zone, filtering by:
 /// - Target must be alive (not dead)
 /// - Target must be in a different nation (enemy)
@@ -1258,9 +1135,7 @@ fn waypoint_route_complete(world: &WorldState, bot: &BotInstance, now_ms: u64) {
 /// - Target must NOT be in genie mode
 /// - Target must NOT be blinking (just respawned)
 /// - Target must be within search range (45.0 units)
-///
 /// Also checks other bots as potential targets (opposing nation, PK zone).
-///
 /// Returns `Some((target_id, x, y, z))` for the nearest valid target, or `None`.
 pub fn find_nearest_enemy(
     bot: &BotInstance,
@@ -1286,34 +1161,29 @@ pub fn find_nearest_enemy(
         };
 
         // Must be alive (HP > 0).
-        // C++ Reference: `BotMoveAttack.cpp:221` — `pTarget->isDead()`
         if ch.hp <= 0 {
             continue;
         }
 
         // Must be a different nation (enemy).
-        // C++ Reference: `BotMoveAttack.cpp:222` —
         //   `TO_USER(pTarget)->GetNation() == GetNation()`
         if ch.nation == bot.nation {
             continue;
         }
 
         // Must be in a PK zone.
-        // C++ Reference: `BotMoveAttack.cpp:223` —
         //   `!TO_USER(pTarget)->isInPKZone()`
         if !is_pk_zone(pos.zone_id) {
             continue;
         }
 
         // Must NOT be a GM.
-        // C++ Reference: `BotMoveAttack.cpp:225` — `TO_USER(pTarget)->isGM()`
         // C++ isGM(): authority == 0
         if ch.authority == 0 {
             continue;
         }
 
         // Must NOT be in genie mode.
-        // C++ Reference: `BotMoveAttack.cpp:224` —
         //   `TO_USER(pTarget)->isInGenie()`
         let is_genie = world.with_session(sid, |h| h.genie_active).unwrap_or(false);
         if is_genie {
@@ -1337,7 +1207,6 @@ pub fn find_nearest_enemy(
     }
 
     // ── Check other bots (opposing nation) ─────────────────────────────
-    // C++ Reference: `BotMoveAttack.cpp:228-229` — bot-vs-bot targeting
     for entry in world.bots.iter() {
         let other = entry.value();
 
@@ -1357,14 +1226,12 @@ pub fn find_nearest_enemy(
         }
 
         // Must be a different nation.
-        // C++ Reference: `BotMoveAttack.cpp:228` —
         //   `TO_BOT(pTarget)->GetNation() == GetNation()`
         if other.nation == bot.nation {
             continue;
         }
 
         // Must be in a PK zone.
-        // C++ Reference: `BotMoveAttack.cpp:229` —
         //   `!TO_BOT(pTarget)->isInPKZone()`
         if !other.is_in_pk_zone() {
             continue;
@@ -1385,13 +1252,9 @@ pub fn find_nearest_enemy(
 }
 
 /// Calculate the bot's new position when moving toward a target.
-///
-/// C++ Reference: `CBot::CalculateNewPosition()` in `BotMoveAttack.cpp:260-267`
-/// + `CBot::HandleAttack()` movement in `BotMoveAttack.cpp:269-307`
-///
+/// + `CBot::HandleAttack()` movement
 /// Moves the bot `speed/10.0` units toward the target, with a small
 /// random offset matching the C++ jitter: `(myrand(0,2000) - 1000) / 500`.
-///
 /// Returns `(new_x, new_y, new_z)` — the bot's new position after movement.
 pub fn move_toward_target(
     bot: &BotInstance,
@@ -1400,7 +1263,6 @@ pub fn move_toward_target(
     target_z: f32,
 ) -> (f32, f32, f32) {
     // Add C++ style random jitter to target position.
-    // C++ Reference: `BotMovement.cpp:97-98`
     //   vUser.Set(x + ((myrand(0, 2000) - 1000.0f) / 500.0f), ...);
     let mut rng = rand::thread_rng();
     let jitter_x: f32 = (rng.gen_range(0..=2000) as f32 - 1000.0) / 500.0;
@@ -1419,12 +1281,10 @@ pub fn move_toward_target(
     }
 
     // Step size: speed / 10.0 world units per tick.
-    // C++ Reference: `BotMovement.cpp:131` — `vDistance *= speed / 10.0f;`
     let speed = get_bot_speed(bot);
     let step = speed / 10.0;
 
     // If one step would overshoot, snap to target (C++ sRunFinish logic).
-    // C++ Reference: `BotMovement.cpp:143-146`
     if step >= distance {
         return (adj_target_x, target_y, adj_target_z);
     }
@@ -1439,20 +1299,13 @@ pub fn move_toward_target(
 }
 
 /// Perform a magic-based attack from a bot to a target.
-///
-/// C++ Reference: `BotMoveAttack.cpp:269-331` — `CBot::HandleAttack()`
 /// dispatches to class-specific magic attack methods which call
 /// `MagicPacket(MAGIC_CASTING, ...)` + `MagicPacket(MAGIC_EFFECTING, ...)`.
-///
 /// We replicate the C++ approach: broadcast both MAGIC_CASTING (animation)
 /// and MAGIC_EFFECTING (damage result) as WIZ_MAGIC_PROCESS packets with
 /// the appropriate class-specific skill ID. This causes the client to show
 /// the correct skill animation and damage numbers.
-///
 /// ## Broadcast format (S->C) — WIZ_MAGIC_PROCESS
-///
-/// C++ Reference: `MagicInstance::build_packet()` in magic_process.rs
-///
 /// | Type  | Field       |
 /// |-------|-------------|
 /// | u8    | bOpcode     |  (MAGIC_CASTING=1 or MAGIC_EFFECTING=3)
@@ -1505,7 +1358,6 @@ fn bot_perform_attack(
     }
 
     // ── AOE check: if the skill is a Type3 MORAL_AREA_ENEMY with radius, use AOE path ──
-    // C++ Reference: `MagicInstance::ExecuteType3()` — when moral == MORAL_AREA_ENEMY and
     // bRadius > 0, damage is applied to all enemies in the radius.
     if bot.is_mage() {
         if let Some(magic) = world.get_magic(skill_id as i32) {
@@ -1542,7 +1394,6 @@ fn bot_perform_attack(
     let mut damage = calculate_bot_damage(bot);
 
     // ── AC Reduction: weapon-type resistance ───────────────────────────
-    // C++ Reference: `Unit::GetACDamage()` in `Unit.cpp:1861-1894`
     // Bot's equipped weapons reduce damage based on target's armor resistances.
     if let Some(ch) = world.get_character_info(target_sid) {
         let _ = ch; // we only need EquippedStats below
@@ -1561,13 +1412,11 @@ fn bot_perform_attack(
     }
 
     // ── Elemental Damage: item bonuses vs target resistance ───────────
-    // C++ Reference: `Unit::GetMagicDamage()` in `Unit.cpp:1700-1747` (bot branch)
     let (elem_damage, hp_drain, mp_damage_drain, mp_drain) =
         calc_bot_elemental_damage(bot, world, target_sid);
     damage = damage.saturating_add(elem_damage).min(MAX_DAMAGE as i16);
 
     // ── Mirror Damage: reflect portion back to bot ─────────────────────
-    // C++ Reference: `BotHealthHandler.cpp:29-41` — `mirrorDamage = (m_byMirrorAmount * amount) / 100`
     // Also `Unit.cpp:1795-1796` — item-based reflection: `damage * total_d4 / 300`
     let mirror_damage = get_target_mirror_damage(world, target_sid, damage);
     if mirror_damage > 0 {
@@ -1580,7 +1429,6 @@ fn bot_perform_attack(
     let (result, target_hp) = apply_damage_to_target(world, target_sid, damage, bot.id);
 
     // ── Post-damage drain effects ──────────────────────────────────────
-    // C++ Reference: `Unit.cpp:1786-1793` — applied after main damage.
     // HP Drain: attacker heals total_d1 * damage / 100
     if hp_drain > 0 {
         let heal = (hp_drain * damage as i32 / 100).min(i16::MAX as i32) as i16;
@@ -1606,7 +1454,6 @@ fn bot_perform_attack(
     }
 
     // ── Phase 1: Broadcast MAGIC_CASTING (cast animation) ────────────
-    // C++ Reference: `MagicPacket(MAGIC_CASTING, sSkillID, GetID(), pUnit->GetID(),
     //                              (uint16)GetX(), (uint16)GetY(), (uint16)GetZ())`
     // The data fields carry caster position for the casting animation.
     let cast_pkt = build_bot_magic_packet(
@@ -1619,7 +1466,6 @@ fn bot_perform_attack(
     broadcast_to_bot_region(world, bot.zone_id, bot.region_x, bot.region_z, &cast_pkt);
 
     // ── Phase 2: Broadcast MAGIC_EFFECTING (damage result) ───────────
-    // C++ Reference: `MagicPacket(MAGIC_EFFECTING, sSkillID, GetID(), pUnit->GetID(),
     //                              (uint16)GetX(), (uint16)GetY(), (uint16)GetZ())`
     // data[3] carries the damage/result for the client to display.
     let effect_pkt = build_bot_magic_packet(
@@ -1689,12 +1535,8 @@ fn bot_perform_attack(
 }
 
 /// Build a WIZ_MAGIC_PROCESS packet for bot skill broadcasting.
-///
-/// C++ Reference: `MagicInstance::build_packet()` in `magic_process.rs:197-207`
-///
 /// Mirrors the exact wire format used by the magic system:
 /// `[u8 opcode_header][u8 magic_opcode][u32 skill_id][u32 caster_id][u32 target_id][u32 data[0..7]]`
-///
 /// # Arguments
 /// - `magic_opcode` — MAGIC_CASTING (1) or MAGIC_EFFECTING (3)
 /// - `skill_id` — class-specific skill ID from `select_bot_skill()`
@@ -1720,11 +1562,8 @@ fn build_bot_magic_packet(
 }
 
 /// Find all enemy targets within a given radius of a center point.
-///
-/// C++ Reference: `FundamentalMethods.cpp:274-375` — `GetUnitListFromSurroundingRegions()`
 /// gathers all potential targets from a 3×3 region grid. Then `UserRegionCheck()`
 /// in `MagicProcess.cpp:465` filters by `isInRangeSlow(mousex, mousez, radius)`.
-///
 /// Returns a list of `(target_id, x, z)` tuples for all valid enemy targets
 /// within the radius. Targets include both players and enemy bots.
 fn find_aoe_targets(
@@ -1838,12 +1677,9 @@ fn find_aoe_targets(
 }
 
 /// Perform an AOE (area-of-effect) magic attack from a mage bot.
-///
-/// C++ Reference: `MagicInstance::ExecuteType3()` in `MagicInstance.cpp:3542-3896`
 /// gathers all units from surrounding regions, filters by `bRadius`, and applies
 /// damage to each. `UserRegionCheck()` in `MagicProcess.cpp:465` uses
 /// `isInRangeSlow()` for the radius check.
-///
 /// This function:
 /// 1. Applies damage to the primary target (already calculated by caller)
 /// 2. Finds all secondary targets within the AOE radius (centered on primary target)
@@ -1918,7 +1754,6 @@ fn bot_perform_aoe_attack(
 }
 
 /// Calculate AOE damage for a specific target.
-///
 /// Uses the same base damage formula as single-target attacks, plus
 /// AC reduction and elemental bonuses when targeting players.
 fn calculate_aoe_target_damage(
@@ -1978,8 +1813,6 @@ fn broadcast_bot_magic_effecting(
 }
 
 /// Broadcast target HP update packets after bot damage.
-///
-/// C++ Reference: `User.cpp:2712-2857` (SendTargetHP)
 /// Wire format: `[u32 target_id][u8 echo][u32 max_hp][u32 current_hp][u32 damage][u32 0][u8 0]`
 /// Damage field: negative for damage dealt, positive for heal (C++ parity).
 fn broadcast_target_hp_update(
@@ -2022,29 +1855,21 @@ fn broadcast_target_hp_update(
 }
 
 /// Calculate base damage for a bot based on its stats and class.
-///
-/// C++ Reference: Derived from `UserAbilityHandler.cpp:160-189` and
 /// `MagicInstance.cpp` damage formulas.
-///
 /// Since bots now use WIZ_MAGIC_PROCESS (skill-based attacks), the damage
 /// formula accounts for the skill's magic type:
-///
 /// - **Warriors**: STR-based melee skill damage.
 ///   Formula: `(STR * level / 25) + (level * 2)`
 ///   C++ warrior skills are physical Type 1 — STR is primary stat.
-///
 /// - **Rogues**: DEX-based skill damage.
 ///   Formula: `(DEX * level / 25) + (level * 2)`
 ///   C++ rogue skills are physical Type 1 — DEX is primary stat.
-///
 /// - **Mages**: INT-based magic damage.
 ///   Formula: `(INT * level / 20) + (level * 3)`
 ///   C++ mage skills are magic Type 3 — INT is primary stat with higher scaling.
-///
 /// - **Priests**: INT-based magic damage (lower scaling than mage).
 ///   Formula: `(INT * level / 25) + (level * 2)`
 ///   C++ priest skills are magic Type 3 — INT is primary but with healing focus.
-///
 /// Minimum damage is 10, maximum is capped at 800 per hit.
 pub fn calculate_bot_damage(bot: &BotInstance) -> i16 {
     let level = bot.level as f32;
@@ -2069,11 +1894,8 @@ pub fn calculate_bot_damage(bot: &BotInstance) -> i16 {
 }
 
 /// Calculate mirror/reflect damage that the target would reflect back to the attacker.
-///
-/// C++ Reference:
 /// - `BotHealthHandler.cpp:29-41` — buff-based mirror: `(m_byMirrorAmount * amount) / 100`
 /// - `Unit.cpp:1795-1796` — item-based reflection: `damage * total_d4 / 300`
-///
 /// For simplicity, we check the target player's `equipped_item_bonuses` for
 /// `ITEM_TYPE_MIRROR_DAMAGE` (type 8) entries and apply the `/300` formula.
 /// The buff-based mirror would require tracking a separate mirror buff flag on
@@ -2106,11 +1928,8 @@ const ITEM_TYPE_MP_DRAIN: u8 = 7;
 const ITEM_TYPE_MIRROR_DAMAGE: u8 = 8;
 
 /// Collect elemental/drain bonuses from bot's equipped items.
-///
-/// C++ Reference: `BotAbility.cpp:456-478` — iterates equipped slots and
 /// accumulates fire_damage, ice_damage, lightning_damage, poison_damage,
 /// hp_drain, mp_damage, mp_drain, mirror_damage from item table.
-///
 /// Returns a vector of `(type, amount)` tuples.
 fn collect_bot_item_bonuses(bot: &BotInstance, world: &WorldState) -> Vec<(u8, i32)> {
     let mut bonuses = Vec::new();
@@ -2168,17 +1987,12 @@ fn collect_bot_item_bonuses(bot: &BotInstance, world: &WorldState) -> Vec<(u8, i
 }
 
 /// Calculate elemental bonus damage from bot's equipped items against a target.
-///
-/// C++ Reference: `Unit::GetMagicDamage()` in `Unit.cpp:1700-1747` (bot branch)
-///
 /// For each elemental bonus (fire/cold/lightning):
 ///   `total_r = (target_base_r + target_add_r) * target_pct_r / 100 + resistance_bonus`
 ///   Capped at 200.
 ///   `bonus_damage += amount - amount * total_r / 200`
-///
 /// Drain types (HP_DRAIN, MP_DAMAGE, MP_DRAIN) are accumulated separately and
 /// applied after the main damage is dealt.
-///
 /// Returns `(extra_elemental_damage, hp_drain_total, mp_damage_total, mp_drain_total)`.
 fn calc_bot_elemental_damage(
     bot: &BotInstance,
@@ -2251,11 +2065,9 @@ fn calc_bot_elemental_damage(
 
 /// Apply damage to a target (player session or bot) and return the result
 /// code and remaining HP.
-///
 /// Returns `(attack_result, target_current_hp)`:
 /// - `ATTACK_SUCCESS` (1) if damage dealt, target alive
 /// - `ATTACK_TARGET_DEAD` (2) if target died
-///
 /// If the target is a player session, updates their HP in the session handle.
 /// If the target is a bot, updates their HP in the bots DashMap.
 fn apply_damage_to_target(
@@ -2264,7 +2076,7 @@ fn apply_damage_to_target(
     damage: i16,
     attacker_id: BotId,
 ) -> (u8, i16) {
-    // Enforce MAX_DAMAGE cap (C++ Define.h:30, Unit.cpp:1598-1601).
+    // Enforce MAX_DAMAGE cap
     let damage = damage.clamp(-(MAX_DAMAGE as i16), MAX_DAMAGE as i16);
 
     // Try player session first.
@@ -2303,7 +2115,6 @@ fn apply_damage_to_target(
 
         // If the bot died, trigger the full death processing (WIZ_DEAD broadcast,
         // regene timer, etc.) instead of just setting presence.
-        // C++ Reference: `CBot::OnDeath()` in `BotHandler.cpp:1648-1689`
         if new_hp <= 0 {
             bot_on_death(world, target_id as BotId, tick_ms());
         }
@@ -2316,10 +2127,8 @@ fn apply_damage_to_target(
 }
 
 /// Switch a bot to fleeing mode — run away from the current target.
-///
 /// C++ bots don't have an explicit flee state (they fight to death),
 /// but we add this for more realistic behaviour.
-///
 /// The bot moves in the opposite direction from the nearest enemy
 /// by `BOT_FLEE_DISTANCE` units, then returns to idle.
 fn start_fleeing(world: &WorldState, bot: &BotInstance, now_ms: u64) {
@@ -2390,7 +2199,6 @@ fn start_fleeing(world: &WorldState, bot: &BotInstance, now_ms: u64) {
 }
 
 /// Compute a random flee position for a bot.
-///
 /// Used when the target position is unknown or the bot has no target.
 fn flee_random_direction(bot: &BotInstance) -> (f32, f32) {
     let mut rng = rand::thread_rng();
@@ -2402,13 +2210,9 @@ fn flee_random_direction(bot: &BotInstance) -> (f32, f32) {
 }
 
 /// Broadcast a WIZ_MOVE packet for a bot's movement.
-///
-/// C++ Reference: `CBot::MoveProcess()` — broadcasts movement to
 /// surrounding regions.
-///
 /// ## Wire format (S->C):
 /// `[u32 socket_id][u16 will_x][u16 will_z][u16 will_y][i16 speed][u8 echo]`
-///
 /// ## Echo values
 /// - `1` — start of new movement (target changed, new run begins)
 /// - `3` — continuing movement (mid-run)
@@ -2438,9 +2242,6 @@ fn broadcast_bot_move_ex(
 }
 
 /// Get bot movement speed based on class and zone.
-///
-/// C++ Reference: `CGameServerDlg::SetBotSpeed()` in `BotChatSpawnHandler.cpp:1421-1436`
-///
 /// | Zone    | Rogue/Captain | Others | Default |
 /// |---------|--------------|--------|---------|
 /// | PK zone | 90.0         | 67.0   | 67.0    |
@@ -2458,17 +2259,12 @@ fn get_bot_speed(bot: &BotInstance) -> f32 {
 }
 
 /// Check if a zone is a PK zone (where bot PvP is allowed).
-///
-/// C++ Reference: `CBot::isInPKZone()` in `BotMoveAttack.cpp:223,229`
 fn is_pk_zone(zone_id: u16) -> bool {
     matches!(zone_id, ZONE_RONARK_LAND..=ZONE_RONARK_LAND_BASE)
 }
 
 /// Check if a position is valid within a zone's map boundaries.
-///
-/// C++ Reference: `SMDFile::IsValidPosition()` — simple X/Z boundary check.
 /// C++ bots call this before `SetPosition()` and skip the move if invalid.
-///
 /// Returns `true` if the position is within bounds (or if no map data is loaded).
 fn is_bot_position_valid(world: &WorldState, zone_id: u16, x: f32, z: f32) -> bool {
     match world.get_zone(zone_id) {
@@ -2478,8 +2274,6 @@ fn is_bot_position_valid(world: &WorldState, zone_id: u16, x: f32, z: f32) -> bo
 }
 
 /// Broadcast a mining animation packet for a bot and update its timer.
-///
-/// C++ Reference: `CBot::BotMining()` — sends `WIZ_MINING(MiningAttempt)` to region.
 fn tick_mining(world: &WorldState, bot: &BotInstance, now_ms: u64) {
     if now_ms.saturating_sub(bot.last_mining_ms) < BOT_MINING_INTERVAL_MS {
         world.update_bot(bot.id, |b| b.last_tick_ms = now_ms);
@@ -2517,8 +2311,6 @@ fn tick_mining(world: &WorldState, bot: &BotInstance, now_ms: u64) {
 }
 
 /// Broadcast a fishing animation packet for a bot and update its timer.
-///
-/// C++ Reference: `CBot::BotFishing()` — sends `WIZ_MINING(FishingAttempt)` to region.
 fn tick_fishing(world: &WorldState, bot: &BotInstance, now_ms: u64) {
     if now_ms.saturating_sub(bot.last_mining_ms) < BOT_MINING_INTERVAL_MS {
         world.update_bot(bot.id, |b| b.last_tick_ms = now_ms);
@@ -2553,15 +2345,10 @@ fn tick_fishing(world: &WorldState, bot: &BotInstance, now_ms: u64) {
 }
 
 /// Merchant move interval constants.
-///
-/// C++ Reference: `CBot::MerchantMoveProcess()` — `m_sMoveRegionAttackTime = UNIXTIME2 + myrand(7,17)`
 const BOT_MERCHANT_MOVE_MIN_MS: u64 = 7_000;
 const BOT_MERCHANT_MOVE_MAX_MS: u64 = 17_000;
 
 /// Walking merchant AI: move toward nearby merchant players, then transition to Merchant.
-///
-/// C++ Reference: `CBot::MerchantMoveProcess()` in `BotHandler.cpp:1344-1457`
-///
 /// Behaviour:
 /// 1. Every 7-17s (random delay), scan surrounding 3×3 region for merchant players.
 /// 2. Move toward the nearest one using step-based movement.
@@ -2674,8 +2461,6 @@ fn tick_merchant_move(world: &WorldState, bot: &BotInstance, now_ms: u64) {
 }
 
 /// Broadcast a merchant chat message for a bot if the interval has elapsed.
-///
-/// C++ Reference: `CBot::BotMerchant()` — sends `WIZ_CHAT(MERCHANT_CHAT)` to region.
 fn tick_merchant(world: &WorldState, bot: &BotInstance, now_ms: u64) {
     if now_ms.saturating_sub(bot.last_merchant_chat_ms) < BOT_MERCHANT_CHAT_INTERVAL_MS {
         world.update_bot(bot.id, |b| b.last_tick_ms = now_ms);
@@ -2696,13 +2481,12 @@ fn tick_merchant(world: &WorldState, bot: &BotInstance, now_ms: u64) {
     let name = bot.name.clone();
 
     // Build WIZ_CHAT packet with MERCHANT_CHAT type (14).
-    // C++: `ChatPacket::Construct(&result, MERCHANT_CHAT, &MerchantChat, &GetName(), GetNation(), GetID())`
     // C++ packets.h:298: MERCHANT_CHAT=14
     // Format: opcode | chat_type(u8=14) | nation(u8) | sender_id(i16) |
     //         name(SByte: u8_len+bytes) | message(DByte: u16_len+bytes) |
     //         personelrank(i8=0) | authority(u8=1) | systemmsg(u8=0)
     let mut pkt = Packet::new(Opcode::WizChat as u8);
-    pkt.write_u8(14); // MERCHANT_CHAT (C++ packets.h:298)
+    pkt.write_u8(14); // MERCHANT_CHAT
     pkt.write_u8(nation);
     pkt.write_i16(bot_id as i16); // sender_id
                                   // SByte: u8 length prefix + name bytes
@@ -2732,9 +2516,6 @@ fn tick_merchant(world: &WorldState, bot: &BotInstance, now_ms: u64) {
 }
 
 /// Despawn a bot: remove from registry and broadcast WIZ_USER_INOUT(INOUT_OUT) to region.
-///
-/// C++ Reference: `CBot::UserInOut(INOUT_OUT)` + `CGameServerDlg::RemoveMapBotList()`.
-///
 /// Builds an INOUT_OUT packet using the bot's session-band ID and broadcasts
 /// it to all players in the surrounding 3×3 region so they see the bot disappear.
 pub fn despawn_bot(world: &WorldState, id: BotId) {
@@ -2748,7 +2529,6 @@ pub fn despawn_bot(world: &WorldState, id: BotId) {
 
         // Broadcast WIZ_USER_INOUT(INOUT_OUT) to the surrounding region so nearby
         // players see the bot disappear.
-        // C++ Reference: `CBot::UserInOut(INOUT_OUT)` — sends type=2 (INOUT_OUT) with
         // only the session ID; no player-info block for OUT packets.
         let mut out_pkt = ko_protocol::Packet::new(ko_protocol::Opcode::WizUserInout as u8);
         out_pkt.write_u8(2); // INOUT_OUT = 2  (crate::handler::region::INOUT_OUT)
@@ -2760,13 +2540,9 @@ pub fn despawn_bot(world: &WorldState, id: BotId) {
 }
 
 /// Bot self-heal AI: cast a heal skill when HP is below 90% of max.
-///
-/// C++ Reference: `CBot::HpMpChange()` in `BotHealthHandler.cpp:341-380`
-///
 /// Skill selection by class:
 /// - Priests (Karus): 112545, (Elmorad): 212545
 /// - All other classes: 490014 (generic heal)
-///
 /// The heal restores 15% of max HP. Priest heals include a MAGIC_CASTING phase;
 /// non-priest heals skip directly to MAGIC_EFFECTING.
 fn tick_bot_self_heal(world: &WorldState, bot: &BotInstance, now_ms: u64) {
@@ -2774,7 +2550,6 @@ fn tick_bot_self_heal(world: &WorldState, bot: &BotInstance, now_ms: u64) {
     let new_hp = (bot.hp + heal_amount).min(bot.max_hp);
 
     // Select heal skill ID based on class + nation
-    // C++ Reference: BotHealthHandler.cpp:355-370
     let skill_id: u32 = if bot.is_priest() {
         if bot.nation == NATION_ELMORAD {
             212545
@@ -2833,17 +2608,12 @@ fn tick_bot_self_heal(world: &WorldState, bot: &BotInstance, now_ms: u64) {
 
 /// Handle a bot's death: mark as dead, broadcast WIZ_DEAD, set regene timer,
 /// update rivalry and anger gauge.
-///
-/// C++ Reference: `CBot::OnDeath(Unit* pKiller)` in `BotHandler.cpp:1648-1689`
-/// C++ Reference: `CBot::OnDeathKilledPlayer()` in `BotHandler.cpp:1870-1912`
-///
 /// When a bot's HP reaches 0:
 /// 1. Set `m_bResHpType = USER_DEAD`, `m_BotState = BOT_DEAD`
 /// 2. In PK zones: increment anger gauge, set killer as rival
 /// 3. Clear target, broadcast WIZ_DEAD
 /// 4. Start regene timer (bot will respawn after `BOT_REGENE_DELAY_MS`)
 /// 5. Give kill rewards (NP + gold) to killer, with rival bonus if applicable
-///
 /// ## Packet format (S->C): WIZ_DEAD
 /// `[u32 dead_unit_id]`
 pub fn bot_on_death(world: &WorldState, bot_id: BotId, now_ms: u64) {
@@ -2883,7 +2653,6 @@ pub fn bot_on_death(world: &WorldState, bot_id: BotId, now_ms: u64) {
     broadcast_to_bot_region(world, zone_id, rx, rz, &dead_pkt);
 
     // ── Rivalry & anger gauge (PK zones only) ────────────────────────
-    // C++ Reference: `BotHandler.cpp:1870-1912` — OnDeathKilledPlayer
     let mut rival_bonus_np: i32 = 0;
     let mut remove_rival_from_killer = false;
 
@@ -2891,7 +2660,6 @@ pub fn bot_on_death(world: &WorldState, bot_id: BotId, now_ms: u64) {
         let now_unix = unix_now();
 
         // Check if killed by rival — bonus NP.
-        // C++ Reference: `BotHandler.cpp:1892-1903`
         let killed_by_rival = current_rival_id >= 0
             && current_rival_id == killer_id as i16
             && rival_expiry > now_unix;
@@ -2902,7 +2670,6 @@ pub fn bot_on_death(world: &WorldState, bot_id: BotId, now_ms: u64) {
         }
 
         // Increment anger gauge (max 5).
-        // C++ Reference: `BotHandler.cpp:1908-1909`
         if current_anger < MAX_ANGER_GAUGE {
             let new_anger = current_anger + 1;
             world.update_bot(bot_id, |b| {
@@ -2912,7 +2679,6 @@ pub fn bot_on_death(world: &WorldState, bot_id: BotId, now_ms: u64) {
         }
 
         // Set killer as rival if bot doesn't have one.
-        // C++ Reference: `BotHandler.cpp:1911-1912`
         if current_rival_id < 0 {
             world.update_bot(bot_id, |b| {
                 b.rival_id = killer_id as i16;
@@ -2922,7 +2688,6 @@ pub fn bot_on_death(world: &WorldState, bot_id: BotId, now_ms: u64) {
     }
 
     // ── Tournament kill scoring ────────────────────────────────────────
-    // C++ Reference: BotHandler.cpp:1858-1867 — OnDeathKilledPlayer
     // When a bot dies in a tournament zone, the player killer's clan gets a score point.
     if killer_id >= 0
         && (killer_id as u32) < crate::world::BOT_ID_BASE
@@ -2942,7 +2707,6 @@ pub fn bot_on_death(world: &WorldState, bot_id: BotId, now_ms: u64) {
             process_bot_kill_reward(world, killer_sid, bot_level, rival_bonus_np);
 
             // Death notice broadcast to zone.
-            // C++ Reference: `CBot::SendNewDeathNotice()` in `BotChatSpawnHandler.cpp:406-487`
             let killer_party_id = world
                 .get_character_info(killer_sid)
                 .and_then(|ch| ch.party_id)
@@ -2959,7 +2723,6 @@ pub fn bot_on_death(world: &WorldState, bot_id: BotId, now_ms: u64) {
             );
 
             // Remove rival from killer if they killed their rival.
-            // C++ Reference: `BotHandler.cpp:2030-2033`
             if remove_rival_from_killer {
                 // The killer's rival tracking is in CharacterInfo.
                 world.update_character_stats(killer_sid, |ch| {
@@ -2984,9 +2747,6 @@ pub fn bot_on_death(world: &WorldState, bot_id: BotId, now_ms: u64) {
 }
 
 /// Broadcast anger gauge update to the bot's region.
-///
-/// C++ Reference: `CBot::UpdateAngerGauge()` in `BotRival.cpp:33-45`
-///
 /// ## Packet format (S->C): WIZ_PVP
 /// - Sub-opcode 5 (`PVPUpdateHelmet`): `[u8 anger_level] [u8 has_full_gauge]`
 /// - Sub-opcode 6 (`PVPResetHelmet`): no additional data
@@ -3013,14 +2773,10 @@ fn broadcast_anger_gauge(
 }
 
 /// Get nation-specific respawn coordinates for a bot in a given zone.
-///
-/// C++ Reference: `BotRegene.cpp:34-87` — `GetStartPosition()` lookup
-///
 /// Uses START_POSITION table data (from migration #18):
 /// - Zone 71 (Ronark Land): Karus (1375,1098), Elmorad (622,898), range ±5
 /// - Zone 72 (Ardream):     Karus (851,136),   Elmorad (190,897), range ±5
 /// - Zone 73 (RLB):         Karus (515,104),   Elmorad (513,916), range ±5
-///
 /// Returns `(x, z)` with random range offset applied.
 fn get_bot_respawn_position(zone_id: u16, nation: u8) -> (f32, f32) {
     let mut rng = rand::thread_rng();
@@ -3066,9 +2822,6 @@ fn get_bot_respawn_position(zone_id: u16, nation: u8) -> (f32, f32) {
 
 /// Regene (respawn) a dead bot: restore HP, move to nation start position,
 /// broadcast INOUT packets.
-///
-/// C++ Reference: `CBot::Regene(uint8, uint32)` in `BotRegene.cpp:3-128`
-///
 /// Steps:
 /// 1. Broadcast WIZ_USER_INOUT(INOUT_OUT) to hide the dead body
 /// 2. Move bot to nation-specific start position for its zone
@@ -3095,7 +2848,6 @@ fn bot_regene(world: &WorldState, bot_id: BotId, now_ms: u64) {
     let nation = bot.nation;
 
     // Step 1: Broadcast INOUT_OUT to clear the dead body.
-    // C++ Reference: `BotRegene.cpp:29` — `BotInOut(INOUT_OUT)`
     let mut out_pkt = Packet::new(Opcode::WizUserInout as u8);
     out_pkt.write_u8(2); // INOUT_OUT
     out_pkt.write_u8(0); // reserved
@@ -3103,7 +2855,6 @@ fn bot_regene(world: &WorldState, bot_id: BotId, now_ms: u64) {
     broadcast_to_bot_region(world, zone_id, old_rx, old_rz, &out_pkt);
 
     // Step 2: Determine respawn position.
-    // C++ Reference: `BotRegene.cpp:34-87` — nation-specific START_POSITION lookup
     let (respawn_x, respawn_z) = get_bot_respawn_position(zone_id, nation);
     let (new_x, new_z) = if respawn_x > 0.0 || respawn_z > 0.0 {
         (respawn_x, respawn_z)
@@ -3115,7 +2866,6 @@ fn bot_regene(world: &WorldState, bot_id: BotId, now_ms: u64) {
     let new_rz = calc_region(new_z);
 
     // Step 3: Restore HP/MP, position, state, and reset anger gauge.
-    // C++ Reference: `BotRegene.cpp:126-127` — `UpdateAngerGauge(0)` on respawn
     // + `isReset(false)` — pick new random route, reset m_MoveState = 1
     let new_route = bot_waypoints::random_route(zone_id);
     world.update_bot(bot_id, |b| {
@@ -3140,7 +2890,6 @@ fn bot_regene(world: &WorldState, bot_id: BotId, now_ms: u64) {
     });
 
     // Step 4: Broadcast INOUT_RESPAWN with full GetUserInfo so clients see the bot.
-    // C++ Reference: `BotRegene.cpp:107` — `BotInOut(INOUT_RESPAWN)` + `GetUserInfo(result)`
     // INOUT_RESPAWN = 3 in C++ (packets.h:53)
     if let Some(alive_bot) = world.get_bot(bot_id) {
         let respawn_pkt = build_bot_inout_packet(&alive_bot, world, 3);
@@ -3159,10 +2908,7 @@ fn bot_regene(world: &WorldState, bot_id: BotId, now_ms: u64) {
 }
 
 /// Parse bot equipment from the DB binary blob into the 17-slot visual array.
-///
-/// C++ Reference: `CDBAgent::LoadBotTable()` in `DBAgent.cpp:5009` — reads `INVENTORY_TOTAL * 8`
 /// bytes where each item = `nItemID(u32) + sDurability(u16) + sCount(u16)`.
-///
 /// The visual broadcast order matches `VISUAL_SLOT_ORDER`:
 /// `[BREAST(4), LEG(10), HEAD(1), GLOVE(12), FOOT(13), SHOULDER(5), RIGHTHAND(6), LEFTHAND(8),
 ///  CWING(42), CHELMET(43), CLEFT(44), CRIGHT(45), CTOP(46), CTATTOO(49), CFAIRY(48), CEMBLEM(47), CTALISMAN(50)]`
@@ -3200,13 +2946,9 @@ fn parse_bot_equipment(str_item: Option<&[u8]>) -> [(u32, i16, u8); 17] {
 }
 
 /// Build a complete WIZ_USER_INOUT packet for a bot with full GetUserInfo data.
-///
-/// C++ Reference: `CBot::GetInOut()` in `BotHandler.cpp:101-107` wraps
 /// `CBot::GetUserInfo()` in `BotHandler.cpp:499-701`.
-///
 /// The packet format is byte-identical to `CUser::GetUserInfo()` — the client
 /// treats bots and players the same for INOUT rendering.
-///
 /// `inout_type`: 1 = INOUT_IN, 3 = INOUT_RESPAWN
 fn build_bot_inout_packet(bot: &BotInstance, world: &WorldState, inout_type: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizUserInout as u8);
@@ -3215,7 +2957,6 @@ fn build_bot_inout_packet(bot: &BotInstance, world: &WorldState, inout_type: u8)
     pkt.write_u32(bot.id);
 
     // ── GetUserInfo body ─────────────────────────────────────────────
-    // C++ Reference: `CBot::GetUserInfo()` in `BotHandler.cpp:499-701`
 
     // Name (SByte — u8 length prefix)
     pkt.write_sbyte_string(&bot.name);
@@ -3339,11 +3080,7 @@ fn build_bot_inout_packet(bot: &BotInstance, world: &WorldState, inout_type: u8)
 }
 
 /// Calculate max HP for a bot from the coefficient table.
-///
-/// C++ Reference: `CUser::SetMaxHp()` in `UserHealtMagicSpSystem.cpp:246-247`.
-///
 /// Formula: `(HP_COEFF * level^2 * STA) + (0.1 * level * STA) + (STA / 5) + 20`
-///
 /// Minimum is 20 HP to match C++ behaviour.
 fn calc_bot_max_hp(level: u8, sta: u8, coeff: &CoefficientRow) -> i16 {
     let lvl = level as f64;
@@ -3353,9 +3090,6 @@ fn calc_bot_max_hp(level: u8, sta: u8, coeff: &CoefficientRow) -> i16 {
 }
 
 /// Calculate max MP for a bot from the coefficient table.
-///
-/// C++ Reference: `CUser::SetMaxMp()` in `UserHealtMagicSpSystem.cpp:326-339`.
-///
 /// - Magic classes (MP coeff != 0): `(MP_COEFF * level^2 * (INT+30)) + (0.1 * level * 2 * (INT+30)) + ((INT+30) / 5) + 20`
 /// - SP classes (Kurian, SP coeff != 0): `(SP_COEFF * level^2 * STA) + (0.1 * level * STA) + (STA / 5)`
 /// - Others: 0
@@ -3378,13 +3112,9 @@ fn calc_bot_max_mp(level: u8, sta: u8, intel: u8, coeff: &CoefficientRow) -> i16
 }
 
 /// Compute and apply HP/MP for a bot using the coefficient table.
-///
 /// Sets `bot.hp`, `bot.max_hp`, `bot.mp`, and `bot.max_mp` based on level,
 /// class stats, and the class coefficient row.
-///
-/// C++ Reference: `CBot::SetBotAbility()` in `BotAbility.cpp:93-360` —
 /// calls `SetMaxHp()` and `SetMaxMp()` which use the coefficient table.
-///
 /// # Arguments
 /// - `bot`  — mutable bot instance to update
 /// - `coeff` — coefficient row for the bot's class (from `WorldState::get_coefficient`)
@@ -3399,11 +3129,8 @@ pub fn set_bot_ability(bot: &mut BotInstance, coeff: &CoefficientRow) {
 }
 
 /// Parameters for spawning a farm bot.
-///
 /// Groups the positional and behavioural arguments that would otherwise
 /// exceed clippy's `too_many_arguments` threshold.
-///
-/// C++ Reference: `CGameServerDlg::SpawnEventBotFarm()` argument list.
 pub struct SpawnBotParams {
     /// Zone ID to spawn in.
     pub zone_id: u16,
@@ -3420,14 +3147,10 @@ pub struct SpawnBotParams {
 }
 
 /// Spawn a bot from a `BotHandlerFarmRow` definition.
-///
 /// Inserts the bot into `WorldState::bots` and marks it in-game.
 /// The caller is responsible for sending `WIZ_USER_INOUT(INOUT_IN)` packets
 /// to nearby players (this function only manages state).
-///
 /// Returns the allocated `BotId`.
-///
-/// C++ Reference: `CGameServerDlg::SpawnEventBotFarm()` + `CBot::UserInOut(INOUT_IN)`.
 pub fn spawn_farm_bot(
     world: &WorldState,
     row: &ko_db::models::bot_system::BotHandlerFarmRow,
@@ -3519,13 +3242,11 @@ pub fn spawn_farm_bot(
     };
 
     // Apply stat-derived HP/MP using the coefficient table.
-    // C++ Reference: `CBot::SetBotAbility()` — `SetMaxHp()` + `SetMaxMp()`
     if let Some(coeff) = world.get_coefficient(bot.class) {
         set_bot_ability(&mut bot, &coeff);
     }
 
     // Assign a random patrol route for PK zone bots.
-    // C++ Reference: `BotHandler.h:481` — `isReset(false)` on spawn:
     //   `s_MoveProcess = myrand(1, 10); m_MoveState = 1;`
     let route = bot_waypoints::random_route(zone_id);
     if route > 0 {
@@ -3553,9 +3274,6 @@ pub fn spawn_farm_bot(
 }
 
 /// Parameters for spawning a GM-issued bot (without a DB row).
-///
-/// C++ Reference: `CUser::HandleBotSpawnFarm()` / `HandleBotSpawnPk()` in
-/// `BotChatSpawnHandler.cpp:242-277` / `310-343`.
 pub struct SpawnGmBotParams {
     /// Zone ID to spawn in.
     pub zone_id: u16,
@@ -3577,10 +3295,7 @@ pub struct SpawnGmBotParams {
 }
 
 /// Map GM class shorthand to an actual KO class code.
-///
-/// C++ Reference: `BotChatSpawnHandler.cpp:879-898` — class filter:
 /// sClass 1=warrior, 2=rogue, 3=mage, 4=priest.
-///
 /// Returns a representative class code for each job group.
 fn gm_class_to_real_class(gm_class: u16, nation: u8) -> u16 {
     // Base classes per nation: Karus race starts at 100, ElMorad at 200.
@@ -3598,8 +3313,6 @@ fn gm_class_to_real_class(gm_class: u16, nation: u8) -> u16 {
 }
 
 /// Generate random base stats for a GM-spawned bot based on class.
-///
-/// C++ Reference: Simplified from DB `bot_handler_farm` data.
 /// Warriors get high STR/STA, rogues get high DEX, mages get high INT.
 fn gm_bot_stats(class: u16) -> (u8, u8, u8, u8, u8) {
     let base_class = class % 100;
@@ -3613,15 +3326,10 @@ fn gm_bot_stats(class: u16) -> (u8, u8, u8, u8, u8) {
 }
 
 /// Spawn a bot from GM command parameters (no DB row required).
-///
 /// Creates a `BotInstance` with generated stats and name, inserts it into
 /// `WorldState::bots`, computes HP/MP from the coefficient table, and
 /// broadcasts `WIZ_USER_INOUT(INOUT_IN)` to surrounding players.
-///
 /// Returns the allocated `BotId`.
-///
-/// C++ Reference: `CGameServerDlg::SpawnEventBotFarm()` in
-/// `BotChatSpawnHandler.cpp:845-970` — creates bot, sets ability, calls
 /// `UserInOut(INOUT_IN)`.
 pub fn spawn_gm_bot(world: &WorldState, params: SpawnGmBotParams) -> BotId {
     use crate::zone::calc_region;
@@ -3727,7 +3435,6 @@ pub fn spawn_gm_bot(world: &WorldState, params: SpawnGmBotParams) -> BotId {
     }
 
     // Assign a random patrol route for PK zone bots.
-    // C++ Reference: `BotHandler.h:481` — `isReset(false)` on spawn
     let route = bot_waypoints::random_route(zone_id);
     if route > 0 {
         bot.move_route = route;
@@ -3735,7 +3442,6 @@ pub fn spawn_gm_bot(world: &WorldState, params: SpawnGmBotParams) -> BotId {
     }
 
     // Broadcast full WIZ_USER_INOUT(INOUT_IN) with GetUserInfo.
-    // C++ Reference: `CBot::UserInOut(INOUT_IN)` in `BotHandler.cpp:136-188`
     let in_pkt = build_bot_inout_packet(&bot, world, 1); // 1 = INOUT_IN
     broadcast_to_bot_region(world, zone_id, rx, rz, &in_pkt);
 
@@ -3758,9 +3464,6 @@ pub fn spawn_gm_bot(world: &WorldState, params: SpawnGmBotParams) -> BotId {
 }
 
 /// Despawn all bots in a specific zone and return the count removed.
-///
-/// C++ Reference: `CUser::HandleBotDisconnected()` + zone filtering.
-///
 /// Iterates all active bots, despawns those in the given zone.
 pub fn despawn_bots_in_zone(world: &WorldState, zone_id: u16) -> usize {
     let bot_ids: Vec<BotId> = world
@@ -3778,9 +3481,6 @@ pub fn despawn_bots_in_zone(world: &WorldState, zone_id: u16) -> usize {
 }
 
 /// Despawn all bots server-wide and return the count removed.
-///
-/// C++ Reference: `CUser::HandleBotAllDisconnected()` in
-/// `BotChatSpawnHandler.cpp:58-97` — iterates all bots, calls
 /// `UserInOut(INOUT_OUT)` + `RemoveMapBotList()` for each.
 pub fn despawn_all_bots(world: &WorldState) -> usize {
     let bot_ids: Vec<BotId> = world.bots.iter().map(|e| *e.key()).collect();
@@ -3792,8 +3492,6 @@ pub fn despawn_all_bots(world: &WorldState) -> usize {
 }
 
 /// Broadcast a packet to all sessions in the surrounding 3x3 regions of a bot.
-///
-/// C++ Reference: `CBot::SendToRegion()` — iterates surrounding regions.
 fn broadcast_to_bot_region(world: &WorldState, zone_id: u16, rx: u16, rz: u16, pkt: &Packet) {
     world.broadcast_to_region_sync(zone_id, rx, rz, Arc::new(pkt.clone()), None, 0);
 }
@@ -6090,7 +5788,6 @@ mod tests {
     }
 
     /// Bot death in tournament zone gives killer player's clan a score point.
-    /// C++ Reference: BotHandler.cpp:1858-1867
     #[test]
     fn test_bot_death_tournament_scoring() {
         use crate::handler::tournament::TournamentState;

@@ -1,9 +1,6 @@
 //! Game event model — maps to the `game_event` PostgreSQL table.
-//!
-//! C++ Reference: `GameServer/GameEvent.h` — `CGameEvent`
 
 /// A single game event row from the database.
-///
 /// event_type: 1 = ZONE_CHANGE, 2 = TRAP_DEAD, 3 = TRAP_AREA
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct GameEventRow {

@@ -1,15 +1,11 @@
 //! A* Pathfinding for NPC movement.
-//!
-//! C++ Reference:
-//! - `KOOriginalGameServer/GameServer/PathFind.cpp` — A* algorithm
-//! - `KOOriginalGameServer/GameServer/PathFind.h` — node structure
-//! - `KOOriginalGameServer/GameServer/Npc.cpp` — PathFind(), StepMove(), IsNoPathFind()
-//! - `KOOriginalGameServer/GameServer/NpcDefines.h` — MAX_PATH_LINE, TILE_SIZE
-//!
+//! -  — A* algorithm
+//! -  — node structure
+//! -  — PathFind(), StepMove(), IsNoPathFind()
+//! -  — MAX_PATH_LINE, TILE_SIZE
 //! The pathfinding operates on the SMD event grid. Each cell in the grid represents
 //! one tile (TILE_SIZE = 4 world units = unit_dist). World coordinates are converted
 //! to grid coordinates by dividing by `unit_dist`.
-//!
 //! ## Algorithm
 //! - 8-directional A* with orthogonal cost 10, diagonal cost 11
 //! - Heuristic: Chebyshev distance (max of dx, dy) matching C++ child node heuristic
@@ -23,19 +19,13 @@ use std::collections::{BinaryHeap, HashMap};
 use crate::zone::MapData;
 
 /// Maximum number of waypoints in a path.
-///
-/// C++ Reference: `NpcDefines.h` — `#define MAX_PATH_LINE 100`
 pub const MAX_PATH_LINE: usize = 100;
 
 /// Cost for orthogonal movement (N, E, S, W).
-///
-/// C++ Reference: `PathFind.cpp` — `LEVEL_TWO_FIND_DIAGONAL 10`
 /// (C++ naming is confusing: "DIAGONAL" constant is used for orthogonal moves)
 const COST_ORTHOGONAL: i32 = 10;
 
 /// Cost for diagonal movement (NE, SE, SW, NW).
-///
-/// C++ Reference: `PathFind.cpp` — `LEVEL_TWO_FIND_CROSS 11`
 /// (C++ naming is confusing: "CROSS" constant is used for diagonal moves)
 const COST_DIAGONAL: i32 = 11;
 
@@ -56,11 +46,9 @@ const NEIGHBORS: [(i32, i32, i32); 8] = [
     (-1, 0, COST_ORTHOGONAL), // Left
 ];
 
-/// Compute the dynamic iteration limit matching C++ `PathFind.cpp:84-89`.
-///
+/// Compute the dynamic iteration limit matching `PathFind.cpp:84-89`.
 /// C++ formula: `maxtry = abs(start_x - dest_x) * mapW + abs(start_y - dest_y) * mapH + 1`
 /// then hard limit = `maxtry * 2`.
-///
 /// This scales with distance: short paths get a small budget (fast bail-out),
 /// long paths get a larger budget.  Clamped to `[500, MAX_ITERATIONS_CAP]`.
 fn calc_max_iterations(sx: i32, sz: i32, gx: i32, gz: i32, grid_size: i32) -> u32 {
@@ -113,8 +101,6 @@ impl PartialOrd for AStarNode {
 }
 
 /// Chebyshev distance heuristic scaled by orthogonal cost.
-///
-/// C++ Reference: `PathFind.cpp:198` — `t_node->h = (int)std::max(x - dx, y - dy)`
 /// Note: C++ uses signed max which can be negative; we use abs for correctness.
 /// The C++ initial node uses Euclidean, but child nodes use Chebyshev — we use
 /// Chebyshev consistently for admissibility.
@@ -128,14 +114,10 @@ fn heuristic(x: i32, z: i32, goal_x: i32, goal_z: i32) -> i32 {
 }
 
 /// Find a path from start to goal on the map's collision grid.
-///
 /// Coordinates are in world space. Internally converts to grid coordinates using
 /// the SMD's `unit_dist` (typically 4.0, matching C++ TILE_SIZE).
-///
 /// The path is returned as world-coordinate waypoints. The start position is NOT
 /// included in the waypoints; the goal position IS included as the last waypoint.
-///
-/// C++ Reference: `Npc.cpp:6399` — `CNpc::PathFind()`
 pub fn find_path(
     map: &MapData,
     start_x: f32,
@@ -258,11 +240,8 @@ fn is_walkable(map: &MapData, gx: i32, gz: i32, grid_size: i32) -> bool {
 }
 
 /// Reconstruct the path from A* came_from map.
-///
 /// Returns waypoints in world coordinates. The start node is excluded; the goal
 /// is included as the exact goal coordinates (not grid-snapped).
-///
-/// C++ Reference: `Npc.cpp:6460-6471` — converts grid coords to world coords,
 /// with the last waypoint set to exact endpoint.
 fn reconstruct_path(
     came_from: &HashMap<(i32, i32), (i32, i32)>,
@@ -310,13 +289,9 @@ fn reconstruct_path(
 }
 
 /// Advance one step along a precomputed path.
-///
 /// Given the current position, the path waypoints, the current waypoint index,
 /// and the NPC's speed (distance per tick), returns the new position and the
 /// updated waypoint index.
-///
-/// C++ Reference: `Npc.cpp:2464` — `CNpc::StepMove()`
-///
 /// Returns `(new_x, new_z, new_waypoint_index)`.
 /// If the path is completed, returns the last waypoint position and the path length.
 pub fn step_move(
@@ -363,12 +338,8 @@ pub fn step_move(
 }
 
 /// Move directly toward a target without pathfinding.
-///
 /// Used for short distances where obstacles are not expected (IsNoPathFind).
 /// Moves at most `speed` units toward the target per call.
-///
-/// C++ Reference: `Npc.cpp:2745` — `CNpc::IsNoPathFind()`
-///
 /// Returns `(new_x, new_z)`.
 pub fn step_no_path_move(
     current_x: f32,
@@ -394,11 +365,8 @@ pub fn step_no_path_move(
 }
 
 /// Check if there is a clear line of sight between two world positions.
-///
 /// Walks the line from start to goal in steps of `step_dist` world units,
 /// checking each tile for walkability. Returns true if the entire line is clear.
-///
-/// C++ Reference: `Npc.cpp:2684` — `CNpc::IsPathFindCheck()`
 pub fn line_of_sight(
     map: &MapData,
     start_x: f32,

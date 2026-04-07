@@ -1,19 +1,12 @@
 //! Auto mining/fishing background tick system.
-//!
-//! C++ Reference: `User.cpp:1246-1430` (active mode), `User.cpp:1433-1590` (offline mode)
-//!
 //! When a player has an auto-mining or auto-fishing item equipped in the
 //! SHOULDER slot (active) or CFAIRY slot (offline merchant), the server
 //! automatically performs mining/fishing every 5 seconds, depositing
 //! rewards into the player's warehouse.
-//!
 //! ## Active Mode (SHOULDER slot)
-//!
 //! - `AUTOMATIC_MINING (501610000)` or `MINING_ROBIN_ITEM (510000000)` → mining
 //! - `AUTOMATIC_FISHING (501620000)` or `FISHING_ROBIN_ITEM (520000000)` → fishing
-//!
 //! ## Offline Mode (CFAIRY slot) — Sprint 447
-//!
 //! - `MERCHANT_AUTO_MANING (700049758)` or `OFFLINE_MINNING (700059759)` → mining
 //! - `MERCHANT_AUTO_FISHING (700099755)` or `OFFLINE_FISHING (700069754)` → fishing
 
@@ -29,45 +22,29 @@ use crate::zone::SessionId;
 // ── Item ID constants ─────────────────────────────────────────────────
 
 /// Auto-mining shoulder item.
-///
-/// C++ Reference: `Define.h` — `AUTOMATIC_MINING`
 const AUTOMATIC_MINING: u32 = 501_610_000;
 
 /// Auto-fishing shoulder item.
-///
-/// C++ Reference: `Define.h` — `AUTOMATIC_FISHING`
 const AUTOMATIC_FISHING: u32 = 501_620_000;
 
 /// Robin mining item (also triggers auto-mining from shoulder).
-///
-/// C++ Reference: `Define.h` — `MINING_ROBIN_ITEM`
 const MINING_ROBIN_ITEM: u32 = 510_000_000;
 
 /// Robin fishing item (also triggers auto-fishing from shoulder).
-///
-/// C++ Reference: `Define.h` — `FISHING_ROBIN_ITEM`
 const FISHING_ROBIN_ITEM: u32 = 520_000_000;
 
 /// Offline mining item (CFAIRY slot).
-///
-/// C++ Reference: `Define.h` — `OFFLINE_MINNING`
 const OFFLINE_MINNING: u32 = 700_059_759;
 
 /// Offline fishing item (CFAIRY slot).
-///
-/// C++ Reference: `Define.h` — `OFFLINE_FISHING`
 const OFFLINE_FISHING: u32 = 700_069_754;
 
 use crate::world::ITEM_EXP;
 
 /// Auto-harvest tick interval (seconds).
-///
-/// C++ Reference: `User.cpp:1248` — `m_AutoMiningSystem = UNIXTIME + 5`
 const AUTO_HARVEST_INTERVAL: u64 = 5;
 
 /// Minimum free warehouse slots required to proceed.
-///
-/// C++ Reference: `User.cpp:1306-1314` — actually checks `bFreeSlots > 0`,
 /// the `ITEMS_IN_EXCHANGE_GROUP` (5) is only an early-exit optimization for
 /// the counting loop, NOT a minimum threshold.
 const MIN_FREE_WAREHOUSE_SLOTS: u8 = 1;
@@ -76,8 +53,6 @@ const MIN_FREE_WAREHOUSE_SLOTS: u8 = 1;
 const SHOULDER_SLOT: usize = 5;
 
 /// CFAIRY cospre slot index.
-///
-/// C++ Reference: `globals.h:279` — `CFAIRY = 48`
 const CFAIRY_SLOT: usize = 48;
 
 use crate::inventory_constants::WAREHOUSE_MAX;
@@ -85,7 +60,6 @@ use crate::inventory_constants::WAREHOUSE_MAX;
 // ── Background tick task ──────────────────────────────────────────────
 
 /// Start the auto-harvest background task.
-///
 /// Ticks every 5 seconds, checking all in-game sessions for auto-mining
 /// and auto-fishing equipment.
 pub fn start_auto_harvest_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
@@ -130,8 +104,6 @@ fn process_auto_harvest_tick(world: &Arc<WorldState>) {
 // ── Active mode (SHOULDER slot) ───────────────────────────────────────
 
 /// Process auto-mining for active (non-offline) players.
-///
-/// C++ Reference: `User.cpp:1246-1337`
 fn process_active_mining(world: &Arc<WorldState>, sid: SessionId, now: u64) {
     let last_tick = world.with_session(sid, |h| h.auto_mining_time).unwrap_or(0);
     if now < last_tick + AUTO_HARVEST_INTERVAL {
@@ -161,8 +133,6 @@ fn process_active_mining(world: &Arc<WorldState>, sid: SessionId, now: u64) {
 }
 
 /// Process auto-fishing for active (non-offline) players.
-///
-/// C++ Reference: `User.cpp:1340-1429`
 fn process_active_fishing(world: &Arc<WorldState>, sid: SessionId, now: u64) {
     let last_tick = world
         .with_session(sid, |h| h.auto_fishing_time)
@@ -196,8 +166,6 @@ fn process_active_fishing(world: &Arc<WorldState>, sid: SessionId, now: u64) {
 // ── Offline mode (CFAIRY slot) ────────────────────────────────────────
 
 /// Process auto-mining for offline merchant players.
-///
-/// C++ Reference: `User.cpp:1433-1523`
 fn process_offline_mining(world: &Arc<WorldState>, sid: SessionId, now: u64) {
     let last_tick = world.with_session(sid, |h| h.auto_mining_time).unwrap_or(0);
     if now < last_tick + AUTO_HARVEST_INTERVAL {
@@ -226,8 +194,6 @@ fn process_offline_mining(world: &Arc<WorldState>, sid: SessionId, now: u64) {
 }
 
 /// Process auto-fishing for offline merchant players.
-///
-/// C++ Reference: `User.cpp:1525-1590`
 fn process_offline_fishing(world: &Arc<WorldState>, sid: SessionId, now: u64) {
     let last_tick = world
         .with_session(sid, |h| h.auto_fishing_time)
@@ -260,8 +226,6 @@ fn process_offline_fishing(world: &Arc<WorldState>, sid: SessionId, now: u64) {
 
 /// Perform the actual auto-harvest: weighted random item selection, warehouse
 /// space check, and deposit (or EXP grant for ITEM_EXP).
-///
-/// C++ Reference: `User.cpp:1267-1330`
 fn do_auto_harvest(
     world: &Arc<WorldState>,
     sid: SessionId,
@@ -278,7 +242,6 @@ fn do_auto_harvest(
     };
 
     // Check warehouse free slots (need at least MIN_FREE_WAREHOUSE_SLOTS)
-    // C++ Reference: User.cpp:1275 — counts empty slots, needs >= ITEMS_IN_EXCHANGE_GROUP
     let warehouse = world.get_warehouse(sid);
     let free_slots = warehouse
         .iter()
@@ -323,8 +286,6 @@ fn do_auto_harvest(
 }
 
 /// EXP amount by player level for auto-mining/fishing.
-///
-/// C++ Reference: `User.cpp:1296-1310`
 /// ```text
 /// Level 1-34:   50 EXP
 /// Level 35-59:  100 EXP
@@ -357,7 +318,6 @@ mod tests {
 
     #[test]
     fn test_exp_for_level_brackets() {
-        // C++ Reference: User.cpp:1296-1310
         assert_eq!(exp_for_level(1), 50);
         assert_eq!(exp_for_level(10), 50);
         assert_eq!(exp_for_level(34), 50);

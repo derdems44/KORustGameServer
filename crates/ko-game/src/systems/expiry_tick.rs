@@ -1,20 +1,13 @@
 //! Premium and item time-expiry tick system.
-//!
-//! C++ Reference: `User.cpp` — `CUser::CheckDelayedTime()`
 //!   - Calls `UpdateCheckPremiumTime()` and `UpdateCheckItemTime()` every 1 second.
-//!
 //! In this Rust implementation, we run the check every 10 seconds (reduced
 //! frequency is sufficient and avoids per-second overhead).
-//!
 //! ## Premium Expiry
-//!
 //! Iterates each player's `premium_map`. If a premium's expiry timestamp is
 //! non-zero and less than the current unix time, it is removed. If the active
 //! premium was among the expired entries, `premium_in_use` is reset to
 //! `NO_PREMIUM`. An updated `WIZ_PREMIUM` info packet is sent to the client.
-//!
 //! ## Item Expiry
-//!
 //! Scans all inventory slots (equipment + bag + cospre + magic bags), warehouse,
 //! and VIP warehouse for items with `expire_time > 0 && expire_time < now`.
 //! Expired items are zeroed out. For inventory/equipment items, a
@@ -35,43 +28,30 @@ use crate::world::{UserItemSlot, WorldState};
 use crate::zone::SessionId;
 
 /// Expiry check interval in seconds.
-///
 /// C++ checks every 1 second per-user in `Update()`. We use 10 seconds to
 /// reduce overhead while still catching expirations promptly.
 const EXPIRY_TICK_INTERVAL_SECS: u64 = 10;
 
 /// No premium active.
-///
-/// C++ Reference: `Define.h:512` — `#define NO_PREMIUM 0`
 const NO_PREMIUM: u8 = 0;
 
 use crate::handler::premium::SUBOPCODE_PREMIUM_INFO;
 
 /// Start of inventory bag region (equals SLOT_MAX).
-///
-/// C++ Reference: `INVENTORY_INVENT = SLOT_MAX`
 const INVENTORY_INVENT: usize = SLOT_MAX;
 
 // ── Item section constants for SendStackChange ──────────────────────────
 
 /// Equipment section.
-///
-/// C++ Reference: `ITEM_SECTION_SLOT = 0`
 const ITEM_SECTION_SLOT: u8 = 0;
 
 /// Inventory bag section.
-///
-/// C++ Reference: `ITEM_SECTION_INVEN = 1`
 const ITEM_SECTION_INVEN: u8 = 1;
 
 /// Cospre section.
-///
-/// C++ Reference: `ITEM_SECTION_COSPRE = 3`
 const ITEM_SECTION_COSPRE: u8 = 3;
 
 /// Magic bag section.
-///
-/// C++ Reference: `ITEM_SECTION_MBAG = 4`
 const ITEM_SECTION_MBAG: u8 = 4;
 
 // ── Cospre absolute-to-relative index mapping ───────────────────────────
@@ -84,8 +64,6 @@ const ITEM_SECTION_MBAG: u8 = 4;
 //   COSP_TATTO=8, COSP_TALISMAN=9, COSP_BAG2=10
 
 /// Map an absolute cospre slot index to the relative position used by the client.
-///
-/// C++ Reference: `User.cpp:1106-1127` — manual if/else chain for each CWING, etc.
 fn cospre_relative_pos(absolute_idx: usize) -> Option<u8> {
     match absolute_idx {
         42 => Some(0),  // CWING -> COSP_WINGS
@@ -104,11 +82,8 @@ fn cospre_relative_pos(absolute_idx: usize) -> Option<u8> {
 }
 
 /// Start the premium/item expiry background task.
-///
 /// Spawns a tokio task that ticks every 10 seconds and checks all online
 /// sessions for expired premiums and items.
-///
-/// C++ Reference: `User.cpp:1149-1156` — `CUser::CheckDelayedTime()`
 pub fn start_expiry_tick_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(EXPIRY_TICK_INTERVAL_SECS));
@@ -120,7 +95,6 @@ pub fn start_expiry_tick_task(world: Arc<WorldState>) -> tokio::task::JoinHandle
 }
 
 /// Process one expiry tick — check all in-game sessions.
-///
 /// Also calls per-player flash/burning time ticks which run on similar
 /// intervals (C++ calls these from the per-player `Update()` loop).
 fn process_expiry_tick(world: &WorldState) {
@@ -131,20 +105,14 @@ fn process_expiry_tick(world: &WorldState) {
         check_premium_expiry(world, sid, now);
         check_item_expiry(world, sid, now);
         check_vip_vault_expiry(world, sid, now);
-        // C++ Reference: User.cpp:1020-1024 — FlashUpdateTime (1-minute tick)
         crate::systems::flash::flash_update_tick(world, sid, now as u64);
-        // C++ Reference: User.cpp:1158-1172 — BurningTime (1-hour tick)
         crate::systems::flash::burning_time_tick(world, sid, now as u64);
-        // C++ Reference: User.cpp:1008-1012 — CheckGenieTime (1-minute tick)
         crate::handler::genie::check_genie_time_tick(world, sid, now as u64);
-        // C++ Reference: User.cpp:1231-1235 — ReturnSymbol expiry check
         check_return_symbol_expiry(world, sid, now as i64);
     }
 }
 
 /// Reset return symbol when its time has expired.
-///
-/// C++ Reference: `User.cpp:1231-1235`:
 /// ```cpp
 /// if (ReturnSymbolisOK > 0 && ReturnSymbolTime < int64(UNIXTIME)) {
 ///     ReturnSymbolTime = 0;
@@ -168,13 +136,10 @@ fn check_return_symbol_expiry(world: &WorldState, sid: SessionId, now: i64) {
 }
 
 /// Reset VIP storage vault expiration flag when expired.
-///
-/// C++ Reference: `User.cpp:1224-1225`:
 /// ```cpp
 /// if (m_bVIPStorageVaultExpiration && (uint32)UNIXTIME >= m_bVIPStorageVaultExpiration)
 ///     m_bVIPStorageVaultExpiration = 0;
 /// ```
-///
 /// When the vault has expired, the flag is set to 0 so subsequent checks
 /// see an inactive vault rather than a stale timestamp.
 fn check_vip_vault_expiry(world: &WorldState, sid: SessionId, now: u32) {
@@ -188,8 +153,6 @@ fn check_vip_vault_expiry(world: &WorldState, sid: SessionId, now: u32) {
 }
 
 /// Check and remove expired premiums for a single session.
-///
-/// C++ Reference: `User.cpp:1027-1058` — `CUser::UpdateCheckPremiumTime()`
 fn check_premium_expiry(world: &WorldState, sid: SessionId, now: u32) {
     // Collect expired premium types inside the DashMap lock.
     let mut expired_types: Vec<u8> = Vec::with_capacity(10);
@@ -233,11 +196,8 @@ fn check_premium_expiry(world: &WorldState, sid: SessionId, now: u32) {
 }
 
 /// Build a `WIZ_PREMIUM` sub-opcode 1 info packet for a given session.
-///
 /// Equivalent to `build_premium_info()` in `premium.rs` but works from
 /// `&WorldState` + `SessionId` without needing a `ClientSession`.
-///
-/// C++ Reference: `CUser::SendPremiumInfo()` — `PremiumSystem.cpp:35-68`
 fn build_premium_info_packet(world: &WorldState, sid: SessionId, now: u32) -> Packet {
     let mut entries: Vec<(u8, u16)> = Vec::with_capacity(10);
     let mut premium_in_use: u8 = NO_PREMIUM;
@@ -293,8 +253,6 @@ struct ExpiredItemSlot {
 }
 
 /// Check and remove expired items for a single session.
-///
-/// C++ Reference: `User.cpp:1060-1147` — `CUser::UpdateCheckItemTime()`
 pub fn check_item_expiry(world: &WorldState, sid: SessionId, now: u32) {
     let mut expired_inventory_slots: Vec<ExpiredItemSlot> = Vec::with_capacity(8);
     let mut any_warehouse_expired = false;
@@ -389,9 +347,6 @@ pub fn check_item_expiry(world: &WorldState, sid: SessionId, now: u32) {
 }
 
 /// Build a `WIZ_ITEM_COUNT_CHANGE` (SendStackChange) packet for item removal.
-///
-/// C++ Reference: `CUser::SendStackChange()` — `ItemHandler.cpp:2424-2449`
-///
 /// When removing an expired item, all fields are zeroed:
 /// `SendStackChange(0, 0, 0, pos, true, 0, section)`
 fn build_item_removal_packet(absolute_idx: usize) -> Packet {
@@ -411,8 +366,6 @@ fn build_item_removal_packet(absolute_idx: usize) -> Packet {
 }
 
 /// Map an absolute inventory index to (section, relative_pos) for `SendStackChange`.
-///
-/// C++ Reference: `User.cpp:1100-1130` — item expiry section mapping
 fn slot_to_section_and_pos(idx: usize) -> (u8, u8) {
     if idx < SLOT_MAX {
         // Equipment slot: section=0, pos=idx
@@ -1180,7 +1133,6 @@ mod tests {
     fn test_vip_vault_expiry_exact_boundary() {
         let (world, sid) = setup_world();
         let now = 1_700_000_000u32;
-        // C++: `UNIXTIME >= m_bVIPStorageVaultExpiration` — equal means expired
         world.update_session(sid, |h| {
             h.vip_vault_expiry = now;
         });

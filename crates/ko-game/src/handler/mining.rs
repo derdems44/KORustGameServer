@@ -1,7 +1,4 @@
 //! WIZ_MINING (0x86) handler — Mining, Fishing, and Betting Game system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/MiningFishingSystem.cpp`
-//!
 //! Sub-opcodes:
 //!   1 = MiningStart     — Start mining (pickaxe + area check)
 //!   2 = MiningAttempt    — Mining attempt (weighted random reward)
@@ -24,8 +21,6 @@ use crate::world::WorldState;
 use crate::zone::SessionId;
 
 /// Sub-opcode constants.
-///
-/// C++ Reference: `packets.h:516-534`
 const MINING_START: u8 = 1;
 const MINING_ATTEMPT: u8 = 2;
 const MINING_STOP: u8 = 3;
@@ -34,13 +29,9 @@ const FISHING_START: u8 = 6;
 const FISHING_ATTEMPT: u8 = 7;
 const FISHING_STOP: u8 = 8;
 /// Soccer kick action (ball interaction).
-///
-/// C++ Reference: `packets.h:537` — `MiningSoccer = 10`
 const MINING_SOCCER: u8 = 10;
 
 /// Result codes.
-///
-/// C++ Reference: `packets.h:542-549`
 const MINING_RESULT_ERROR: u16 = 0;
 const MINING_RESULT_SUCCESS: u16 = 1;
 const MINING_RESULT_ALREADY: u16 = 2;
@@ -49,25 +40,17 @@ const MINING_RESULT_NOT_PICKAXE: u16 = 5;
 const MINING_RESULT_NO_EARTHWORM: u16 = 7;
 
 /// Mining delay in seconds between attempts.
-///
-/// C++ Reference: `packets.h:553` — `#define MINING_DELAY (5 * SECOND)`
 const MINING_DELAY_SECS: u64 = 5;
 
 /// Item IDs.
-///
-/// C++ Reference: `Define.h:308-344`, `GameDefine.h:1295`
 pub(crate) const GOLDEN_MATTOCK: u32 = 389_135_000;
-/// C++ reference item ID (Define.h).
 pub(crate) const MATTOCK: u32 = 389_132_000;
 pub(crate) const GOLDEN_FISHING_ROD: u32 = 191_347_000;
-/// C++ reference item ID (Define.h).
 pub(crate) const FISHING_ROD: u32 = 191_346_000;
 const RAINWORM: u32 = 508_226_000;
 use crate::world::ITEM_EXP;
 
 /// Weapon kind values.
-///
-/// C++ Reference: `GameDefine.h:1234-1236`
 const WEAPON_PICKAXE: i32 = 61;
 const WEAPON_FISHING: i32 = 63;
 
@@ -111,8 +94,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Check if the player is in a valid mining area.
-///
-/// C++ Reference: `CUser::MiningFishingAreaCheck(1)`
 fn is_in_mining_area(zone_id: u16, x: f32, z: f32) -> bool {
     match zone_id {
         ZONE_MORADON => (600.0..=666.0).contains(&x) && (348.0..=399.0).contains(&z),
@@ -129,8 +110,6 @@ fn is_in_mining_area(zone_id: u16, x: f32, z: f32) -> bool {
 }
 
 /// Check if the player is in a valid fishing area.
-///
-/// C++ Reference: `CUser::MiningFishingAreaCheck(2)`
 fn is_in_fishing_area(zone_id: u16, x: f32, z: f32) -> bool {
     match zone_id {
         ZONE_ELMORAD => (850.0..=935.0).contains(&x) && (1080.0..=1115.0).contains(&z),
@@ -140,8 +119,6 @@ fn is_in_fishing_area(zone_id: u16, x: f32, z: f32) -> bool {
 }
 
 /// Get EXP reward amount based on player level.
-///
-/// C++ Reference: `CUser::GetMiningExpCount()`
 fn get_mining_exp(level: u8) -> i64 {
     match level {
         1..=34 => 50,
@@ -153,10 +130,7 @@ fn get_mining_exp(level: u8) -> i64 {
 }
 
 /// Check that the right hand has a valid pickaxe with durability > 0.
-///
-/// C++ Reference: `MiningFishingSystem.cpp:307-311` — validates item ID
 /// is GOLDEN_MATTOCK or MATTOCK, and item is not duplicate/rented/sealed.
-///
 /// Returns the pickaxe item_id if valid, None otherwise.
 fn check_pickaxe(world: &WorldState, sid: SessionId) -> Option<u32> {
     let slot = world.get_inventory_slot(sid, RIGHTHAND)?;
@@ -168,7 +142,6 @@ fn check_pickaxe(world: &WorldState, sid: SessionId) -> Option<u32> {
         return None;
     }
     // Reject duplicate/rented/sealed items
-    // C++ Reference: MiningFishingSystem.cpp:308-311
     if slot.flag == crate::world::ITEM_FLAG_DUPLICATE
         || slot.flag == crate::world::ITEM_FLAG_RENTED
         || slot.flag == crate::world::ITEM_FLAG_SEALED
@@ -185,8 +158,6 @@ fn check_pickaxe(world: &WorldState, sid: SessionId) -> Option<u32> {
 }
 
 /// Check that the right hand has a valid fishing rod with durability > 0.
-///
-/// C++ Reference: `MiningFishingSystem.cpp` — validates item ID
 /// is GOLDEN_FISHING_ROD or FISHING_ROD, and item is not duplicate/rented/sealed.
 fn check_fishing_rod(world: &WorldState, sid: SessionId) -> Option<u32> {
     let slot = world.get_inventory_slot(sid, RIGHTHAND)?;
@@ -225,8 +196,6 @@ fn count_item_in_bag(world: &WorldState, sid: SessionId, item_id: u32) -> u16 {
 }
 
 /// Reduce durability of right-hand item by `amount`.
-///
-/// C++ Reference: `CUser::ItemWoreOut(ATTACK, amount)`
 fn reduce_righthand_durability(world: &WorldState, sid: SessionId, amount: i16) {
     world.update_inventory(sid, |inv| {
         if let Some(slot) = inv.get_mut(RIGHTHAND) {
@@ -240,8 +209,6 @@ fn reduce_righthand_durability(world: &WorldState, sid: SessionId, amount: i16) 
 }
 
 /// Perform weighted random selection from a list of mining/fishing items.
-///
-/// C++ Reference: `HandleMiningAttempt()` — builds a 10000-slot array
 /// and picks a random index.
 pub(crate) fn weighted_random_item(items: &[ko_db::models::MiningFishingItemRow]) -> Option<u32> {
     if items.is_empty() {
@@ -275,8 +242,6 @@ pub(crate) fn weighted_random_item(items: &[ko_db::models::MiningFishingItemRow]
 }
 
 /// Handle MiningStart (sub-opcode 1).
-///
-/// C++ Reference: `CUser::HandleMiningStart()`
 fn handle_mining_start(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -338,8 +303,6 @@ fn handle_mining_start(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle MiningAttempt (sub-opcode 2).
-///
-/// C++ Reference: `CUser::HandleMiningAttempt()`
 async fn handle_mining_attempt(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -471,8 +434,6 @@ async fn handle_mining_attempt(session: &mut ClientSession) -> anyhow::Result<()
 }
 
 /// Handle MiningStop (sub-opcode 3).
-///
-/// C++ Reference: `CUser::HandleMiningStop()`
 fn handle_mining_stop(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -481,8 +442,6 @@ fn handle_mining_stop(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Internal mining stop — broadcast to region + send personal stop.
-///
-/// C++ Reference: `CUser::HandleMiningStop()`
 pub(crate) fn stop_mining_internal(world: &Arc<WorldState>, sid: SessionId) {
     let is_mining = world.with_session(sid, |h| h.is_mining).unwrap_or(false);
     if !is_mining {
@@ -516,8 +475,6 @@ pub(crate) fn stop_mining_internal(world: &Arc<WorldState>, sid: SessionId) {
 }
 
 /// Handle BettingGame (sub-opcode 5).
-///
-/// C++ Reference: `CUser::HandleBettingGame()`
 fn handle_betting_game(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -576,13 +533,10 @@ fn handle_betting_game(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle FishingStart (sub-opcode 6).
-///
-/// C++ Reference: `CUser::HandleFishingStart()`
 fn handle_fishing_start(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
 
-    // C++ Reference: MiningFishingSystem.cpp:406 — `if (isBlinking() || ...)`
     // Blinking (respawn invulnerability) prevents fishing start.
     let now_unix = std::time::SystemTime::now()
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
@@ -670,8 +624,6 @@ fn handle_fishing_start(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle FishingAttempt (sub-opcode 7).
-///
-/// C++ Reference: `CUser::HandleFishingAttempt()`
 async fn handle_fishing_attempt(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -804,8 +756,6 @@ async fn handle_fishing_attempt(session: &mut ClientSession) -> anyhow::Result<(
 }
 
 /// Handle FishingStop (sub-opcode 8).
-///
-/// C++ Reference: `CUser::HandleFishingStop()`
 fn handle_fishing_stop(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -814,8 +764,6 @@ fn handle_fishing_stop(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Internal fishing stop — broadcast to region + send personal stop.
-///
-/// C++ Reference: `CUser::HandleFishingStop()`
 pub(crate) fn stop_fishing_internal(world: &Arc<WorldState>, sid: SessionId) {
     let is_fishing = world.with_session(sid, |h| h.is_fishing).unwrap_or(false);
     if !is_fishing {
@@ -867,9 +815,6 @@ fn send_fishing_error_and_stop(world: &Arc<WorldState>, sid: SessionId) {
 }
 
 /// Handle soccer kick action (MiningSoccer = 10).
-///
-/// C++ Reference: `CUser::HandleSoccer()` in `SoccerSystem.cpp:381-404`
-///
 /// Sets the mining flag and broadcasts kick animation to the region.
 async fn handle_soccer_kick(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -1181,7 +1126,6 @@ mod tests {
 
     #[test]
     fn test_fishing_start_has_blinking_guard() {
-        // C++ Reference: MiningFishingSystem.cpp:406
         // HandleFishingStart() checks isBlinking() FIRST, before dead/state checks.
         // Verify the check uses is_player_blinking with UNIX timestamp.
         let now = std::time::SystemTime::now()
@@ -1198,10 +1142,9 @@ mod tests {
 
     #[test]
     fn test_mining_start_no_blinking_guard() {
-        // C++ Reference: MiningFishingSystem.cpp:163-199
         // HandleMiningStart() does NOT check isBlinking().
         // This test documents that mining_start intentionally lacks the check.
-        // (Only fishing_start has it in the C++ reference.)
+        // (Only fishing_start has it in the protocol specification.)
         assert!(true, "mining_start correctly omits isBlinking check");
     }
 }

@@ -1,6 +1,4 @@
 //! Pet repository — loads and saves pet data from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `GameServer/LoadServerData.cpp` — pet info/transform loading
 //! - `GameServer/DBAgent.cpp` — `CreateNewPet()`, `LoadPetData()`
 
@@ -20,7 +18,6 @@ impl<'a> PetRepository<'a> {
 
     /// Load all pet stats info rows (bulk load at startup, 60 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadPetInfoTable()`
     pub async fn load_all_stats_info(&self) -> Result<Vec<PetStatsInfoRow>, sqlx::Error> {
         sqlx::query_as::<_, PetStatsInfoRow>(
             "SELECT pet_level, pet_max_hp, pet_max_sp, pet_attack, pet_defence, pet_res, pet_exp \
@@ -32,7 +29,6 @@ impl<'a> PetRepository<'a> {
 
     /// Load all pet image change/transform recipes (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadPetTransformTable()`
     pub async fn load_all_image_changes(&self) -> Result<Vec<PetImageChangeRow>, sqlx::Error> {
         sqlx::query_as::<_, PetImageChangeRow>(
             "SELECT s_index, n_req_item0, n_req_item1, n_req_item2, n_replace_item, \
@@ -45,7 +41,6 @@ impl<'a> PetRepository<'a> {
 
     /// Load pet data for a specific serial ID.
     ///
-    /// C++ Reference: `g_DBAgent.LoadPetData(nSerialNum)`
     pub async fn load_pet_data(
         &self,
         serial_id: i64,
@@ -62,7 +57,6 @@ impl<'a> PetRepository<'a> {
 
     /// Save (upsert) pet data back to the database.
     ///
-    /// C++ Reference: `g_DBAgent.SavePetData()`
     pub async fn save_pet_data(&self, pet: &PetUserDataRow) -> Result<(), sqlx::Error> {
         sqlx::query(
             "INSERT INTO pet_user_data (n_serial_id, s_pet_name, b_level, s_hp, s_mp, \
@@ -89,7 +83,6 @@ impl<'a> PetRepository<'a> {
 
     /// Create a new pet and return the auto-assigned index.
     ///
-    /// C++ Reference: `g_DBAgent.CreateNewPet()`
     pub async fn create_pet(
         &self,
         serial_id: i64,

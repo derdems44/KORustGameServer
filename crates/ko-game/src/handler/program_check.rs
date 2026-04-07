@@ -1,7 +1,4 @@
 //! WIZ_PROGRAMCHECK (0x7A) handler — GM program list inspection.
-//!
-//! C++ Reference: `User.cpp:4816-4859` — `CUser::PlayerProgramCheck`
-//!
 //! Flow:
 //! 1. GM sends `/plc <PlayerName>` → sub-opcode 0x01 with target name
 //! 2. Server stores GM socket, sends probe (0x02, 0x01) to target client
@@ -24,7 +21,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
 
     if sub_opcode == 0x01 {
         // ── GM Request: /plc <PlayerName> ──────────────────────────────
-        // C++ Reference: User.cpp:4825-4843
         let world = session.world().clone();
         let sid = session.session_id();
 
@@ -67,7 +63,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
         );
     } else {
         // ── Client Response: program list ──────────────────────────────
-        // C++ Reference: User.cpp:4845-4858
         let world = session.world().clone();
 
         let gm_sid = world.plc_gm_socket.load(Ordering::Relaxed);
@@ -78,7 +73,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
         let program_info = reader.read_string().unwrap_or_default();
 
         // Send program info to GM as a notice (PUBLIC_CHAT)
-        // C++ Reference: g_pMain->SendHelpDescription(GMTemp, ProgramInfo.c_str())
         let gm_nation = world
             .get_character_info(gm_sid as u16)
             .map(|ch| ch.nation)

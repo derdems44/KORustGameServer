@@ -1,9 +1,6 @@
 //! Item tables repository — loads item-related reference data from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `GameServer/LoadServerData.cpp` — various `Load*Table()` functions
 //! - `shared/database/ItemTableSet.h` — DB loaders
-//!
 //! All tables are bulk-loaded at startup and cached in-memory by the game server.
 
 use crate::models::item_tables::{
@@ -30,7 +27,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all item special effect rows (bulk load at startup).
     ///
     /// Returns all item_op entries (2,703 rows).
-    /// C++ Reference: `CGameServerDlg::LoadItemOpTable()`
     pub async fn load_all_item_ops(&self) -> Result<Vec<ItemOpRow>, sqlx::Error> {
         sqlx::query_as::<_, ItemOpRow>(
             "SELECT item_id, trigger_type, skill_id, trigger_rate \
@@ -43,7 +39,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all set item bonus rows (bulk load at startup).
     ///
     /// Returns all set_item entries (1,165 rows).
-    /// C++ Reference: `CGameServerDlg::LoadSetItemTable()`
     pub async fn load_all_set_items(&self) -> Result<Vec<SetItemRow>, sqlx::Error> {
         sqlx::query_as::<_, SetItemRow>(
             "SELECT set_index, set_name, ac_bonus, hp_bonus, mp_bonus, \
@@ -65,7 +60,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all monster drop table rows (bulk load at startup).
     ///
     /// Returns all monster_item entries (2,154 rows).
-    /// C++ Reference: `CGameServerDlg::LoadMonsterItemTable()`
     pub async fn load_all_monster_items(&self) -> Result<Vec<MonsterItemRow>, sqlx::Error> {
         sqlx::query_as::<_, MonsterItemRow>(
             "SELECT s_index, \
@@ -82,7 +76,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all item exchange/crafting recipes (bulk load at startup).
     ///
     /// Returns all item_exchange entries (5,023 rows).
-    /// C++ Reference: `CGameServerDlg::LoadItemExchangeTable()`
     pub async fn load_all_item_exchanges(&self) -> Result<Vec<ItemExchangeRow>, sqlx::Error> {
         sqlx::query_as::<_, ItemExchangeRow>(
             "SELECT n_index, random_flag, \
@@ -107,7 +100,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all item upgrade settings (bulk load at startup).
     ///
     /// Returns all item_upgrade_settings entries (257 rows).
-    /// C++ Reference: `CGameServerDlg::LoadItemUpgradeTable()`
     pub async fn load_all_upgrade_settings(
         &self,
     ) -> Result<Vec<ItemUpgradeSettingsRow>, sqlx::Error> {
@@ -124,7 +116,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all new upgrade recipes (bulk load at startup).
     ///
     /// Returns all new_upgrade entries (18,148 rows).
-    /// C++ Reference: `CGameServerDlg::LoadNewUpgradeTable()`
     pub async fn load_all_new_upgrades(&self) -> Result<Vec<NewUpgradeRow>, sqlx::Error> {
         sqlx::query_as::<_, NewUpgradeRow>(
             "SELECT n_index, str_note, origin_number, n_str_note, \
@@ -137,7 +128,6 @@ impl<'a> ItemTablesRepository<'a> {
 
     /// Load all NPC drop table rows (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadNpcItemTable()`
     pub async fn load_all_npc_items(&self) -> Result<Vec<NpcItemRow>, sqlx::Error> {
         sqlx::query_as::<_, NpcItemRow>(
             "SELECT s_index, \
@@ -153,7 +143,6 @@ impl<'a> ItemTablesRepository<'a> {
 
     /// Load all item upgrade recipes (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadItemUpgradeRecipes()`
     pub async fn load_all_item_upgrades(&self) -> Result<Vec<ItemUpgradeRow>, sqlx::Error> {
         sqlx::query_as::<_, ItemUpgradeRow>(
             "SELECT n_index, npc_num, origin_type, origin_item, \
@@ -168,7 +157,6 @@ impl<'a> ItemTablesRepository<'a> {
 
     /// Load all weapon crafting templates (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMakeWeaponTable()`
     pub async fn load_all_make_weapons(&self) -> Result<Vec<MakeWeaponRow>, sqlx::Error> {
         sqlx::query_as::<_, MakeWeaponRow>(
             "SELECT by_level, class_1, class_2, class_3, class_4, class_5, class_6, \
@@ -181,7 +169,6 @@ impl<'a> ItemTablesRepository<'a> {
 
     /// Load all defensive crafting templates (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMakeDefensiveTable()`
     pub async fn load_all_make_defensives(&self) -> Result<Vec<MakeDefensiveRow>, sqlx::Error> {
         sqlx::query_as::<_, MakeDefensiveRow>(
             "SELECT by_level, class_1, class_2, class_3, class_4, class_5, class_6, class_7 \
@@ -193,7 +180,6 @@ impl<'a> ItemTablesRepository<'a> {
 
     /// Load all crafting grade codes (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMakeGradeItemTable()`
     pub async fn load_all_make_grade_codes(
         &self,
     ) -> Result<Vec<MakeItemGradeCodeRow>, sqlx::Error> {
@@ -208,7 +194,6 @@ impl<'a> ItemTablesRepository<'a> {
 
     /// Load all crafting rarity codes (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMakeLareItemTable()`
     pub async fn load_all_make_lare_codes(&self) -> Result<Vec<MakeItemLareCodeRow>, sqlx::Error> {
         sqlx::query_as::<_, MakeItemLareCodeRow>(
             "SELECT level_grade, lare_item, magic_item, general_item \
@@ -220,7 +205,6 @@ impl<'a> ItemTablesRepository<'a> {
 
     /// Load all crafting item groups (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMakeItemGroupTable()`
     pub async fn load_all_make_item_groups(&self) -> Result<Vec<MakeItemGroupRow>, sqlx::Error> {
         sqlx::query_as::<_, MakeItemGroupRow>(
             "SELECT group_num, items FROM make_item_group ORDER BY group_num",
@@ -231,7 +215,6 @@ impl<'a> ItemTablesRepository<'a> {
 
     /// Load all random crafting item group mappings (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMakeItemGroupRandomTable()`
     pub async fn load_all_make_item_group_randoms(
         &self,
     ) -> Result<Vec<MakeItemGroupRandomRow>, sqlx::Error> {
@@ -245,7 +228,6 @@ impl<'a> ItemTablesRepository<'a> {
 
     /// Load all rental items (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadRentalItemTable()`
     pub async fn load_all_rental_items(&self) -> Result<Vec<RentalItemRow>, sqlx::Error> {
         sqlx::query_as::<_, RentalItemRow>(
             "SELECT rental_index, item_index, durability, serial_number, \
@@ -263,7 +245,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Used to validate buy requests: the requested item must exist in
     /// the sell table for the NPC's selling group.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadItemSellTable()` (LoadServerData.cpp:247)
     pub async fn load_all_sell_table(&self) -> Result<Vec<ItemSellTableRow>, sqlx::Error> {
         sqlx::query_as::<_, ItemSellTableRow>(
             "SELECT n_index, i_selling_group, \
@@ -280,7 +261,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all item special sewing (crafting) recipes (bulk load at startup).
     ///
     /// Returns all item_special_sewing entries (2,468 rows).
-    /// C++ Reference: `CGameServerDlg::LoadItemSpecialExchangeTable()`
     pub async fn load_all_special_sewing(&self) -> Result<Vec<ItemSpecialSewingRow>, sqlx::Error> {
         sqlx::query_as::<_, ItemSpecialSewingRow>(
             "SELECT n_index, description, \
@@ -300,7 +280,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all item smash entries (bulk load at startup).
     ///
     /// Returns all item_smash entries (205 rows).
-    /// C++ Reference: `CGameServerDlg::LoadItemExchangeCrashTable()`
     pub async fn load_all_item_smash(&self) -> Result<Vec<ItemSmashRow>, sqlx::Error> {
         sqlx::query_as::<_, ItemSmashRow>(
             "SELECT n_index, item_id, count, rate \
@@ -313,7 +292,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all special stone definitions (bulk load at startup).
     ///
     /// Returns all k_special_stone entries (18 rows).
-    /// C++ Reference: `CGameServerDlg::LoadSpecialStoneTable()`
     pub async fn load_all_special_stones(&self) -> Result<Vec<SpecialStoneRow>, sqlx::Error> {
         sqlx::query_as::<_, SpecialStoneRow>(
             "SELECT n_index, zone_id, main_npc, monster_name, summon_npc, summon_count, status \
@@ -326,7 +304,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all random item entries (bulk load at startup).
     ///
     /// Returns all item_random entries (58 rows).
-    /// C++ Reference: `CGameServerDlg::LoadItemRandomTable()`
     pub async fn load_all_item_random(&self) -> Result<Vec<ItemRandomRow>, sqlx::Error> {
         sqlx::query_as::<_, ItemRandomRow>(
             "SELECT n_index, str_item_name, item_id, item_count, rental_time, session_id, status \
@@ -339,7 +316,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all item group entries (bulk load at startup).
     ///
     /// Returns all item_group entries (4 rows).
-    /// C++ Reference: `CGameServerDlg::LoadItemGroupTable()`
     pub async fn load_all_item_groups(&self) -> Result<Vec<ItemGroupRow>, sqlx::Error> {
         sqlx::query_as::<_, ItemGroupRow>(
             "SELECT group_id, name, items FROM item_group ORDER BY group_id",
@@ -351,7 +327,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all item exchange experience entries (bulk load at startup).
     ///
     /// Returns all item_exchange_exp entries (204 rows).
-    /// C++ Reference: `CGameServerDlg::LoadItemExchangeExpTable()`
     pub async fn load_all_item_exchange_exp(&self) -> Result<Vec<ItemExchangeExpRow>, sqlx::Error> {
         sqlx::query_as::<_, ItemExchangeExpRow>(
             "SELECT n_index, random_flag, \
@@ -371,7 +346,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all item give exchange entries (bulk load at startup).
     ///
     /// Returns all item_give_exchange entries (661 rows).
-    /// C++ Reference: `CGameServerDlg::LoadItemGiveExchangeTable()`
     pub async fn load_all_item_give_exchange(
         &self,
     ) -> Result<Vec<ItemGiveExchangeRow>, sqlx::Error> {
@@ -387,7 +361,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all right-click exchange mappings (bulk load at startup).
     ///
     /// Returns all item_right_click_exchange entries (96 rows).
-    /// C++ Reference: `CGameServerDlg::LoadItemRightClickExchangeTable()`
     pub async fn load_all_right_click_exchange(
         &self,
     ) -> Result<Vec<ItemRightClickExchangeRow>, sqlx::Error> {
@@ -401,7 +374,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all right exchange entries (bulk load at startup).
     ///
     /// Returns all item_right_exchange entries (66 rows).
-    /// C++ Reference: `CGameServerDlg::LoadItemRightExchangeTable()`
     pub async fn load_all_right_exchange(&self) -> Result<Vec<ItemRightExchangeRow>, sqlx::Error> {
         sqlx::query_as::<_, ItemRightExchangeRow>(
             "SELECT item_id, str_name, exchange_type, description, exchange_count, \
@@ -414,7 +386,6 @@ impl<'a> ItemTablesRepository<'a> {
 
     /// Load sealed items for a specific account (loaded per-login).
     ///
-    /// C++ Reference: `CDBAgent::LoadSealedItems()`
     pub async fn load_sealed_items_by_account(
         &self,
         account_id: &str,
@@ -432,7 +403,6 @@ impl<'a> ItemTablesRepository<'a> {
     /// Load all make_item rows (bulk load at startup, 10,000 rows).
     ///
     /// Used by the loot system (ItemProdution) to map sIndex -> (item_code, item_level).
-    /// C++ Reference: `CNpc::ItemProdution()` in Npc.cpp.
     pub async fn load_all_make_items(&self) -> Result<Vec<MakeItemRow>, sqlx::Error> {
         sqlx::query_as::<_, MakeItemRow>(
             "SELECT s_index, item_code, item_level \

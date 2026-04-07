@@ -1,6 +1,4 @@
 /// Clan warehouse item row (maps to `clan_warehouse_items` table).
-///
-/// C++ Reference: `CKnights::m_sClanWarehouseArray[WAREHOUSE_MAX]`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ClanWarehouseItemRow {
     pub id: i64,

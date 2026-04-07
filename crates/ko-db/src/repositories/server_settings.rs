@@ -1,6 +1,4 @@
 //! Repository for server settings, damage settings, and home positions.
-//!
-//! C++ Reference: `LoadServerSettingsData()`, `LoadDamageSettingTable()` in `LoadServerData.cpp`
 
 use crate::models::{
     DamageSettingsRow, HomeRow, ServerSettingsRow, StartPositionRandomRow, StartPositionRow,
@@ -20,7 +18,6 @@ impl<'a> ServerSettingsRepository<'a> {
 
     /// Load the single server settings row.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadServerSettingsData()` (LoadServerData.cpp:1012)
     pub async fn load_server_settings(&self) -> Result<ServerSettingsRow, sqlx::Error> {
         sqlx::query_as::<_, ServerSettingsRow>("SELECT * FROM server_settings LIMIT 1")
             .fetch_one(self.pool)
@@ -29,7 +26,6 @@ impl<'a> ServerSettingsRepository<'a> {
 
     /// Load the single damage settings row.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadDamageSettingTable()` (LoadServerData.cpp:155)
     pub async fn load_damage_settings(&self) -> Result<DamageSettingsRow, sqlx::Error> {
         sqlx::query_as::<_, DamageSettingsRow>("SELECT * FROM damage_settings LIMIT 1")
             .fetch_one(self.pool)
@@ -45,7 +41,6 @@ impl<'a> ServerSettingsRepository<'a> {
 
     /// Load all start position rows (one per zone).
     ///
-    /// C++ Reference: `CGameServerDlg::m_StartPositionArray` loaded in `LoadServerData.cpp`
     pub async fn load_start_positions(&self) -> Result<Vec<StartPositionRow>, sqlx::Error> {
         sqlx::query_as::<_, StartPositionRow>("SELECT * FROM start_position ORDER BY zone_id")
             .fetch_all(self.pool)
@@ -54,7 +49,6 @@ impl<'a> ServerSettingsRepository<'a> {
 
     /// Load all random spawn points for special zones.
     ///
-    /// C++ Reference: `CGameServerDlg::m_StartPositionRandomArray`
     pub async fn load_start_positions_random(
         &self,
     ) -> Result<Vec<StartPositionRandomRow>, sqlx::Error> {
@@ -67,7 +61,6 @@ impl<'a> ServerSettingsRepository<'a> {
 
     /// Load right-top title messages from the `right_top_title` table.
     ///
-    /// C++ Reference: `CRightTopTitleSet::Fetch()` in `RightTopTitleSet.h`
     ///
     /// Returns (title, message) pairs ordered by ID.
     pub async fn load_right_top_titles(&self) -> Result<Vec<(String, String)>, sqlx::Error> {

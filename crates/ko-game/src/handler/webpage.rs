@@ -1,19 +1,12 @@
 //! WIZ_WEBPAGE (0x6F) handler -- Open URL in client browser.
-//!
-//! C++ Reference: `KOOriginalGameServer/shared/packets.h:113` -- `#define WIZ_WEBPAGE 0x6F`
-//!
 //! This is an S2C-only packet that tells the client to open a URL.
 //! The client calls `ShellExecuteA` with the provided URL.
 //! Typically used by GMs to direct players to event pages or announcements.
-//!
 //! ## Server -> Client
-//!
 //! ```text
 //! [sbyte_string url]
 //! ```
-//!
 //! ## Client behavior (IDA sub_938730)
-//!
 //! When the client receives opcode 0x6F, it triggers the internal browser
 //! or system browser with the URL payload.
 
@@ -28,7 +21,6 @@ use crate::zone::SessionId;
 const MAX_URL_LENGTH: usize = 255;
 
 /// Handle WIZ_WEBPAGE (0x6F) -- server sends URL to client.
-///
 /// This is primarily S2C, but the client dispatch does route 0x6F
 /// to a handler. If the client sends this opcode, we ignore it
 /// (only GMs can trigger URL sends via the `send_webpage` builder).
@@ -45,9 +37,7 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
 }
 
 /// Build WIZ_WEBPAGE S2C packet to open a URL on the client.
-///
 /// Format: `[sbyte_string url]`
-///
 /// Used by GM commands to direct players to web pages.
 pub fn build_webpage_packet(url: &str) -> Option<Packet> {
     if url.is_empty() || url.len() > MAX_URL_LENGTH {
@@ -59,7 +49,6 @@ pub fn build_webpage_packet(url: &str) -> Option<Packet> {
 }
 
 /// Send a webpage URL to a specific session.
-///
 /// Called from GM command handlers to open a URL in the target player's client.
 pub fn send_webpage_to_session(world: &WorldState, target_sid: SessionId, url: &str) {
     if let Some(pkt) = build_webpage_packet(url) {

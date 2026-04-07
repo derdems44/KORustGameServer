@@ -1,7 +1,4 @@
 //! Audit Log repository — game event logging to PostgreSQL.
-//!
-//! C++ Reference: `FerihaLogHandler.cpp` — 25 log functions writing to 24 MSSQL tables.
-//!
 //! Rust approach: Unified `game_audit_log` table with `event_type` discriminator and
 //! TEXT `details` field for event-specific data. All inserts are fire-and-forget via
 //! `tokio::spawn` (non-blocking).

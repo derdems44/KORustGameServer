@@ -1,20 +1,15 @@
 //! WIZ_GUILD_BANK (0xD0) handler — Guild/Clan bank system.
-//!
 //! v2525 client's native guild bank panel (panel at `[[0x1092A14]+0x684]`).
 //! Shared bank storage for clan members with tab-based organization,
 //! gold management, transaction logging, and permission controls.
-//!
 //! ## Client RE
-//!
 //! - Panel field: `[game+0x684]` — init to 0xFFFFFFFF, checked != 0 before dispatch
 //! - Main handler: `0x714A90` — 6-entry jump table at `0x714B20`
 //! - Sub-panels: bank=0x120, tab_content=0x124, item_detail=0x128, item_list=0x12C
 //! - Gold: stored as i64 at `[esi+0xBD8]/[esi+0xBDC]`
 //! - Max tabs: 9 (index 0-8)
 //! - Sound: 0x53092 on bank open
-//!
 //! ## S2C Sub-opcodes
-//!
 //! | Sub | Sub-sub | Name            | Wire format |
 //! |-----|---------|-----------------|-------------|
 //! | 1   | 1       | Open/Init       | u16 scroll_pos, u16 npc_id |
@@ -35,9 +30,7 @@
 //! | 6   | 2       | Perm result     | u8 role, u16 result |
 //! | 6   | 3       | Item detail     | u16 item_id |
 //! | 6   | 4       | Perm multi      | u8 count, {u16} × count |
-//!
 //! ## String IDs
-//!
 //! - 0xAD75 (44405): Success
 //! - 0xAD76 (44406): Error type 1
 //! - 0xAD77 (44407): Error type 2
@@ -93,7 +86,6 @@ const ITEMS_PER_TAB: usize = ITEMS_PER_PAGE;
 // ── In-memory cache ─────────────────────────────────────────────────────
 
 /// In-memory guild bank cache: clan_id → GuildBankCacheData.
-///
 /// Loaded lazily from DB on first open. Modified in-memory by item ops,
 /// persisted to DB asynchronously (fire-and-forget).
 static GUILD_BANKS: LazyLock<DashMap<u16, GuildBankCacheData>> = LazyLock::new(DashMap::new);
@@ -114,7 +106,6 @@ struct GuildBankCacheData {
 // ── S2C Builders — Sub=1: Item Result ───────────────────────────────────
 
 /// Build item result open/init packet (sub=1, sub_sub=1).
-///
 /// Client plays sound 0x53092, initializes bank panel, sets scroll/NPC.
 pub fn build_open_init(scroll_pos: u16, npc_id: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizGuildBank as u8);
@@ -126,7 +117,6 @@ pub fn build_open_init(scroll_pos: u16, npc_id: u16) -> Packet {
 }
 
 /// Build item result code packet (sub=1, sub_sub=2).
-///
 /// Result codes: -4=full, -3=err2, -2=err1, -1=success, 0=none, 1=npc_update, 2=reset.
 pub fn build_result_code(result: i16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizGuildBank as u8);
@@ -154,7 +144,6 @@ pub fn build_result_error() -> Packet {
 // ── S2C Builders — Sub=2: Open Bank ─────────────────────────────────────
 
 /// Build full bank init packet (sub=2, sub_sub=1).
-///
 /// Client opens the bank UI, shows dialog (string 0xAD87), initializes tabs.
 pub fn build_bank_init(
     tab_permission: u8,
@@ -202,7 +191,6 @@ pub fn build_bank_reset() -> Packet {
 // ── S2C Builders — Sub=3: Map Items ─────────────────────────────────────
 
 /// Build map coordinate markers packet (sub=3, sub_sub=1).
-///
 /// Displays markers on the minimap for item locations.
 pub fn build_map_coords(coords: &[(u16, u16)]) -> Packet {
     let mut pkt = Packet::new(Opcode::WizGuildBank as u8);
@@ -219,7 +207,6 @@ pub fn build_map_coords(coords: &[(u16, u16)]) -> Packet {
 // ── S2C Builders — Sub=4: Item Data ─────────────────────────────────────
 
 /// Build gold update packet (sub=4, sub_sub=1).
-///
 /// Client sign-extends u16 gold to i64 for display.
 pub fn build_gold_update(gold: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizGuildBank as u8);
@@ -312,7 +299,6 @@ pub fn build_log_removal(flag: u8) -> Packet {
 // ── S2C Builders — Sub=6: Permissions ───────────────────────────────────
 
 /// Build permission result packet (sub=6, sub_sub=2).
-///
 /// Result codes: -11..-1 = errors (string 0xAD88), 0 = none, 1 = add member.
 pub fn build_perm_result(role_type: u8, result_code: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizGuildBank as u8);
@@ -335,8 +321,6 @@ pub fn build_perm_item_detail(item_id: u16) -> Packet {
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 /// Common state validation: not dead, not trading, not merchanting, not mining, not fishing.
-///
-/// C++ Reference: ClanBank.cpp — repeated checks at top of each sub-handler.
 fn validate_basic_state(session: &ClientSession) -> bool {
     let world = session.world();
     let sid = session.session_id();
@@ -408,7 +392,6 @@ async fn ensure_loaded(session: &ClientSession, clan_id: u16) -> anyhow::Result<
 // ── C2S Handler ─────────────────────────────────────────────────────────
 
 /// Handle WIZ_GUILD_BANK (0xD0) from the client.
-///
 /// C2S packets are sent from UI interactions (clicking in guild bank panel).
 /// DB tables: guild_bank, guild_bank_item, guild_bank_log.
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
@@ -478,7 +461,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle guild bank open request (sub=2).
-///
 /// Validates clan membership, loads bank from DB into cache,
 /// sends bank init + tab info + item slots.
 async fn handle_open(session: &mut ClientSession, _sub_sub: u8) -> anyhow::Result<()> {
@@ -591,15 +573,12 @@ async fn handle_open(session: &mut ClientSession, _sub_sub: u8) -> anyhow::Resul
 }
 
 /// Handle guild bank item data operations (sub=4).
-///
 /// Dispatches on sub_sub to distinguish operation type.
-///
 /// C2S format (based on C++ ClanBank.cpp reference):
 /// - sub_sub=1: gold op — `[u32 amount] [u8 direction]` (0=deposit, 1=withdraw)
 /// - sub_sub=2: item deposit — `[u16 npc_id] [u32 item_id] [u8 page] [u8 src] [u8 dst] [u32 count]`
 /// - sub_sub=3: item withdraw — same format as deposit
 /// - sub_sub=4: item move — `[u16 npc_id] [u32 item_id] [u8 page] [u8 src] [u8 dst]`
-///
 /// NOTE: C2S format determined by v2525 client binary. If format doesn't match,
 /// debug logging below will reveal actual structure for correction.
 async fn handle_item_data(
@@ -626,7 +605,6 @@ async fn handle_item_data(
 }
 
 /// Handle gold deposit/withdraw (sub=4, sub_sub=1).
-///
 /// C2S: `[u32 amount] [u8 direction]` — direction 0=deposit, 1=withdraw.
 async fn handle_gold_op(
     session: &mut ClientSession,
@@ -755,10 +733,7 @@ async fn handle_gold_op(
 }
 
 /// Handle item deposit: inventory → guild bank (sub=4, sub_sub=2).
-///
 /// C2S: `[u16 npc_id] [u32 item_id] [u8 page/tab] [u8 src_pos] [u8 dst_pos] [u32 count]`
-///
-/// C++ Reference: ClanBank.cpp:119-344 (ClanWarehouseItemInput)
 async fn handle_deposit(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -971,10 +946,7 @@ async fn handle_deposit(
 }
 
 /// Handle item withdraw: guild bank → inventory (sub=4, sub_sub=3).
-///
 /// C2S: `[u16 npc_id] [u32 item_id] [u8 page/tab] [u8 src_pos] [u8 dst_pos] [u32 count]`
-///
-/// C++ Reference: ClanBank.cpp:346-579 (ClanWarehouseItemOutput)
 /// Only clan leader or assistant can withdraw.
 async fn handle_withdraw(
     session: &mut ClientSession,
@@ -1186,10 +1158,7 @@ async fn handle_withdraw(
 }
 
 /// Handle item move within guild bank (sub=4, sub_sub=4).
-///
 /// C2S: `[u16 npc_id] [u32 item_id] [u8 page/tab] [u8 src_pos] [u8 dst_pos]`
-///
-/// C++ Reference: ClanBank.cpp:581-683 (ClanWarehouseItemMove)
 /// Only clan leader or assistant can move.
 async fn handle_move_item(
     session: &mut ClientSession,
@@ -1288,7 +1257,6 @@ async fn handle_move_item(
 }
 
 /// Handle guild bank log request (sub=5).
-///
 /// Loads paginated transaction logs from DB and sends to client.
 async fn handle_log(
     session: &mut ClientSession,
@@ -1430,8 +1398,6 @@ fn save_inventory_slot_async(session: &ClientSession, slot_idx: usize) {
 }
 
 /// Send deposit/withdraw notification to all clan members.
-///
-/// C++ Reference: ClanBank.cpp:298-338 (deposit), :533-573 (withdraw).
 fn send_guild_bank_notice(
     world: &std::sync::Arc<crate::world::WorldState>,
     clan_id: u16,

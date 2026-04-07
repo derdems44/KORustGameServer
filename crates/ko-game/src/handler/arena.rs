@@ -1,13 +1,6 @@
 //! WIZ_PVP (0x88) handler — PvP Rival & Anger Gauge system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/UserRivalSystem.cpp`
-//!                `KOOriginalGameServer/GameServer/UserHealtMagicSpSystem.cpp:589-611`
-//!                `KOOriginalGameServer/shared/packets.h:324-329`
-//!
 //! ## Overview
-//!
 //! The Rival system activates in Ardream / Ronark Land PvP zones:
-//!
 //! 1. When a player is killed by an enemy, if the victim has no rival yet the
 //!    killer becomes the victim's rival for 5 minutes (`RIVALRY_DURATION = 300s`).
 //! 2. Each kill also increments the *anger gauge* (0-5).  The gauge is broadcast
@@ -18,21 +11,16 @@
 //!    (`RIVALRY_NP_BONUS`) and the rivalry is removed.
 //! 4. On regene (and Draki Tower regene) the anger gauge resets to 0 via
 //!    `PVPResetHelmet` (6).
-//!
-//! ## WIZ_PVP Sub-opcodes (C++ `packets.h:324-329`)
-//!
+//! ## WIZ_PVP Sub-opcodes
 //! | Value | Name             | Direction      | Payload                                   |
 //! |-------|------------------|----------------|-------------------------------------------|
 //! | 1     | PVPAssignRival   | Server → Client| u32 rival_sid, u16, u16, u32 coins, u32 np, sbyte clan_name, sbyte name |
 //! | 2     | PVPRemoveRival   | Server → Client| (no payload)                              |
 //! | 5     | PVPUpdateHelmet  | Server → Client| u8 gauge, u8 is_full                      |
 //! | 6     | PVPResetHelmet   | Server → Client| (no payload)                              |
-//!
 //! Note: WIZ_PVP is entirely **server → client**. The client never sends this
 //! opcode. The handler in mod.rs is a no-op pass-through for any stray packets.
-//!
 //! ## Integration Points
-//!
 //! * `attack.rs` — calls [`on_pvp_kill`] after a successful PvP kill in the
 //!   rivalry zones.
 //! * `regene.rs` — calls [`reset_anger_gauge`] on player regene.
@@ -59,26 +47,18 @@ pub const PVP_RESET_HELMET: u8 = 6;
 // ── Constants (C++ GameDefine.h:1329-1333) ───────────────────────────────────
 
 /// Rivalry duration in seconds (5 minutes).
-///
-/// C++ Reference: `GameDefine.h:1329` — `#define RIVALRY_DURATION 300`
 pub const RIVALRY_DURATION: u64 = 300;
 
 /// NP bonus for killing your rival (revenge kill).
-///
-/// C++ Reference: `GameDefine.h:1330` — `#define RIVALRY_NP_BONUS 150`
 pub const RIVALRY_NP_BONUS: u16 = 150;
 
 /// Maximum anger gauge level.
-///
-/// C++ Reference: `GameDefine.h:1333` — `#define MAX_ANGER_GAUGE 5`
 pub const MAX_ANGER_GAUGE: u8 = 5;
 
 // ── Zone helpers ─────────────────────────────────────────────────────────────
 
 /// Returns `true` for zones where the rivalry (anger gauge / rival) system is
 /// active.
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp` — switch on `GetZoneID()`:
 /// `ZONE_ARDREAM`, `ZONE_RONARK_LAND`, `ZONE_RONARK_LAND_BASE` enable the rival.
 pub fn is_rivalry_zone(zone_id: u16) -> bool {
     zone_id == ZONE_ARDREAM || zone_id == ZONE_RONARK_LAND || zone_id == ZONE_RONARK_LAND_BASE
@@ -87,17 +67,13 @@ pub fn is_rivalry_zone(zone_id: u16) -> bool {
 // ── Core PvP kill integration ─────────────────────────────────────────────────
 
 /// Called after every successful PvP kill in a rivalry-eligible zone.
-///
 /// Performs, in order:
 /// 1. Increments the victim's anger gauge (capped at `MAX_ANGER_GAUGE`).
 /// 2. Assigns the killer as the victim's rival if the victim has no active rival.
 /// 3. Checks whether the victim was the killer's rival; if so, removes the
 ///    rivalry and returns `true` (caller should add `RIVALRY_NP_BONUS` NP).
-///
 /// # Returns
 /// `true` when the kill was a *revenge kill* (killer had the victim as rival).
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:589-611` — `OnDeathKilledUser`
 pub fn on_pvp_kill(
     world: &WorldState,
     killer_sid: SessionId,
@@ -145,8 +121,6 @@ pub fn on_pvp_kill(
 }
 
 /// Reset a player's anger gauge to 0 (called on regene).
-///
-/// C++ Reference: `UserRegeneSystem.cpp:126-127` — `if (GetAngerGauge() > 0) UpdateAngerGauge(0);`
 pub fn reset_anger_gauge(world: &WorldState, sid: SessionId) {
     let current = world
         .with_session(sid, |h| {
@@ -163,8 +137,6 @@ pub fn reset_anger_gauge(world: &WorldState, sid: SessionId) {
 // ── S2C Packet Builders ─────────────────────────────────────────────────────
 
 /// Build a WIZ_PVP(PVPAssignRival=1) packet.
-///
-/// C++ Reference: `UserRivalSystem.cpp:12-26`
 /// Format: [u8:1] [u32:rival_sid] [u16:1] [u16:1] [u32:coins] [u32:loyalty]
 ///         [sbyte:clan_name or u16:0] [sbyte:rival_name]
 pub fn build_assign_rival_packet(
@@ -190,8 +162,6 @@ pub fn build_assign_rival_packet(
 }
 
 /// Build a WIZ_PVP(PVPRemoveRival=2) packet — no payload beyond sub-opcode.
-///
-/// C++ Reference: `UserRivalSystem.cpp:34-46` — `CUser::RemoveRival`
 pub fn build_remove_rival_packet() -> Packet {
     let mut pkt = Packet::new(Opcode::WizPvp as u8);
     pkt.write_u8(PVP_REMOVE_RIVAL);
@@ -199,8 +169,6 @@ pub fn build_remove_rival_packet() -> Packet {
 }
 
 /// Build a WIZ_PVP(PVPUpdateHelmet=5) packet — anger gauge update.
-///
-/// C++ Reference: `UserRivalSystem.cpp:48-64` — `CUser::UpdateAngerGauge`
 /// Format: [u8:5] [u8:gauge] [u8:is_full]
 pub fn build_update_helmet_packet(gauge: u8) -> Packet {
     let clamped = gauge.min(MAX_ANGER_GAUGE);
@@ -212,8 +180,6 @@ pub fn build_update_helmet_packet(gauge: u8) -> Packet {
 }
 
 /// Build a WIZ_PVP(PVPResetHelmet=6) packet — no payload beyond sub-opcode.
-///
-/// C++ Reference: `UserRegeneSystem.cpp:126-127` — anger gauge reset on regene.
 pub fn build_reset_helmet_packet() -> Packet {
     let mut pkt = Packet::new(Opcode::WizPvp as u8);
     pkt.write_u8(PVP_RESET_HELMET);

@@ -1,20 +1,12 @@
 //! WIZ_NATION_TRANSFER (0x82) handler — nation/faction transfer.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/NationTransferHandler.cpp`
-//!
 //! ## Two-Phase Protocol
-//!
 //! 1. **Phase 1** (sub=1): Client requests transfer options.
 //!    Server responds with character list and their new-nation appearance.
 //! 2. **Phase 2** (sub=2): Client confirms selection with race/face/hair choices.
 //!    Server updates memory, sends confirmation. Client disconnects itself.
-//!
 //! ## Item Required
-//!
 //! - `ITEM_NATION_TRANSFER (810096000)` — consumed on success
-//!
 //! ## Restrictions
-//!
 //! - All account characters must not be in a clan
 //! - Cannot transfer if character is king
 
@@ -38,8 +30,6 @@ const NATION_OPEN_BOX: u8 = 2;
 const ERR_NONE: u8 = 0;
 
 /// War is currently open — cannot transfer.
-///
-/// C++ Reference: `NationTransferHandler.cpp:70-73` — `bError = 1`
 #[cfg(test)]
 const ERR_WAR_OPEN: u8 = 1;
 
@@ -52,22 +42,16 @@ const ERR_IN_CLAN: u8 = 2;
 const ERR_IS_KING: u8 = 3;
 
 /// Player is transformed — cannot transfer.
-///
-/// C++ Reference: `NationTransferHandler.cpp:40-44` — `error = 6`
 #[cfg(test)]
 const ERR_TRANSFORMED: u8 = 6;
 
 /// No transfer scroll item.
-///
-/// C++ Reference: `NationTransferHandler.cpp:33-37` — `error = 7`
 #[cfg(test)]
 const ERR_NO_ITEM: u8 = 7;
 
 // ── Item ────────────────────────────────────────────────────────────────────
 
 /// Nation Transfer scroll item ID.
-///
-/// C++ Reference: `Define.h` — `#define ITEM_NATION_TRANSFER 810096000`
 #[cfg(test)]
 const ITEM_NATION_TRANSFER: u32 = 810096000;
 
@@ -78,15 +62,11 @@ use crate::race_constants::{
 };
 
 /// Handle WIZ_NATION_TRANSFER from the client.
-///
-/// C++ Reference: `NationTransferHandler.cpp` — dispatches sub=1 or sub=2
-///
 /// **v2525 CONFLICT**: Client opcode 0x82 = WizTitle (title/name-tag system),
 /// NOT NationTransfer. The v2525 client's handler at `0x7C9AB0` dispatches
 /// sub-opcodes 1-3 as title categories (10 actions each, string resources).
 /// Sending NationTransfer S2C packets on 0x82 causes the client to show
 /// unrelated title notification strings. The feature is non-functional.
-///
 /// We accept C2S but respond with a WIZ_CHAT notice instead of 0x82 packets.
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
@@ -119,9 +99,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Phase 1: Client requests nation transfer options.
-///
-/// C++ Reference: `ReqSendNationTransfer()` in NationTransferHandler.cpp
-///
 /// Validates eligibility and responds with character list showing
 /// what each character would look like after transfer.
 #[cfg(test)]
@@ -136,28 +113,24 @@ async fn handle_request(session: &mut ClientSession) -> anyhow::Result<()> {
     };
 
     // Check: has nation transfer scroll
-    // C++ Reference: NationTransferHandler.cpp:33 (SendNationTransfer)
     if !has_item(&world, sid, ITEM_NATION_TRANSFER) {
         send_error(session, ERR_NO_ITEM).await?;
         return Ok(());
     }
 
     // Check: not transformed
-    // C++ Reference: NationTransferHandler.cpp:40 (SendNationTransfer)
     if world.is_transformed(sid) {
         send_error(session, ERR_TRANSFORMED).await?;
         return Ok(());
     }
 
     // Check: war not open
-    // C++ Reference: NationTransferHandler.cpp:434 (ReqSendNationTransfer)
     if world.is_war_open() {
         send_error(session, ERR_WAR_OPEN).await?;
         return Ok(());
     }
 
     // Check: ALL account characters must not be in a clan and none can be king.
-    // C++ Reference: NationTransferHandler.cpp:437-513 — GetAllCharID + loop
     let account_err = check_all_account_chars(session, &world, ch.nation).await?;
     if account_err != ERR_NONE {
         send_error(session, account_err).await?;
@@ -179,7 +152,6 @@ async fn handle_request(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // Build response: character list with converted appearance
-    // C++: [u8 sub=2] [u8 error=0] [u8 char_count=1]
     //      [u16 charnum] [string name] [u8 new_race] [u8 new_nation] [u16 new_class] [u8 face] [u32 hair]
     let mut result = Packet::new(Opcode::WizNationTransfer as u8);
     result.write_u8(NATION_OPEN_BOX);
@@ -207,9 +179,6 @@ async fn handle_request(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Phase 2: Client confirms nation transfer with appearance choices.
-///
-/// C++ Reference: `ReqHandleNationChange()` in NationTransferHandler.cpp
-///
 /// Validates, updates memory, consumes item. Client disconnects itself.
 #[cfg(test)]
 #[allow(dead_code)]
@@ -226,7 +195,6 @@ async fn handle_confirm(
     };
 
     // Re-validate all conditions
-    // C++ Reference: NationTransferHandler.cpp:64-79 (ReqHandleNationChange)
     if !has_item(&world, sid, ITEM_NATION_TRANSFER) {
         send_error(session, ERR_NO_ITEM).await?;
         return Ok(());
@@ -243,7 +211,6 @@ async fn handle_confirm(
     }
 
     // Re-validate: ALL account characters not in clan and none is king
-    // C++ Reference: NationTransferHandler.cpp:81-165
     let account_err = check_all_account_chars(session, &world, ch.nation).await?;
     if account_err != ERR_NONE {
         send_error(session, account_err).await?;
@@ -251,7 +218,6 @@ async fn handle_confirm(
     }
 
     // Read confirmation data
-    // C++: [u8 ?] [u8 ?] [u8 char_count] { [u16 charnum] [string name] [u8 race] [u8 face] [u32 hair] }
     let flag1 = reader.read_u8().unwrap_or(0);
     let flag2 = reader.read_u8().unwrap_or(0);
     let char_count = reader.read_u8().unwrap_or(0);
@@ -320,7 +286,6 @@ async fn handle_confirm(
     result.write_u32(new_hair);
     session.send_packet(&result).await?;
 
-    // C++ Reference: NationTransferHandler.cpp:640-641 — InitType4(); RecastSavedMagic();
     world.clear_all_buffs(sid, false);
     world.set_user_ability(sid);
     world.recast_saved_magic(sid);
@@ -351,9 +316,6 @@ async fn handle_confirm(
 }
 
 /// Convert race for nation transfer.
-///
-/// C++ Reference: `NationTransferHandler.cpp` — race conversion tables
-///
 /// Returns the default target race (0 if invalid).
 #[cfg(test)]
 fn convert_race(current_race: u8, class: u16, nation: u8) -> u8 {
@@ -395,8 +357,6 @@ fn convert_race(current_race: u8, class: u16, nation: u8) -> u8 {
 }
 
 /// Check if the target race is valid for the player's current nation.
-///
-/// C++ Reference: `NationTransferHandler.cpp` — race validation
 #[cfg(test)]
 fn is_valid_target_race(target_race: u8, current_nation: u8) -> bool {
     if current_nation == 1 {
@@ -428,15 +388,11 @@ fn has_item(world: &crate::world::WorldState, sid: crate::zone::SessionId, item_
 }
 
 /// Check ALL account characters for clan membership and king status.
-///
-/// C++ Reference: `NationTransferHandler.cpp:81-165` (ReqHandleNationChange)
 /// and `NationTransferHandler.cpp:437-513` (ReqSendNationTransfer)
-///
 /// C++ calls `GetAllCharID()` to load all 4 character IDs from `account_char`,
 /// then for each non-empty character:
 /// - checks against king name → `ERR_IS_KING` (3)
 /// - loads character data and checks `sClanID > 0` → `ERR_IN_CLAN` (2)
-///
 /// Returns `ERR_NONE` (0) if all characters pass.
 #[cfg(test)]
 #[allow(dead_code)]
@@ -483,7 +439,6 @@ async fn check_all_account_chars(
 }
 
 /// Send a NATION_OPEN_BOX error response.
-///
 /// Format: `[0x82] [u8 NATION_OPEN_BOX=2] [u8 error_code]`
 #[cfg(test)]
 #[allow(dead_code)]

@@ -1,19 +1,12 @@
 //! WIZ_CHANGE_HAIR (0x89) handler — hair/face change at character selection.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CharacterSelectionHandler.cpp:374-396`
-//! C++ Reference: `KOOriginalGameServer/GameServer/DatabaseThread.cpp:1109-1147`
-//!
 //! ## Request (C->S) — SByte strings (u8 length prefix)
-//!
 //! | Offset | Type  | Description |
 //! |--------|-------|-------------|
 //! | 0      | u8    | Sub-opcode (0=char selection, 1=in-game item) |
 //! | 1      | sstr  | Character name (u8 len + bytes) |
 //! | 2+N    | u8    | Face type |
 //! | 3+N    | u32le | Hair style ID |
-//!
 //! ## Response (S->C)
-//!
 //! | Offset | Type | Description |
 //! |--------|------|-------------|
 //! | 0      | u8   | Result (0=success, 1=fail) |

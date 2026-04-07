@@ -1,6 +1,4 @@
 //! RANKBUG configuration model — ranking system multipliers.
-//!
-//! C++ Reference: `GameDefine.h:4898-4907` — `struct RANKBUG`
 
 use sqlx::FromRow;
 
@@ -15,7 +13,6 @@ pub struct RankBugConfig {
     pub juraid_join: i32,
     /// PK zone rank multiplier for out-of-top-10 players.
     ///
-    /// C++ Reference: `pRankBug.CzRank` — `nMyRank = total * CzRank`
     pub cz_rank: i32,
     /// Collection Race minimum competition count.
     pub cr_min_comp: i32,

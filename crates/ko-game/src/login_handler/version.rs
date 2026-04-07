@@ -1,12 +1,7 @@
 //! LS_VERSION_REQ (0x01) handler — version check for the launcher.
-//!
-//! C++ Reference: `KOOriginalGameServer/LoginServer/LoginSession.cpp:91-97`
-//!
 //! ## Request (Client → Server)
 //! Empty (just opcode).
-//!
 //! ## Response (Server → Client)
-//!
 //! | Offset | Type  | Description               |
 //! |--------|-------|---------------------------|
 //! | 0      | u16le | Protocol version (e.g. 2369) |

@@ -1,7 +1,4 @@
 //! Sheriff (WIZ_REPORT) handler -- player reporting and voting system.
-//!
-//! C++ Reference: `SheriffHandler.cpp` -- `CUser::SheriffVote()`
-//!
 //! Sub-opcodes:
 //! | Code | Name            | Description                                    |
 //! |------|-----------------|------------------------------------------------|
@@ -36,7 +33,7 @@ const MAX_ID_REPORT: usize = 512;
 /// Maximum reports displayed per page.
 const REPORTS_PER_PAGE: u8 = 8;
 
-/// In-memory sheriff report entry (matches C++ `_SHERIFF_STUFF`).
+/// In-memory sheriff report entry (matches `_SHERIFF_STUFF`).
 #[derive(Debug, Clone)]
 pub struct SheriffReport {
     /// Name of the reported player.
@@ -88,8 +85,6 @@ fn is_session_king(world: &WorldState, sid: crate::zone::SessionId) -> bool {
 }
 
 /// Handle incoming WIZ_REPORT packet.
-///
-/// C++ Reference: `CUser::SheriffVote(Packet & pkt)` in `SheriffHandler.cpp`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -119,8 +114,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle ReportSuccess (sub-opcode 9) -- file a new report.
-///
-/// C++ Reference: `SheriffHandler.cpp:19-66`
 async fn handle_report_success(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -220,8 +213,6 @@ async fn handle_report_success(
 }
 
 /// Handle ReportAgree/ReportDisagree (sub-opcode 12/13) -- vote on a report.
-///
-/// C++ Reference: `SheriffHandler.cpp:68-207`
 async fn handle_report_vote(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -330,8 +321,6 @@ async fn handle_report_vote(
 }
 
 /// Handle ListOpen (sub-opcode 14) -- paginated report list.
-///
-/// C++ Reference: `SheriffHandler.cpp:209-254`
 async fn handle_list_open(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -413,8 +402,6 @@ async fn handle_list_open(
 }
 
 /// Handle KingsInspector (sub-opcode 18) -- open inspector UI.
-///
-/// C++ Reference: `SheriffHandler.cpp:7-11` -- `CUser::KingsInspectorList()`
 async fn handle_kings_inspector(session: &mut ClientSession) -> anyhow::Result<()> {
     let mut resp = Packet::new(Opcode::WizReport as u8);
     resp.write_u8(sub_opcode::KINGS_INSPECTOR);

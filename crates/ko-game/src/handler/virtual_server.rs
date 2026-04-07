@@ -1,13 +1,8 @@
 //! WIZ_VIRTUAL_SERVER (0x4C) handler — server/channel change request.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/UserObjectSystem.cpp:75-77`
-//!
 //! In the C++ reference implementation, `ServerChangeOk()` immediately returns
 //! without processing. This feature is unused in single-server setups and the
 //! handler is a no-op.
-//!
 //! ## Client -> Server
-//!
 //! `[u16 warp_id]` (unused — function returns immediately)
 
 use ko_protocol::Packet;
@@ -16,9 +11,6 @@ use tracing::debug;
 use crate::session::{ClientSession, SessionState};
 
 /// Handle WIZ_VIRTUAL_SERVER from the client.
-///
-/// C++ Reference: `UserObjectSystem.cpp:75-77` — `CUser::ServerChangeOk()`
-///
 /// This is a no-op. The C++ reference immediately returns without processing.
 pub fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {

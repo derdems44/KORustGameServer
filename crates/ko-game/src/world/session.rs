@@ -28,7 +28,6 @@ impl WorldState {
     }
     /// Recalculate max HP/MP using the coefficient formula and update the session.
     ///
-    /// C++ Reference: `SetMaxHp(iFlag=1)` in `UserHealtMagicSpSystem.cpp:224-248`
     /// When `iFlag=1`, the zone-based override is skipped and the normal
     /// coefficient formula is used. This restores normal HP after leaving
     /// zones that cap HP (DD zone 89, Chaos zone 85).
@@ -53,8 +52,6 @@ impl WorldState {
 
     /// Get all **alive** NPC IDs in a 3×3 region grid, filtered by event room.
     ///
-    /// C++ Reference: `FundamentalMethods.cpp:259` — dead NPCs are filtered out.
-    /// C++ Reference: `User.cpp:2155` — `GetEventRoom() >= 0 && pNpc->GetEventRoom() != GetEventRoom()`
     ///
     /// Only returns NPCs whose `event_room` matches the requesting player's
     /// event room. This provides instance-level isolation in event zones.
@@ -391,7 +388,6 @@ impl WorldState {
     ///
     /// Called on each successful packet receive to track activity.
     ///
-    /// C++ Reference: `KOSocket::OnRead()` — `m_lastResponse = UNIXTIME2;`
     pub fn touch_session(&self, id: SessionId) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             handle.last_response_time = Instant::now();
@@ -417,7 +413,6 @@ impl WorldState {
     }
     /// Set the zone_changing flag for a session.
     ///
-    /// C++ Reference: `m_bWarp` in `User.h` — prevents movement during zone change.
     pub fn set_zone_changing(&self, id: SessionId, value: bool) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             handle.zone_changing = value;
@@ -444,7 +439,6 @@ impl WorldState {
     }
     /// Set the warp-loop prevention flag.
     ///
-    /// C++ Reference: `m_bCheckWarpZoneChange` in `User.h:441`
     pub fn set_check_warp_zone_change(&self, id: SessionId, value: bool) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             handle.check_warp_zone_change = value;
@@ -459,7 +453,6 @@ impl WorldState {
     }
     /// Set the store_open flag (shopping mall UI open).
     ///
-    /// C++ Reference: `m_bStoreOpen` in `User.h`
     pub fn set_store_open(&self, id: SessionId, value: bool) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             handle.store_open = value;
@@ -474,7 +467,6 @@ impl WorldState {
     }
     /// Check if attack is disabled (GM ban-attack).
     ///
-    /// C++ Reference: `User.h:905 — isAttackDisabled()`
     /// Returns true if `attack_disabled_until` is u32::MAX (permanent) or > current UNIX time.
     pub fn is_attack_disabled(&self, id: SessionId) -> bool {
         let status = self
@@ -539,7 +531,6 @@ impl WorldState {
 
     /// Check if a session is in-game (has character info loaded).
     ///
-    /// C++ Reference: `CUser::isInGame()` — returns true when character is fully loaded.
     pub fn is_session_ingame(&self, id: SessionId) -> bool {
         self.sessions
             .get(&id)
@@ -555,7 +546,6 @@ impl WorldState {
     /// Returns `Some((x, z))` if the player's saved cast_skill_id matches,
     /// or `None` if it doesn't match or the session doesn't exist.
     ///
-    /// C++ Reference: `CUser::pUserMagicUsed.castID/castX/castZ`
     pub fn get_cast_position(&self, id: SessionId, skill_id: u32) -> Option<(f32, f32)> {
         self.sessions.get(&id).and_then(|h| {
             if h.cast_skill_id == skill_id {
@@ -567,7 +557,6 @@ impl WorldState {
     }
     /// Check if a player is currently blinking (respawn invulnerability).
     ///
-    /// C++ Reference: `CUser::isBlinking()` in `User.h:910`
     ///   `return m_bAbnormalType == ABNORMAL_BLINKING;`
     ///
     /// While blinking, the player is invulnerable to NPC attacks and invisible
@@ -581,7 +570,6 @@ impl WorldState {
 
     /// Collect all sessions whose blink has expired.
     ///
-    /// C++ Reference: `CUser::BlinkTimeCheck()` in `User.cpp:4078-4090`
     /// Called from the periodic tick to find sessions that need blink cleared.
     ///
     /// Returns a list of `(session_id, zone_id)` for expired blink sessions.
@@ -598,7 +586,6 @@ impl WorldState {
 
     /// Clear blink state for a session (set expiry to 0).
     ///
-    /// C++ Reference: `CUser::BlinkTimeCheck()` in `User.cpp:4078-4090`
     /// Resets `m_tBlinkExpiryTime`, `m_bRegeneType`, and `m_bCanUseSkills`.
     pub fn clear_blink(&self, id: SessionId) {
         self.update_session(id, |h| {
@@ -609,7 +596,6 @@ impl WorldState {
 
     /// Set invisibility type for a session.
     ///
-    /// C++ Reference: `CUser::UpdateVisibility()` in `User.cpp:4028-4031`
     /// Called by `StateChangeServerDirect(7, ...)` to update the stealth type.
     pub fn set_invisibility_type(&self, id: SessionId, invis_type: u8) {
         self.update_session(id, |h| {
@@ -619,7 +605,6 @@ impl WorldState {
 
     /// Get invisibility type for a session.
     ///
-    /// C++ Reference: `CUser::m_bInvisibilityType` in `User.h`
     /// Returns 0 (INVIS_NONE) if session not found.
     pub fn get_invisibility_type(&self, id: SessionId) -> u8 {
         self.sessions
@@ -630,14 +615,12 @@ impl WorldState {
 
     /// Check if a player is currently invisible (stealthed).
     ///
-    /// C++ Reference: `CUser::m_bInvisibilityType != INVIS_NONE`
     pub fn is_invisible(&self, id: SessionId) -> bool {
         self.get_invisibility_type(id) != 0
     }
 
     /// Get abnormal type for a session.
     ///
-    /// C++ Reference: `CUser::m_bAbnormalType` in `User.h`
     /// Returns 1 (ABNORMAL_NORMAL) if session not found.
     pub fn get_abnormal_type(&self, id: SessionId) -> u32 {
         self.sessions.get(&id).map(|h| h.abnormal_type).unwrap_or(1)
@@ -645,7 +628,6 @@ impl WorldState {
 
     /// Build `BroadcastState` from the session's current runtime state.
     ///
-    /// C++ Reference: fields written alongside `GetUserInfo` in `UserInfoSystem.cpp`.
     pub fn get_broadcast_state(&self, id: SessionId) -> BroadcastState {
         self.sessions
             .get(&id)
@@ -677,7 +659,6 @@ impl WorldState {
 
     /// Check if a player is currently transformed.
     ///
-    /// C++ Reference: `Unit::isTransformed()` in `Unit.h:332`
     ///   `return m_transformationType != TransformationNone;`
     pub fn is_transformed(&self, id: SessionId) -> bool {
         self.sessions
@@ -688,7 +669,6 @@ impl WorldState {
 
     /// Set transformation state for a session.
     ///
-    /// C++ Reference: `MagicInstance::ExecuteType6()` in `MagicInstance.cpp:5183-5189`
     /// Stores transform type, visual ID, skill ID, start time, and duration.
     pub fn set_transformation(
         &self,
@@ -711,7 +691,6 @@ impl WorldState {
 
     /// Clear transformation state (Type6Cancel).
     ///
-    /// C++ Reference: `MagicInstance::Type6Cancel()` in `MagicInstance.cpp:6757-6784`
     /// Resets transformation type, visual ID, skill ID, and timing.
     pub fn clear_transformation(&self, id: SessionId) {
         self.update_session(id, |h| {
@@ -725,7 +704,6 @@ impl WorldState {
 
     /// Collect all sessions whose transformation has expired.
     ///
-    /// C++ Reference: `CUser::Type6Duration()` in `MagicProcess.cpp:468-477`
     /// Called from the periodic tick every ~700ms.
     /// Checks: `UNIXTIME2 - m_tTransformationStartTime >= m_sTransformationDuration`
     ///
@@ -746,7 +724,6 @@ impl WorldState {
 
     /// Check if a player can use skills.
     ///
-    /// C++ Reference: `Unit::canUseSkills()` in `Unit.h:280`
     /// Returns false during blink invulnerability.
     pub fn can_use_skills(&self, id: SessionId) -> bool {
         self.sessions
@@ -765,14 +742,12 @@ impl WorldState {
 
     /// Check whether a player is undead (BUFF_TYPE_UNDEAD active).
     ///
-    /// C++ Reference: `Unit::m_bIsUndead` — converts healing to damage.
     pub fn is_undead(&self, id: SessionId) -> bool {
         self.sessions.get(&id).map(|h| h.is_undead).unwrap_or(false)
     }
 
     /// Check whether a player is blinded (UNSIGHT/BLIND/DISABLE_TARGETING active).
     ///
-    /// C++ Reference: `Unit::m_bIsBlinded` — prevents targeting.
     pub fn is_blinded(&self, id: SessionId) -> bool {
         self.sessions
             .get(&id)
@@ -782,7 +757,6 @@ impl WorldState {
 
     /// Check whether physical damage is fully blocked for a player.
     ///
-    /// C++ Reference: `Unit::m_bBlockPhysical` — Imir's Roar effect.
     pub fn is_block_physical(&self, id: SessionId) -> bool {
         self.sessions
             .get(&id)
@@ -792,7 +766,6 @@ impl WorldState {
 
     /// Check whether magical damage is fully blocked for a player.
     ///
-    /// C++ Reference: `Unit::m_bBlockMagic` — Logos Horn / Freeze effect.
     pub fn is_block_magic(&self, id: SessionId) -> bool {
         self.sessions
             .get(&id)
@@ -802,14 +775,12 @@ impl WorldState {
 
     /// Check whether a player is in Devil transformation.
     ///
-    /// C++ Reference: `CUser::m_bIsDevil` — Kurian Devil Form.
     pub fn is_devil(&self, id: SessionId) -> bool {
         self.sessions.get(&id).map(|h| h.is_devil).unwrap_or(false)
     }
 
     /// Check whether a player can teleport (not blocked by NO_RECALL debuff).
     ///
-    /// C++ Reference: `Unit::m_bCanTeleport`
     pub fn can_teleport(&self, id: SessionId) -> bool {
         self.sessions
             .get(&id)
@@ -819,7 +790,6 @@ impl WorldState {
 
     /// Check whether a player can use stealth (not blocked by PROHIBIT_INVIS debuff).
     ///
-    /// C++ Reference: `Unit::m_bCanStealth`
     pub fn can_stealth(&self, id: SessionId) -> bool {
         self.sessions
             .get(&id)
@@ -830,7 +800,6 @@ impl WorldState {
     /// Collect sessions where blink has ended, player is still transformed,
     /// but `can_use_skills` is false (needs re-enabling).
     ///
-    /// C++ Reference: `User.cpp:994-995`
     ///   `if (!isBlinking() && isTransformed() && m_bCanUseSkills == false) m_bCanUseSkills = true;`
     pub fn collect_post_blink_skill_enable(&self, now_unix: u64) -> Vec<SessionId> {
         let mut result = Vec::with_capacity(8);
@@ -847,7 +816,6 @@ impl WorldState {
 
     /// Get the number of online (in-game) sessions.
     ///
-    /// C++ Reference: `CGameServerDlg::GetUserCount()`
     pub fn online_count(&self) -> usize {
         self.online_count.load(Ordering::Relaxed) as usize
     }
@@ -857,7 +825,6 @@ impl WorldState {
     /// Used by the periodic character save task to iterate all online players
     /// and persist their stats/position to DB.
     ///
-    /// C++ Reference: `ServerStartStopHandler.cpp:340-374` — `Timer_UpdateSessions`
     pub fn get_in_game_session_ids(&self) -> Vec<SessionId> {
         self.sessions
             .iter()
@@ -867,7 +834,6 @@ impl WorldState {
     }
     /// Check if a player is dead (hp <= 0 or res_hp_type == USER_DEAD).
     ///
-    /// C++ Reference: `User.h:909` — `isDead() { return m_bResHpType == USER_DEAD || m_sHp <= 0; }`
     pub fn is_player_dead(&self, id: SessionId) -> bool {
         self.sessions
             .get(&id)
@@ -897,7 +863,6 @@ impl WorldState {
     }
     /// Update a player's current SP in CharacterInfo.
     ///
-    /// C++ Reference: `CUser::m_sSp`
     pub fn update_character_sp(&self, id: SessionId, sp: i16) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             if let Some(ref mut ch) = handle.character {
@@ -907,7 +872,6 @@ impl WorldState {
     }
     /// Update a player's res_hp_type (sit/stand/dead state).
     ///
-    /// C++ Reference: `User.cpp:2947` — `m_bResHpType = buff;`
     pub fn update_res_hp_type(&self, id: SessionId, res_hp_type: u8) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             if let Some(ref mut ch) = handle.character {
@@ -917,7 +881,6 @@ impl WorldState {
     }
     /// Remove a player's rivalry state, resetting rival_id to -1.
     ///
-    /// C++ Reference: `CUser::RemoveRival()` in `UserRivalSystem.cpp:34-46`
     /// Sends WIZ_PVP(PVPRemoveRival=2) to notify the client.
     pub fn remove_rival(&self, id: SessionId) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
@@ -935,10 +898,8 @@ impl WorldState {
     ///
     /// Sends WIZ_PVP(PVPAssignRival=1) to the victim's client.
     ///
-    /// C++ Reference: `CUser::SetRival(Unit* pRival)` in `UserRivalSystem.cpp:4-26`
     /// Packet format: [u8:1] [u32:rival_session_id] [u16:1] [u16:1] [u32:coins] [u32:loyalty] [sbyte:clan_name] [sbyte:rival_name]
     pub fn set_rival(&self, victim_id: SessionId, killer_id: SessionId, now_secs: u64) {
-        // C++ `hasRival()` check — do not overwrite existing rival
         let already_has_rival = self
             .with_session(victim_id, |h| {
                 h.character
@@ -996,7 +957,6 @@ impl WorldState {
     /// Update a player's anger gauge and send WIZ_PVP(PVPUpdateHelmet/PVPResetHelmet)
     /// to the player's own client.
     ///
-    /// C++ Reference: `CUser::UpdateAngerGauge(uint8)` in `UserRivalSystem.cpp:48-64`
     /// Sub-opcodes: PVPUpdateHelmet=5 when gauge > 0, PVPResetHelmet=6 when gauge == 0.
     /// Note: C++ CUser version calls `Send(&result)` (self only), NOT SendToRegion.
     pub fn update_anger_gauge(&self, id: SessionId, new_gauge: u8) {
@@ -1020,7 +980,6 @@ impl WorldState {
 
     /// Check and expire rivalry for a player whose expiry time has passed.
     ///
-    /// C++ Reference: `CUser::CheckDelayedTime()` in `User.cpp:997-998`
     /// Called on the server tick — if `hasRival() && hasRivalryExpired()` → `RemoveRival()`.
     pub fn check_rivalry_expiry(&self, id: SessionId, now_secs: u64) {
         let should_remove = self
@@ -1112,7 +1071,6 @@ impl WorldState {
     }
     /// Update a session's position and detect region change.
     ///
-    /// C++ Reference: `Unit::RegisterRegion` in `Unit.cpp:182-196`
     pub fn update_position(
         &self,
         id: SessionId,
@@ -1197,7 +1155,6 @@ impl WorldState {
     }
     /// Broadcast a packet to all sessions in the 3×3 region grid, filtered by event room.
     ///
-    /// C++ Reference: `CGameServerDlg::Send_Region` in `FundamentalMethods.cpp:533-536`
     ///
     /// Event room isolation: only recipients whose `event_room` matches `sender_event_room`
     /// will receive the packet. In non-event zones all players have `event_room=0`, so the
@@ -1232,7 +1189,6 @@ impl WorldState {
     }
     /// Get all session IDs in the 3×3 region grid, filtered by event room.
     ///
-    /// C++ Reference: `User.cpp:2088` — `GetEventRoom() >= 0 && pUser->GetEventRoom() != GetEventRoom()`
     ///
     /// Only returns sessions whose `event_room` matches `sender_event_room`.
     /// This provides instance-level isolation: players in BDW room 1 cannot
@@ -1265,14 +1221,12 @@ impl WorldState {
     }
     /// Broadcast a packet to all in-game sessions on the server.
     ///
-    /// C++ Reference: `CGameServerDlg::Send_All` in `FundamentalMethods.cpp`
     /// Get a reference to the shared game time/weather state.
     pub fn game_time_weather(&self) -> &Arc<GameTimeWeather> {
         &self.game_time_weather
     }
     /// Get a reference to the Lua quest scripting engine.
     ///
-    /// C++ Reference: `CGameServerDlg::GetLuaEngine()`
     pub fn lua_engine(&self) -> &Arc<crate::lua_engine::LuaEngine> {
         &self.lua_engine
     }
@@ -1301,7 +1255,6 @@ impl WorldState {
     }
     /// Return a list of all in-game (character loaded) session IDs.
     ///
-    /// C++ Reference: `CGameServerDlg::GetUserPtr(i)` loop in `CollectionRaceHandler.cpp:136`
     pub fn all_ingame_session_ids(&self) -> Vec<u16> {
         self.sessions
             .iter()
@@ -1312,7 +1265,6 @@ impl WorldState {
 
     /// Broadcast a packet to all in-game sessions whose zone is NOT in the exclusion set.
     ///
-    /// C++ Reference: `TempleEventStart()` in `EventMainSystem.cpp:623-632`
     /// — skips `isInTempleEventZone()`, `isInMonsterStoneZone()`, `ZONE_PRISON`.
     pub fn broadcast_to_all_excluding_zones(&self, packet: Arc<Packet>, excluded_zones: &[u16]) {
         for entry in self.sessions.iter() {
@@ -1325,7 +1277,6 @@ impl WorldState {
 
     /// Broadcast a packet to all in-game sessions in the 3x3 region grid (synchronous).
     ///
-    /// C++ Reference: `CUser::SendToRegion` — sends to players within +-1 region.
     /// This sync version uses SessionHandle position data instead of zone region
     /// locks, suitable for use in non-async Lua bindings.
     pub fn broadcast_to_region_sync(
@@ -1364,7 +1315,6 @@ impl WorldState {
     }
     /// Broadcast a packet to all in-game sessions in a specific zone.
     ///
-    /// C++ Reference: `CUser::SendToRegion` (sends to entire zone, not just 3×3).
     pub fn broadcast_to_zone(&self, zone_id: u16, packet: Arc<Packet>, except: Option<SessionId>) {
         if let Some(index_entry) = self.zone_session_index.get(&zone_id) {
             let session_ids: Vec<SessionId> = index_entry.value().read().iter().copied().collect();
@@ -1382,7 +1332,6 @@ impl WorldState {
     }
     /// Collect tag name entries for players in a 3×3 region grid.
     ///
-    /// C++ Reference: `CUser::UserInOutTag()` — sends tag list of nearby players
     /// who have non-empty, non-"-" tag names.
     ///
     /// Returns Vec of (char_name, tag_name, r, g, b).
@@ -1435,7 +1384,6 @@ impl WorldState {
 
     /// Broadcast a packet to all in-game sessions in a zone AND event_room.
     ///
-    /// C++ Reference: `CGameServerDlg::Send_Zone(pkt, zone, nullptr, ALL, EventRoom)`
     /// Used by Dungeon Defence timer/stage counter packets.
     pub fn broadcast_to_zone_event_room(
         &self,
@@ -1460,7 +1408,6 @@ impl WorldState {
     }
     /// Broadcast to all players in a zone + event_room that match a nation filter.
     ///
-    /// C++ Reference: `CGameServerDlg::Send_All(pkt, nullptr, nation, zone, true, event_room)`
     /// Used for Juraid bridge NPC broadcasts (per-nation).
     pub fn broadcast_to_zone_event_room_nation(
         &self,
@@ -1491,7 +1438,6 @@ impl WorldState {
     }
     /// Send a PvP death notice to all players in a zone with per-recipient killtype.
     ///
-    /// C++ Reference: `CUser::SendNewDeathNotice(Unit* pKiller)` in `User.cpp:3440-3521`
     ///
     /// Packet format: WIZ_EXT_HOOK (0xE9) + DeathNotice sub-opcode (0xD7) + SByte strings.
     /// - killtype 1: recipient IS the killer or victim
@@ -1600,7 +1546,6 @@ impl WorldState {
     }
     /// Broadcast a packet to all in-game sessions of a specific nation.
     ///
-    /// C++ Reference: `CGameServerDlg::Send_All` with nation filter.
     pub fn broadcast_to_nation(&self, nation: u8, packet: Arc<Packet>, except: Option<SessionId>) {
         for entry in self.sessions.iter() {
             let sid = *entry.key();
@@ -1617,7 +1562,6 @@ impl WorldState {
     }
     /// Broadcast a packet to all in-game sessions with level ≤ max_level.
     ///
-    /// C++ Reference: `CGameServerDlg::Send_Noah_Knights` in `FundamentalMethods.cpp:787-799`
     pub fn broadcast_to_max_level(&self, max_level: u8, packet: Arc<Packet>) {
         for entry in self.sessions.iter() {
             let handle = entry.value();
@@ -1631,8 +1575,6 @@ impl WorldState {
 
     /// Broadcast a packet to class-matched, party-less players in a zone.
     ///
-    /// C++ Reference: `CGameServerDlg::Send_Zone_Matched_Class` in
-    /// `FundamentalMethods.cpp:392-421`
     ///
     /// `class_bitmask`: bit0=warrior, bit1=rogue, bit2=mage, bit3=priest, bit4(10)=kurian
     pub fn broadcast_to_zone_matched_class(
@@ -1689,7 +1631,6 @@ impl WorldState {
 
     /// Find a session by account ID (case-insensitive).
     ///
-    /// C++ Reference: `CGameServerDlg::GetUserPtr(strAccountID, TYPE_ACCOUNT)`
     ///
     /// Used by the login handler to detect and kick duplicate logins.
     pub fn find_session_by_account(&self, account: &str) -> Option<SessionId> {
@@ -1721,7 +1662,6 @@ impl WorldState {
     /// Kick a session for duplicate login — remove from world so the old
     /// session's writer/reader tasks detect the closed channel and shut down.
     ///
-    /// C++ Reference: `CUser::goDisconnect()` — closes socket, triggers cleanup.
     ///
     /// We remove the session from the DashMap which drops the `tx` sender,
     /// then re-insert a tombstone-free entry. The old session's reader/writer
@@ -1818,7 +1758,6 @@ impl WorldState {
     /// Find a session by character name (case-insensitive).
     /// O(1) lookup via name_to_session index.
     ///
-    /// C++ Reference: `CGameServerDlg::GetUserPtr(strUserID, TYPE_CHARACTER)`
     pub fn find_session_by_name(&self, name: &str) -> Option<SessionId> {
         self.name_to_session
             .get(&name.to_lowercase())
@@ -1857,7 +1796,6 @@ impl WorldState {
 
     /// Set the private chat target for a session.
     ///
-    /// C++ Reference: `m_sPrivateChatUser` in `User.h`
     pub fn set_private_chat_target(&self, id: SessionId, target: Option<SessionId>) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             handle.private_chat_target = target;
@@ -1869,7 +1807,6 @@ impl WorldState {
     }
     /// Check if a session is blocking private messages.
     ///
-    /// C++ Reference: `CUser::isBlockingPrivateChat()`
     pub fn is_blocking_private_chat(&self, id: SessionId) -> bool {
         self.sessions
             .get(&id)
@@ -1878,7 +1815,6 @@ impl WorldState {
     }
     /// Set the PM block flag for a session.
     ///
-    /// C++ Reference: `CUser::m_bBlockPrivateChat`
     pub fn set_block_private_chat(&self, id: SessionId, block: bool) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             handle.block_private_chat = block;
@@ -2008,7 +1944,6 @@ impl WorldState {
     ///
     /// Returns `(session_id, nation)` for each eligible member.
     ///
-    /// C++ Reference: ArenaHandler.cpp:302-338 — eligibility check per member.
     /// Skips members in temple event zones (`isInTempleEventZone()`).
     pub fn get_cvc_eligible_clan_members(
         &self,
@@ -2050,7 +1985,6 @@ impl WorldState {
 
     /// Check if two sessions are in the same event room.
     ///
-    /// C++ Reference: `CUser::isSameEventRoom(CUser* pTarget)` in `User.h`
     ///
     /// Returns `true` if:
     /// - Both sessions have `event_room > 0` AND their values are equal
@@ -2066,14 +2000,12 @@ impl WorldState {
 
     /// Get the event room ID for a session (0 = not in any event room).
     ///
-    /// C++ Reference: `CUser::GetEventRoom()` in `User.h`
     pub fn get_event_room(&self, id: SessionId) -> u16 {
         self.with_session(id, |h| h.event_room).unwrap_or(0)
     }
 
     /// Get the Monster Stone activation status for a session.
     ///
-    /// C++ Reference: `CUser::m_sMonsterStoneStatus`
     pub fn get_monster_stone_status(&self, id: SessionId) -> bool {
         self.with_session(id, |h| h.monster_stone_status)
             .unwrap_or(false)
@@ -2081,7 +2013,6 @@ impl WorldState {
 
     /// Set the Monster Stone activation status for a session.
     ///
-    /// C++ Reference: `CUser::m_sMonsterStoneStatus`
     pub fn set_monster_stone_status(&self, id: SessionId, status: bool) {
         self.update_session(id, |h| {
             h.monster_stone_status = status;
@@ -2090,14 +2021,12 @@ impl WorldState {
 
     /// Get the tower owner NPC ID for a session (-1 = not mounted).
     ///
-    /// C++ Reference: `CUser::GetTowerID()`
     pub fn get_tower_owner_id(&self, id: SessionId) -> i32 {
         self.with_session(id, |h| h.tower_owner_id).unwrap_or(-1)
     }
 
     /// Set the tower owner NPC ID for a session.
     ///
-    /// C++ Reference: `CUser::m_TowerOwnerID`
     pub fn set_tower_owner_id(&self, id: SessionId, npc_id: i32) {
         self.update_session(id, |h| {
             h.tower_owner_id = npc_id;
@@ -2108,7 +2037,6 @@ impl WorldState {
 
     /// Collect a snapshot of all sessions with active pets for decay processing.
     ///
-    /// C++ Reference: `CUser::CheckDelayedTime()` — pet decay branch at line 1218.
     /// Only includes sessions that have an active pet (pet_data.is_some()).
     pub fn collect_pet_decay_data(&self, now_unix: u64) -> Vec<PetDecayData> {
         let mut data = Vec::with_capacity(16);
@@ -2137,7 +2065,6 @@ impl WorldState {
     ///
     /// Returns `Some(new_satisfaction)` if the pet is still alive, `None` if it died.
     ///
-    /// C++ Reference: `CUser::PetSatisFactionUpdate(-100)` in `User.cpp:1220`
     pub fn apply_pet_decay(&self, sid: SessionId, amount: i16, now_unix: u64) -> Option<i16> {
         let mut result = None;
         self.update_session(sid, |h| {
@@ -2192,7 +2119,6 @@ impl WorldState {
     /// Used by `pet_attack_tick` to process pet auto-attacks without holding
     /// DashMap references.
     ///
-    /// C++ Reference: `CUser::PetMonAttack()` in `PetMainHandler.cpp:902-963`
     pub fn collect_pet_attack_data(&self) -> Vec<PetAttackData> {
         let mut data = Vec::with_capacity(16);
         for entry in self.sessions.iter() {
@@ -2237,14 +2163,12 @@ impl WorldState {
 
     /// Get Knight Cash balance for a session.
     ///
-    /// C++ Reference: `CUser::m_nKnightCash`
     pub fn get_knight_cash(&self, id: SessionId) -> u32 {
         self.with_session(id, |h| h.knight_cash).unwrap_or(0)
     }
 
     /// Get TL balance for a session.
     ///
-    /// C++ Reference: `CUser::m_nTLBalance`
     pub fn get_tl_balance(&self, id: SessionId) -> u32 {
         self.with_session(id, |h| h.tl_balance).unwrap_or(0)
     }
@@ -2264,7 +2188,6 @@ impl WorldState {
     /// Broadcast a packet to all in-game sessions in a specific zone that match
     /// the given nation.
     ///
-    /// C++ Reference: `CGameServerDlg::Send_Zone(&result, zoneid, nullptr, nation)`
     /// Used by the wanted event to send position updates to the enemy nation.
     pub fn broadcast_to_zone_nation(
         &self,
@@ -2294,7 +2217,6 @@ impl WorldState {
 
     /// Access the wanted event rooms (read-only lock handle).
     ///
-    /// C++ Reference: `CGameServerDlg::pWantedMain[3]`
     pub fn wanted_rooms(
         &self,
     ) -> &parking_lot::RwLock<[crate::world::WantedEventRoom; crate::world::MAX_WANTED_ROOMS]> {
@@ -2306,7 +2228,6 @@ impl WorldState {
     /// Returns `Vec<(session_id, nation, x, z, name)>` for wanted players that
     /// are alive and in the specified PK zone.
     ///
-    /// C++ Reference: `CUser::WantedEventUserisMove()` in `WandetEvent.cpp:224-262`
     pub fn collect_wanted_players_in_zone(
         &self,
         zone_id: u16,
@@ -2335,7 +2256,6 @@ impl WorldState {
 
     /// Reset all online players' Draki Tower entrance limits.
     ///
-    /// C++ Reference: `DrakiTowerLimitReset()` — resets at 18:00 daily.
     pub fn reset_draki_entrance_limits(&self) {
         for mut entry in self.sessions.iter_mut() {
             entry.value_mut().draki_entrance_limit =
@@ -2572,7 +2492,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_nearby_session_ids_filters_by_event_room() {
-        // C++ Reference: User.cpp:2088 — GetEventRoom() filtering in visibility
         let world = WorldState::new();
         let (tx1, _rx1) = mpsc::unbounded_channel();
         let (tx2, _rx2) = mpsc::unbounded_channel();
@@ -2775,7 +2694,6 @@ mod tests {
 
     #[test]
     fn test_potion_cooldown_constant_matches_cpp() {
-        // C++ Reference: User.h:35 — PLAYER_POTION_REQUEST_INTERVAL = 2400
         let cooldown_ms: u128 = 2400;
         assert_eq!(
             cooldown_ms, 2400,

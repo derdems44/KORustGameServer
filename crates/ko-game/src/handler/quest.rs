@@ -1,7 +1,4 @@
 //! WIZ_QUEST (0x64) handler — quest system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/QuestHandler.cpp`
-//!
 //! Sub-opcodes:
 //! - 1: Quest list (QuestDataRequest — server->client on game start)
 //! - 2: Save event (update quest state)
@@ -18,8 +15,6 @@ use ko_db::repositories::quest::QuestRepository;
 use ko_protocol::{Opcode, Packet, PacketReader};
 
 /// Maximum number of text IDs in an NPC_SAY dialog.
-///
-/// C++ Reference: `NPCHandler.cpp:568` — `int32 nTextID[8]`
 const MAX_SAY_TEXT_IDS: usize = 8;
 
 use crate::handler::zone_change;
@@ -28,8 +23,6 @@ use crate::world::types::ZONE_MORADON;
 use crate::zone::SessionId;
 
 /// Handle WIZ_QUEST from the client.
-///
-/// C++ Reference: `CUser::QuestV2PacketProcess(Packet & pkt)`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -48,7 +41,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
     let quest_helper = world.get_quest_helper(quest_helper_id);
 
-    // Decompile (GameServer.exe.c:370572): `((v5 - 4) & 0xF6) != 0 || v5 == 13`
     // Sub-opcodes 4, 5, 12 have relaxed NPC validation (no NPC alive/range check).
     // Sub-opcodes 3, 7, 13 and others require full NPC validation.
     match sub_opcode {
@@ -82,7 +74,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             handle_execute_helper(session, &helper)?;
         }
         13 => {
-            // Decompile: opcode 13 enters NPC validation path but has no action
             // in the switch -- it falls through to printf (no-op).
             // Sub-opcode 13 is used as a RESPONSE by RunGiveItemCheckExchange,
             // not as a client request handler.
@@ -115,9 +106,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Send quest data to client on game start.
-///
-/// C++ Reference: `CUser::QuestDataRequest(bool gamestarted)` (QuestHandler.cpp:59-117)
-///
 /// Sends:
 /// 1. WIZ_QUEST sub-opcode 8 (time sync)
 /// 2. WIZ_QUEST sub-opcode 1 (quest list with states)
@@ -127,7 +115,6 @@ pub async fn send_quest_data(session: &mut ClientSession) -> anyhow::Result<()> 
     let world = session.world().clone();
 
     // 1. Send time sync
-    // C++ Reference: QuestHandler.cpp:63-67
     let now = chrono::Utc::now();
     let mut time_pkt = Packet::new(Opcode::WizQuest as u8);
     time_pkt.write_u8(8);
@@ -140,7 +127,6 @@ pub async fn send_quest_data(session: &mut ClientSession) -> anyhow::Result<()> 
     session.send_packet(&time_pkt).await?;
 
     // 2. Build quest list
-    // C++ Reference: QuestHandler.cpp:69-107
     let quests = world.with_session(sid, |h| h.quests.clone());
     let quest_map = quests.unwrap_or_default();
 
@@ -156,7 +142,6 @@ pub async fn send_quest_data(session: &mut ClientSession) -> anyhow::Result<()> 
         list_pkt.write_u8(info.quest_state);
 
         // Track active/ready quests for monster data request
-        // C++ Reference: QuestHandler.cpp:82-84
         if info.quest_state == 1 || info.quest_state == 3 {
             active_quest_ids.push(quest_id);
         }
@@ -165,7 +150,6 @@ pub async fn send_quest_data(session: &mut ClientSession) -> anyhow::Result<()> 
     session.send_packet(&list_pkt).await?;
 
     // 3. Send monster data for each active quest
-    // C++ Reference: QuestHandler.cpp:109-116
     for quest_id in &active_quest_ids {
         send_quest_monster_data(session, *quest_id).await?;
     }
@@ -174,9 +158,6 @@ pub async fn send_quest_data(session: &mut ClientSession) -> anyhow::Result<()> 
 }
 
 /// Send monster kill count data for a specific quest.
-///
-/// C++ Reference: `CUser::QuestV2MonsterDataRequest(uint16 sQuestID)` (QuestHandler.cpp:469-482)
-///
 /// Packet: WIZ_QUEST, sub=9, type=1(u8), quest_id(u16), kill_counts[4](u16 each)
 async fn send_quest_monster_data(session: &mut ClientSession, quest_id: u16) -> anyhow::Result<()> {
     let sid = session.session_id();
@@ -202,8 +183,6 @@ async fn send_quest_monster_data(session: &mut ClientSession, quest_id: u16) -> 
 }
 
 /// Validate quest prerequisites (nation, level, class) without NPC checks.
-///
-/// C++ Reference: QuestHandler.cpp:129-138
 fn validate_quest_prerequisites(
     session: &ClientSession,
     helper: &ko_db::models::QuestHelperRow,
@@ -235,8 +214,6 @@ fn validate_quest_prerequisites(
 }
 
 /// Validate quest prerequisites including NPC alive/proto ID/range checks.
-///
-/// C++ Reference: QuestHandler.cpp:144-159
 ///   - NPC must exist and not be dead
 ///   - NPC proto ID must match quest helper's s_npc_id
 ///   - Player must be in range of the NPC
@@ -261,13 +238,11 @@ fn validate_quest_with_npc(
 
     let npc_id = nid as u32;
 
-    // C++ Reference: QuestHandler.cpp:146 — pNpc == nullptr || pNpc->isDead()
     // NPC must exist and be alive
     if world.is_npc_dead(npc_id) {
         return false;
     }
 
-    // C++ Reference: QuestHandler.cpp:148 — pQuestHelper->sNpcId != pNpc->GetProtoID()
     // NPC proto ID must match the quest helper's expected NPC
     if let Some(npc) = world.get_npc_instance(npc_id) {
         if helper.s_npc_id != npc.proto_id as i16 {
@@ -275,7 +250,6 @@ fn validate_quest_with_npc(
         }
     }
 
-    // C++ Reference: QuestHandler.cpp:150 — !isInRange(pNpc, MAX_NPC_RANGE)
     // Player must be within NPC interaction range
     if !world.is_in_npc_range(sid, npc_id) {
         return false;
@@ -285,10 +259,6 @@ fn validate_quest_with_npc(
 }
 
 /// Check if a class matches the quest requirement.
-///
-/// C++ Reference: `CUser::JobGroupCheck(short jobgroupid)` from
-/// `UserSkillStatPointSystem.cpp:1179-1210`
-///
 /// Class format: nation * 100 + class_type (e.g., 101=Karus Warrior, 201=El Morad Warrior).
 /// `required_class` uses GROUP_* defines from GameDefine.h:
 ///   1=Warrior, 2=Rogue, 3=Mage, 4=Priest, 5=Any (sentinel), 13=Kurian.
@@ -298,7 +268,6 @@ pub fn job_group_check(player_class: u16, required_class: i16) -> bool {
     if required_class == 5 {
         return true;
     }
-    // C++ `if (jobgroupid > 100) return GetClass() == jobgroupid;`
     if required_class > 100 {
         return player_class == required_class as u16;
     }
@@ -315,8 +284,6 @@ pub fn job_group_check(player_class: u16, required_class: i16) -> bool {
 }
 
 /// Handle quest accept (sub-opcode 12).
-///
-/// C++ Reference: QuestHandler.cpp:187-189
 async fn handle_accept(
     session: &mut ClientSession,
     helper: &ko_db::models::QuestHelperRow,
@@ -342,8 +309,6 @@ async fn handle_accept(
 }
 
 /// Handle quest abandon (sub-opcode 5).
-///
-/// C++ Reference: QuestHandler.cpp:172-185
 async fn handle_abandon(
     session: &mut ClientSession,
     helper: &ko_db::models::QuestHelperRow,
@@ -362,7 +327,6 @@ async fn handle_abandon(
 
     save_event(session, quest_id, 4).await?;
 
-    // C++ Reference: QuestHandler.cpp:180-183 — Monster Suppression Squad zones
     // If abandoning quest in zones 81-83, kick the user out to Moradon.
     // Use (0,0) — resolve_zero_coords handles nation-specific start_position.
     let current_zone = world.get_position(sid).map(|p| p.zone_id).unwrap_or(0);
@@ -374,9 +338,6 @@ async fn handle_abandon(
 }
 
 /// Handle execute helper (sub-opcode 3/7).
-///
-/// C++ Reference: `CUser::QuestV2ExecuteHelper` (QuestHandler.cpp:493-500)
-///
 /// In C++ this runs a Lua script. Since we don't have Lua yet, we send the
 /// NPC message packet so the client at least sees the quest NPC dialog.
 fn handle_execute_helper(
@@ -388,7 +349,6 @@ fn handle_execute_helper(
     let world = session.world().clone();
 
     // If quest is already completed, don't run it again
-    // C++ Reference: QuestHandler.cpp:493-497
     let already_completed = world
         .with_session(sid, |h| {
             h.quests
@@ -403,15 +363,12 @@ fn handle_execute_helper(
     }
 
     // Run the quest Lua script with the trigger event index
-    // C++ Reference: QuestHandler.cpp:499
     quest_v2_run_event(&world, sid, helper, helper.n_event_trigger_index, -1);
 
     Ok(())
 }
 
 /// Handle check fulfill / turn-in (sub-opcode 4).
-///
-/// C++ Reference: `CUser::QuestV2CheckFulfill` (QuestHandler.cpp:502-532)
 fn handle_check_fulfill(
     session: &mut ClientSession,
     helper: &ko_db::models::QuestHelperRow,
@@ -435,7 +392,6 @@ fn handle_check_fulfill(
     }
 
     // Check monster kill requirements
-    // C++ Reference: QuestHandler.cpp:516-530
     if let Some(quest_monster) = world.get_quest_monster(quest_id) {
         // Special case: quest 812 skips kill count check
         if quest_monster.s_quest_num != 812 {
@@ -447,7 +403,6 @@ fn handle_check_fulfill(
                 quest_monster.s_count4,
             ];
 
-            // C++ Reference: QuestHandler.cpp:525 — exact equality check
             // `if (pQuestInfo->m_bKillCounts[group] != pQuestMonster->sCount[group]) return;`
             // C++ requires kills == required_count (NOT >= required_count).
             for group in 0..4 {
@@ -459,17 +414,13 @@ fn handle_check_fulfill(
     }
 
     // All requirements met — run the Lua completion script
-    // C++ Reference: QuestHandler.cpp:531
     quest_v2_run_event(&world, sid, helper, helper.n_event_complete_index, -1);
 
     Ok(())
 }
 
 /// Save a quest event (state change) and notify the client.
-///
-/// C++ Reference: `CUser::SaveEvent(uint16 sQuestID, uint8 bQuestState)`
 /// (QuestHandler.cpp:209-353)
-///
 /// State values:
 /// - 1: ongoing (accept)
 /// - 2: completed
@@ -486,7 +437,6 @@ pub(crate) async fn save_event(
     match quest_state {
         1 => {
             // Set quest to ongoing
-            // C++ Reference: QuestHandler.cpp:217-244
             //   - NEW entry (nullptr): create, set state, reset kill counts
             //   - EXISTING entry (else): only update QuestState, keep kill counts
             world.update_session(sid, |h| {
@@ -611,13 +561,9 @@ pub(crate) async fn save_event(
 }
 
 /// Track monster kill for quest progress.
-///
-/// C++ Reference: `CUser::QuestV2MonsterCountAdd(uint16 sNpcID)` (QuestHandler.cpp:394-451)
-///
 /// Called when an NPC/monster is killed. Checks all active quests for matching
 /// monster IDs and increments kill counts. Uses `world.send_to_session` for
 /// sending packets since this may be called from non-async context.
-///
 /// C++ call site: `CNpc::OnDeathProcess()` — called for the killer and all
 /// party members within 80m range.
 pub fn quest_monster_count_add(
@@ -773,8 +719,6 @@ pub fn quest_monster_count_add(
 }
 
 /// Load quest data from DB into the session's quest map.
-///
-/// C++ Reference: `CDBAgent::LoadQuestData()` (QuestDatabase.cpp)
 pub async fn load_quest_data(session: &mut ClientSession) -> anyhow::Result<()> {
     let char_id = session.character_id().unwrap_or("").to_string();
     if char_id.is_empty() {
@@ -814,17 +758,12 @@ pub async fn load_quest_data(session: &mut ClientSession) -> anyhow::Result<()> 
 }
 
 /// Build a WIZ_NPC_SAY (0x56) packet for NPC dialog text.
-///
-/// C++ Reference: `CUser::SendSay(int32 nTextID[8])` in `NPCHandler.cpp:568-575`
-///
 /// The packet sends up to 8 text IDs that the client looks up in the quest
 /// string table. The first two i32 fields are always -1 (reserved).
-///
 /// Wire format: `[i32 -1][i32 -1][i32 text_id × 8]`
 pub fn build_npc_say_packet(text_ids: &[i32]) -> Packet {
     let mut pkt = Packet::new(Opcode::WizNpcSay as u8);
 
-    // C++ Reference: NPCHandler.cpp:571 — `result << int32(-1) << int32(-1);`
     pkt.write_i32(-1);
     pkt.write_i32(-1);
 
@@ -838,10 +777,7 @@ pub fn build_npc_say_packet(text_ids: &[i32]) -> Packet {
 }
 
 /// Run a quest Lua script via the Lua engine.
-///
-/// C++ Reference: `CUser::QuestV2RunEvent(_QUEST_HELPER*, uint32 nEventID, int8 bSelectedReward)`
 /// (QuestHandler.cpp:534-563)
-///
 /// Sets `m_nQuestHelperID` on the session, then calls `LuaEngine::execute()` with the
 /// helper's Lua filename. For NPC-linked quests (sEventDataIndex != 500), verifies the
 /// NPC exists before running.
@@ -935,7 +871,6 @@ mod tests {
 
     #[test]
     fn test_monster_suppression_zones_81_to_83() {
-        // C++ Reference: QuestHandler.cpp:180-183
         // Abandoning a quest in zones 81-83 kicks the user to Moradon.
         for zone in 81u16..=83u16 {
             assert!(
@@ -951,7 +886,6 @@ mod tests {
 
     // ── Sprint 313: Quest fulfill exact kill count check ─────────────
 
-    /// C++ Reference: QuestHandler.cpp:525
     /// `if (pQuestInfo->m_bKillCounts[group] != pQuestMonster->sCount[group]) return;`
     /// C++ uses exact equality (!=), NOT greater-than-or-equal.
     #[test]

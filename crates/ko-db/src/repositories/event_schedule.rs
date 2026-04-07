@@ -1,6 +1,4 @@
 //! Event scheduling repository — loads event schedule, timing, rewards, and triggers.
-//!
-//! C++ Reference: `CGameServerDlg::LoadEventTimeList()`, `LoadEventScheduleData()`
 
 use crate::models::event_schedule::{
     EventOptFtRow, EventOptVroomRow, EventRewardRow, EventRoomPlayTimerRow, EventScheduleDayRow,
@@ -21,7 +19,6 @@ impl<'a> EventScheduleRepository<'a> {
 
     /// Load all event schedule main list entries.
     ///
-    /// C++ Reference: `CEventScheduleMainListSet`
     pub async fn load_main_list(&self) -> Result<Vec<EventScheduleMainRow>, sqlx::Error> {
         sqlx::query_as::<_, EventScheduleMainRow>(
             "SELECT eventid, event_type, zoneid, name, status, \
@@ -36,7 +33,6 @@ impl<'a> EventScheduleRepository<'a> {
 
     /// Load all event schedule day-of-week entries.
     ///
-    /// C++ Reference: `CEventScheduleDayListSet`
     pub async fn load_day_list(&self) -> Result<Vec<EventScheduleDayRow>, sqlx::Error> {
         sqlx::query_as::<_, EventScheduleDayRow>(
             "SELECT eventid, sunday, monday, tuesday, wednesday, thursday, friday, saturday \
@@ -48,7 +44,6 @@ impl<'a> EventScheduleRepository<'a> {
 
     /// Load virtual room event timing options.
     ///
-    /// C++ Reference: `CGameServerDlg::pEventTimeOpt.pvroomop[]`
     pub async fn load_vroom_opts(&self) -> Result<Vec<EventOptVroomRow>, sqlx::Error> {
         sqlx::query_as::<_, EventOptVroomRow>(
             "SELECT zoneid, name, sign, play, attackopen, attackclose, finish \
@@ -60,7 +55,6 @@ impl<'a> EventScheduleRepository<'a> {
 
     /// Load room-based event play timers.
     ///
-    /// C++ Reference: `eventroomscheduleplaytimerset.h`
     pub async fn load_room_play_timers(&self) -> Result<Vec<EventRoomPlayTimerRow>, sqlx::Error> {
         sqlx::query_as::<_, EventRoomPlayTimerRow>(
             "SELECT event_local_id, event_zone_id, event_name, \
@@ -74,7 +68,6 @@ impl<'a> EventScheduleRepository<'a> {
 
     /// Load event rewards (winner/loser prizes).
     ///
-    /// C++ Reference: `CGameServerDlg::m_EventRewardArray`
     pub async fn load_rewards(&self) -> Result<Vec<EventRewardRow>, sqlx::Error> {
         sqlx::query_as::<_, EventRewardRow>(
             "SELECT s_index, status, local_id, is_winner, description, \
@@ -90,7 +83,6 @@ impl<'a> EventScheduleRepository<'a> {
 
     /// Load event trigger mappings.
     ///
-    /// C++ Reference: `CGameServerDlg::m_EventTriggerArray`
     pub async fn load_triggers(&self) -> Result<Vec<EventTriggerRow>, sqlx::Error> {
         sqlx::query_as::<_, EventTriggerRow>(
             "SELECT n_index, b_npc_type, s_npc_id, n_trigger_num \
@@ -102,7 +94,6 @@ impl<'a> EventScheduleRepository<'a> {
 
     /// Load timer display entries for client UI.
     ///
-    /// C++ Reference: `CGameServerDlg::m_EventTimerShowListArray`
     pub async fn load_timer_show_list(&self) -> Result<Vec<EventTimerShowRow>, sqlx::Error> {
         sqlx::query_as::<_, EventTimerShowRow>(
             "SELECT id, name, status, hour, minute, days \
@@ -114,7 +105,6 @@ impl<'a> EventScheduleRepository<'a> {
 
     /// Load Forgotten Temple timing options.
     ///
-    /// C++ Reference: `CGameServerDlg::pForgettenTemple.ptimeopt`
     pub async fn load_ft_opts(&self) -> Result<Option<EventOptFtRow>, sqlx::Error> {
         sqlx::query_as::<_, EventOptFtRow>(
             "SELECT playing_time, summon_time, spawn_min_time, waiting_time, \

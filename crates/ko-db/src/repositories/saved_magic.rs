@@ -1,6 +1,4 @@
 //! Saved magic repository — user_saved_magic table access.
-//!
-//! C++ Reference: `CDBAgent::LoadSavedMagic`, `CDBAgent::UpdateSavedMagic`
 //! in `DBAgent.cpp:974-1047`.
 
 use sqlx::{PgPool, QueryBuilder};
@@ -8,18 +6,12 @@ use sqlx::{PgPool, QueryBuilder};
 use crate::models::SavedMagicRow;
 
 /// Maximum saved buff slots per character.
-///
-/// C++ Reference: USER_SAVED_MAGIC has nSkill1..nSkill10 (10 pairs).
 pub const MAX_SAVED_MAGIC_SLOTS: usize = 10;
 
 /// Minimum duration (seconds) to persist a buff. Buffs under this are discarded.
-///
-/// C++ Reference: `nExpiry > 5` check in LoadSavedMagic.
 pub const MIN_SAVED_DURATION: i32 = 5;
 
 /// Maximum duration (seconds) to persist a buff (8 hours).
-///
-/// C++ Reference: `nExpiry < 28800` check in LoadSavedMagic.
 pub const MAX_SAVED_DURATION: i32 = 28800;
 
 /// Repository for saved magic (buff persistence) database operations.
@@ -37,7 +29,6 @@ impl<'a> SavedMagicRepository<'a> {
     ///
     /// Returns only entries with valid skill_id > 0 and duration within range.
     ///
-    /// C++ Reference: `CDBAgent::LoadSavedMagic` — filters nSkillID > 0, nExpiry > 5, nExpiry < 28800.
     pub async fn load_saved_magic(
         &self,
         character_id: &str,
@@ -63,7 +54,6 @@ impl<'a> SavedMagicRepository<'a> {
     /// Replaces all existing entries. Up to 10 entries are saved.
     /// Entries with skill_id == 0 or remaining_duration <= 0 are stored as empty slots.
     ///
-    /// C++ Reference: `CDBAgent::UpdateSavedMagic` — calls UPDATE_SAVED_MAGIC stored proc.
     pub async fn save_saved_magic(
         &self,
         character_id: &str,

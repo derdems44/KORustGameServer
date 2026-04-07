@@ -1,19 +1,14 @@
 //! WIZ_WORLD_BOSS (0xD6) handler — World boss event system.
-//!
 //! v2525 client's world boss tracking panel. Displays boss status,
 //! UI initialization data, and ranking/info messages.
-//!
 //! ## Client RE
-//!
 //! - Handler: `0x70B210` — reads `[u8=1][u8 sub2]`, dispatches sub2 (1-3)
 //! - Panel: `[game+0x6B4]` — Group B (panel-dependent)
 //! - Storage: 4 boss panel slots at `this+0x180` through `+0x5508`
 //! - Status handler: `0x70C1E0` — 10-entry jump table at `0x70C400`
 //! - UI init handler: `0x70BC20` — complex per-boss entry format
 //! - Ranking handler: `0x70B830` — LUT at `0x70BBB8` (1-102 range)
-//!
 //! ## S2C Packet Format
-//!
 //! ```text
 //! [u8 sub1]  — MUST be 1 (client checks)
 //! [u8 sub2]  — sub-opcode:
@@ -36,9 +31,7 @@
 //!   sub2=3: Ranking/Info
 //!     [i32 info_id]      — 1-102 range, string lookup via LUT
 //! ```
-//!
 //! ## Status Codes (sub2=1, jump table at `0x70C400`)
-//!
 //! | code | String ID | Hex    | Meaning                         |
 //! |------|-----------|--------|---------------------------------|
 //! | 1    | —         | —      | Boss spawned (opens panel)      |
@@ -47,9 +40,7 @@
 //! | 4    | 31117     | 0x798D | Status message                  |
 //! | 5-9  | —         | —      | Fall through (no display)       |
 //! | 10   | 31118     | 0x798E | Status message                  |
-//!
 //! ## Ranking Info IDs (sub2=3, LUT at `0x70BBB8`)
-//!
 //! | info_id | String ID | Decimal |
 //! |---------|-----------|---------|
 //! | 1       | 0x4075    | 16501   |
@@ -60,14 +51,10 @@
 //! | 101     | 0x798F    | 31119   |
 //! | 102     | 0x7990    | 31120   |
 //! | default | 0x5E6     | 1510    |
-//!
 //! ## Boss Type Gauge Clamping
-//!
 //! - Type 1/2: gauge_level [0,3], alpha [0,3]
 //! - Type 3/4: gauge_level [4,7], alpha [3,6]
-//!
 //! ## C2S Packets
-//!
 //! - Ranking request: `[u8=1][u8 sub2=3][u8 slot_id][u8 state][i32 panel_id][u16 name_len][name]`
 //! - Panel button: `[u8=1][u8 sub2=1][u16 param][optional string]`
 
@@ -133,7 +120,6 @@ pub struct BossEntry {
 }
 
 /// Runtime boss state for live tracking (atomic — safe for concurrent access).
-///
 /// Each boss slot (1-4) has one of these, stored in the world state or
 /// a shared map. Updated by the NPC/combat system when bosses take damage.
 #[derive(Debug)]
@@ -206,10 +192,8 @@ impl LiveBossState {
 // ── S2C Builders ──────────────────────────────────────────────────────
 
 /// Build a world boss status message packet (sub2=1).
-///
 /// Client RE: `0x70C1E0` — 10-entry jump table. Code 1 opens panel,
 /// 2-4/10 show string messages, 5-9 silently fall through.
-///
 /// Wire: `[u8 sub1=1][u8 sub2=1][i32 status_code]`
 pub fn build_status(status_code: i32) -> Packet {
     let mut pkt = Packet::new(Opcode::WizWorldBoss as u8);
@@ -220,12 +204,9 @@ pub fn build_status(status_code: i32) -> Packet {
 }
 
 /// Build a world boss UI init packet (sub2=2).
-///
 /// Client RE: `0x70BC20` — reads result_code (must be 1), then
 /// boss_count entries with per-boss 10-field structure.
-///
 /// - `bosses`: Up to 4 boss entries
-///
 /// Wire: `[u8 sub1=1][u8 sub2=2][i32 result=1][u8 count][{per-boss}×N]`
 pub fn build_ui_init(bosses: &[BossEntry]) -> Packet {
     let mut pkt = Packet::new(Opcode::WizWorldBoss as u8);
@@ -253,9 +234,7 @@ pub fn build_ui_init(bosses: &[BossEntry]) -> Packet {
 }
 
 /// Build a world boss UI init error packet (sub2=2, result != 1).
-///
 /// Client shows error string `0x9C8B` (40075) when result_code != 1.
-///
 /// Wire: `[u8 sub1=1][u8 sub2=2][i32 result_code]`
 pub fn build_ui_init_error(result_code: i32) -> Packet {
     let mut pkt = Packet::new(Opcode::WizWorldBoss as u8);
@@ -266,11 +245,8 @@ pub fn build_ui_init_error(result_code: i32) -> Packet {
 }
 
 /// Build a world boss ranking/info packet (sub2=3).
-///
 /// Client RE: `0x70B830` — LUT at `0x70BBB8` maps info_id to string.
-///
 /// - `info_id`: Ranking/info identifier (1-102)
-///
 /// Wire: `[u8 sub1=1][u8 sub2=3][i32 info_id]`
 pub fn build_ranking_info(info_id: i32) -> Packet {
     let mut pkt = Packet::new(Opcode::WizWorldBoss as u8);
@@ -283,12 +259,10 @@ pub fn build_ranking_info(info_id: i32) -> Packet {
 // ── C2S Handler ───────────────────────────────────────────────────────
 
 /// Handle WIZ_WORLD_BOSS (0xD6) from the client.
-///
 /// C2S packets:
 /// - Panel button: `[u8=1][u8 sub2=1][u16 param]`
 /// - UI init request: `[u8=1][u8 sub2=2]`
 /// - Ranking request: `[u8=1][u8 sub2=3][u8 slot_id][u8 state][i32 panel_id][name]`
-///
 /// Implemented: sub2=2 (UI init from DB config).
 /// Stub: sub2=1 (status), sub2=3 (ranking).
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
@@ -358,7 +332,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle world boss UI init request (sub2=2).
-///
 /// Loads boss configurations from the DB and sends them to the client.
 /// All bosses start as dead/inactive (no live spawn lifecycle yet).
 async fn handle_ui_init(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -405,12 +378,9 @@ async fn handle_ui_init(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle ranking request (sub2=3).
-///
 /// Queries the DB for rankings on the given boss slot. If data exists,
 /// sends info_id=10 (string 31114 — "ranking available"). Otherwise
 /// sends info_id=101 (string 31119 — "no ranking data").
-///
-/// C++ Reference: No C++ handler — v2525-specific.
 async fn handle_ranking(
     session: &mut ClientSession,
     slot_id: u8,

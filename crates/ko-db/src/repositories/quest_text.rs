@@ -1,6 +1,4 @@
 //! Quest text repository — database access for quest menu and talk tables.
-//!
-//! C++ Reference:
 //! - `GameServerDlg.cpp` — loads `QUEST_MENU_US`, `QUEST_TALK_US` at startup
 //! - `CQuestMenuSet`, `CQuestTalkSet` — recordset loaders
 
@@ -23,7 +21,6 @@ impl<'a> QuestTextRepository<'a> {
 
     /// Load all quest menu options.
     ///
-    /// C++ Reference: `CQuestMenuSet` — loads from `QUEST_MENU_US`.
     pub async fn load_quest_menus(&self) -> Result<Vec<QuestMenuRow>, sqlx::Error> {
         sqlx::query_as::<_, QuestMenuRow>("SELECT * FROM quest_menu ORDER BY i_num")
             .fetch_all(self.pool)
@@ -32,7 +29,6 @@ impl<'a> QuestTextRepository<'a> {
 
     /// Load all quest talk text entries.
     ///
-    /// C++ Reference: `CQuestTalkSet` — loads from `QUEST_TALK_US`.
     pub async fn load_quest_talks(&self) -> Result<Vec<QuestTalkRow>, sqlx::Error> {
         sqlx::query_as::<_, QuestTalkRow>("SELECT * FROM quest_talk ORDER BY i_num")
             .fetch_all(self.pool)

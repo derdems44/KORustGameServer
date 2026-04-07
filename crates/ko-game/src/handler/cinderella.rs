@@ -1,9 +1,5 @@
 //! WIZ_CINDERELLA (0xE0) handler -- Cinderella War (Fun Class) Event.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CindirellaWar.cpp`
-//!
 //! ## Sub-opcodes (cindopcode enum)
-//!
 //! | Value | Name          | Description                               |
 //! |-------|---------------|-------------------------------------------|
 //! | 0     | selectclass   | Select/change class during Cinderella war  |
@@ -17,7 +13,6 @@
 //! | 8     | notchange     | Cannot change (server-sent)               |
 //! | 9     | alreadyclass  | Already that class (server-sent)          |
 //! | 10    | alreadynation | Already that nation (server-sent)         |
-//!
 //! Cinderella War is a special PvP event where players can change their
 //! class and nation temporarily. The event uses special zones and has
 //! its own matchmaking/room system. Players are given preset equipment,
@@ -36,8 +31,6 @@ use crate::world::WorldState;
 use crate::zone::SessionId;
 
 /// Cinderella sub-opcode constants.
-///
-/// C++ Reference: `GameDefine.h` enum `cindopcode`
 pub mod sub_opcode {
     /// Select/change class during event.
     pub const SELECT_CLASS: u8 = 0;
@@ -70,26 +63,17 @@ pub const MAX_SETTING_TIERS: usize = 5;
 pub const MAX_CLASSES: usize = 5;
 
 /// Class cooldown for class change (seconds).
-///
-/// C++ Reference: `CindirellaSelectClass` -- `myselectlasttime = UNIXTIME + 80`
 pub const CLASS_CHANGE_COOLDOWN_SECS: u64 = 80;
 
 /// Cooldown for nation change (seconds).
-///
-/// C++ Reference: `CindirellaNationChange` -- `myselectnationtime = UNIXTIME + 90`
 pub const NATION_CHANGE_COOLDOWN_SECS: u64 = 90;
 
 /// Error cooldown applied on failed attempts (seconds).
-///
-/// C++ Reference: `SendCindSelectError` -- `UNIXTIME + 5`
 pub const ERROR_COOLDOWN_SECS: u64 = 5;
 
 // ── Per-Player State ─────────────────────────────────────────────────────
 
 /// Per-player Cinderella War event state.
-///
-/// C++ Reference: `_CINDWARUSER` in `GameDefine.h:473-517`
-///
 /// Stores the player's original data so it can be restored when the event
 /// ends or the player leaves.
 #[derive(Debug, Clone)]
@@ -166,8 +150,6 @@ impl Default for CindirellaPlayerState {
 // ── Global Event State ───────────────────────────────────────────────────
 
 /// Global Cinderella War event lifecycle state.
-///
-/// C++ Reference: `_CINDWARGAME` in `GameDefine.h:583-648`
 #[derive(Debug, Clone, Default)]
 pub struct CindirellaEventState {
     /// Whether the event is in the prepare (registration) phase.
@@ -189,20 +171,15 @@ pub struct CindirellaEventState {
 impl CindirellaEventState {
     /// Whether the event is active (prepare or war phase).
     ///
-    /// C++ Reference: `_CINDWARGAME::isON()`
     pub fn is_on(&self) -> bool {
         self.prepare || self.start
     }
 }
 
 /// Cinderella class index from class code.
-///
-/// C++ Reference: `CUser::get_cindclassindex()` in `CindirellaWar.cpp:182-194`
-///
 /// Knight Online class codes:
 ///   Karus:   101-106(warrior), 107-108(rogue), 109-110(mage), 111-112(priest), 113-115(kurian)
 ///   Elmorad: 201-206(warrior), 207-208(rogue), 209-210(mage), 211-212(priest), 213-215(kurian)
-///
 /// Returns 0=Warrior, 1=Rogue, 2=Mage, 3=Priest, 4=Kurian, or None.
 pub fn get_class_index(class_code: u16) -> Option<u8> {
     let normalized = if class_code > 200 {
@@ -221,9 +198,6 @@ pub fn get_class_index(class_code: u16) -> Option<u8> {
 }
 
 /// Get the new class code for a Cinderella event class selection.
-///
-/// C++ Reference: `CUser::CindirellaGetNewClass()` in `CindirellaWar.cpp:123-145`
-///
 /// Returns the class code based on nation, selected class index, and tier level.
 pub fn get_new_class(nation: u8, class_index: u8, beginner_level: u8) -> Option<u16> {
     let base_class = if nation == 2 {
@@ -257,8 +231,6 @@ pub fn get_new_class(nation: u8, class_index: u8, beginner_level: u8) -> Option<
 }
 
 /// Get the new race for a Cinderella event class selection.
-///
-/// C++ Reference: `CUser::CindirellaGetNewRace()` in `CindirellaWar.cpp:148-166`
 pub fn get_new_race(nation: u8, class_index: u8) -> Option<u8> {
     if nation == 2 {
         // Elmorad
@@ -284,8 +256,6 @@ pub fn get_new_race(nation: u8, class_index: u8) -> Option<u8> {
 }
 
 /// Check if a zone is a Cinderella War zone.
-///
-/// C++ Reference: `CGameServerDlg::isCindirellaZone()`
 pub fn is_cinderella_zone(zone_id: u16, event_zone_id: u16) -> bool {
     zone_id == event_zone_id
 }
@@ -293,7 +263,6 @@ pub fn is_cinderella_zone(zone_id: u16, event_zone_id: u16) -> bool {
 // ── Packet Builders ──────────────────────────────────────────────────────
 //
 // All Cinderella responses wrap in: WIZ_EXT_HOOK(0xE9) + CINDIRELLA(0xE0) + cindopcode + payload
-// C++ Reference: All cinderella responses use `Packet(WIZ_EXT_HOOK) << uint8(CINDIRELLA)`
 
 /// Build base response packet with WIZ_EXT_HOOK + CINDIRELLA sub-opcode.
 fn build_cind_base() -> Packet {
@@ -303,8 +272,6 @@ fn build_cind_base() -> Packet {
 }
 
 /// Build join event response.
-///
-/// C++ Reference: `CindirellaWar.cpp:384-387`
 pub fn build_join_event(
     is_prepare: bool,
     class_index: u8,
@@ -327,8 +294,6 @@ pub fn build_join_event(
 }
 
 /// Build starting notification.
-///
-/// C++ Reference: `CindirellaWar.cpp:1020-1022`
 pub fn build_starting(remaining_time: u32) -> Packet {
     let mut pkt = build_cind_base();
     pkt.write_u8(sub_opcode::STARTING);
@@ -337,8 +302,6 @@ pub fn build_starting(remaining_time: u32) -> Packet {
 }
 
 /// Build individual KDA update (type=0: personal).
-///
-/// C++ Reference: `CindirellaWar.cpp:536-538`
 pub fn build_kda_personal(kill_count: u16, dead_count: u16) -> Packet {
     let mut pkt = build_cind_base();
     pkt.write_u8(sub_opcode::UPDATE_KDA);
@@ -349,8 +312,6 @@ pub fn build_kda_personal(kill_count: u16, dead_count: u16) -> Packet {
 }
 
 /// Build global KDA update (type=1: broadcast).
-///
-/// C++ Reference: `CindirellaWar.cpp:550-554`
 pub fn build_kda_global(elmorad_kills: u16, karus_kills: u16) -> Packet {
     let mut pkt = build_cind_base();
     pkt.write_u8(sub_opcode::UPDATE_KDA);
@@ -361,8 +322,6 @@ pub fn build_kda_global(elmorad_kills: u16, karus_kills: u16) -> Packet {
 }
 
 /// Build finish notification.
-///
-/// C++ Reference: `CindirellaWar.cpp:562-566`
 pub fn build_finish() -> Packet {
     let mut pkt = build_cind_base();
     pkt.write_u8(sub_opcode::FINISH);
@@ -370,8 +329,6 @@ pub fn build_finish() -> Packet {
 }
 
 /// Build select class success response.
-///
-/// C++ Reference: `CindirellaWar.cpp:114-116`
 pub fn build_select_success(selected_class: u8) -> Packet {
     let mut pkt = build_cind_base();
     pkt.write_u8(sub_opcode::SELECT_CLASS);
@@ -381,8 +338,6 @@ pub fn build_select_success(selected_class: u8) -> Packet {
 }
 
 /// Build nation change success response.
-///
-/// C++ Reference: `CindirellaWar.cpp:80-81`
 pub fn build_nation_success() -> Packet {
     let mut pkt = build_cind_base();
     pkt.write_u8(sub_opcode::NATION_CHANGE);
@@ -391,8 +346,6 @@ pub fn build_nation_success() -> Packet {
 }
 
 /// Build error response for selectclass or nationchange.
-///
-/// C++ Reference: `CindirellaWar.cpp:28-29`
 pub fn build_cind_error(is_nation: bool, error_code: u8, remaining_secs: u32) -> Packet {
     let mut pkt = build_cind_base();
     pkt.write_u8(if is_nation {
@@ -410,12 +363,8 @@ pub fn build_cind_error(is_nation: bool, error_code: u8, remaining_secs: u32) ->
 // ── WIZ_PRESET Builders ─────────────────────────────────────────────────
 
 /// Build WIZ_PRESET type 1 — stat preset.
-///
-/// C++ Reference: `CindirellaWar.cpp:334-338`
-///
 /// **v2525 CONFLICT**: 0xB9 = WIZ_PET_STAT. Cannot send preset packets.
 /// Stats are applied to world state directly; client refreshes on zone change.
-///
 /// Wire: `[WIZ_PRESET][u8 1][u8 1][u16*5 stats][u16 free_points]`
 #[cfg(test)]
 fn build_preset_stats(stats: [i16; 5], free_points: i16) -> Packet {
@@ -430,11 +379,7 @@ fn build_preset_stats(stats: [i16; 5], free_points: i16) -> Packet {
 }
 
 /// Build WIZ_PRESET type 2 — skill preset.
-///
-/// C++ Reference: `CindirellaWar.cpp:350-357`
-///
 /// **v2525 CONFLICT**: 0xB9 = WIZ_PET_STAT. Cannot send preset packets.
-///
 /// Wire: `[WIZ_PRESET][u8 2][u8 1][u8*4 pages][u8 free_skill]`
 #[cfg(test)]
 fn build_preset_skills(skill_pages: [i16; 4], free_skill_pts: i16) -> Packet {
@@ -451,12 +396,8 @@ fn build_preset_skills(skill_pages: [i16; 4], free_skill_pts: i16) -> Packet {
 // ── Handler ──────────────────────────────────────────────────────────────
 
 /// Handle incoming WIZ_CINDERELLA (0xE0) packet.
-///
-/// C++ Reference: `CUser::CindirillaHandler()` in `CindirellaWar.cpp:4-15`
-///
 /// The first byte is a sub-opcode. Only `selectclass` (0) and
 /// `nationchange` (1) are client-initiated; the rest are server-sent.
-///
 /// The event system requires WorldState integration to be fully functional.
 /// Currently validates packets and sub-opcodes, but event activation
 /// depends on GM commands setting up the event state.
@@ -466,7 +407,6 @@ pub async fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Resu
     }
 
     // Dead players cannot interact with cinderella events
-    // C++ Reference: CindirellaWar.cpp — isDead() check
     if session.world().is_player_dead(session.session_id()) {
         return Ok(());
     }
@@ -502,9 +442,7 @@ fn now_unix() -> u64 {
 }
 
 /// Handle selectclass sub-opcode.
-///
-/// C++ Reference: `CUser::CindirellaSelectClass()` in `CindirellaWar.cpp:86-118`
-/// + `CUser::CindirellaSign()` in `CindirellaWar.cpp:198-390`
+/// + `CUser::CindirellaSign()`
 async fn handle_select_class(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -606,8 +544,6 @@ async fn handle_select_class(
 }
 
 /// First-time event join — save original data, apply preset.
-///
-/// C++ Reference: `CUser::CindirellaSign()` in `CindirellaWar.cpp:198-390`
 #[allow(clippy::too_many_arguments)]
 async fn cinderella_sign(
     session: &mut ClientSession,
@@ -783,8 +719,6 @@ fn apply_preset_items(world: &WorldState, sid: SessionId, setting_id: u8, class_
 }
 
 /// Apply class/nation change — shared by class switch and nation change.
-///
-/// C++ Reference: `CUser::CindirellaChaModify()` in `CindirellaWar.cpp:393-524`
 async fn cinderella_cha_modify(
     session: &mut ClientSession,
     world: &WorldState,
@@ -859,8 +793,6 @@ async fn cinderella_cha_modify(
 }
 
 /// Handle nationchange sub-opcode.
-///
-/// C++ Reference: `CUser::CindirellaNationChange()` in `CindirellaWar.cpp:51-83`
 async fn handle_nation_change(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -944,9 +876,6 @@ async fn handle_nation_change(
 // ── Restore System ───────────────────────────────────────────────────────
 
 /// Restore player's original data and clean up event participation.
-///
-/// C++ Reference: `CUser::CindirellaLogOut()` in `CindirellaWar.cpp:576-682`
-///
 /// Called on disconnect, zone exit, or event end.
 pub fn cinderella_logout(world: &WorldState, sid: SessionId, _exit_game: bool) {
     let ps = match world.remove_cindwar_player(sid) {
@@ -987,8 +916,6 @@ pub fn cinderella_logout(world: &WorldState, sid: SessionId, _exit_game: bool) {
 // ── KDA System ───────────────────────────────────────────────────────────
 
 /// Update KDA on PvP kill in Cinderella War zone.
-///
-/// C++ Reference: `CUser::CindireallaUpdateKDA()` in `CindirellaWar.cpp:534-557`
 pub fn cinderella_update_kda(world: &WorldState, killer_sid: SessionId, victim_sid: SessionId) {
     // Victim: increment deaths
     world.update_cindwar_player(victim_sid, |s| {
@@ -1032,8 +959,6 @@ pub fn cinderella_update_kda(world: &WorldState, killer_sid: SessionId, victim_s
 // ── Timer ────────────────────────────────────────────────────────────────
 
 /// Cinderella War per-second timer tick.
-///
-/// C++ Reference: `CGameServerDlg::CindirellaTimer()` in `CindirellaWar.cpp:706-861`
 pub fn cinderella_timer_tick(world: &WorldState) {
     let now = now_unix();
     let event = world.cindwar_event();
@@ -1129,8 +1054,6 @@ pub fn cinderella_timer_tick(world: &WorldState) {
 }
 
 /// End the Cinderella War event — sort rankings, distribute rewards, cleanup.
-///
-/// C++ Reference: `CindirellaWar.cpp:780-861`
 fn cinderella_finish(world: &WorldState) {
     // Collect all event users with KDA
     let users = world.cindwar_all_users();

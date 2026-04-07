@@ -1,28 +1,18 @@
 //! Juraid Mountain event system — PvE-focused room event.
-//!
-//! C++ Reference: `EventMainSystem.cpp` (Juraid sections), `EventMainTimer.cpp`
-//!
 //! Juraid Mountain is a PvE event where Karus and El Morad teams compete
 //! to kill monsters. Each room has separate areas for each nation.
 //! The nation that kills more monsters wins.
-//!
 //! ## Zone Layout
-//!
 //! Zone 87 has three bridge gates that open at timed intervals:
 //! - Bridge 0 opens at start_time + 20 minutes (1200s)
 //! - Bridge 1 opens at start_time + 30 minutes (1800s)
 //! - Bridge 2 opens at start_time + 40 minutes (2400s)
-//!
 //! Each bridge has separate Karus/El Morad versions (different NPC IDs).
-//!
 //! ## Scoring
-//!
 //! - Each monster kill adds 1 to the killing nation's score
 //! - The nation with more kills wins at the end of the play timer
 //! - On tie: draw (0)
-//!
 //! ## Rewards
-//!
 //! Loaded from `event_rewards` table (local_id=11 for Juraid).
 
 use std::collections::HashMap;
@@ -37,20 +27,14 @@ pub use crate::world::types::ZONE_JURAID;
 pub const DEFAULT_JURAID_ROOMS: u8 = 10;
 
 /// Number of bridge gates in Juraid Mountain.
-///
-/// C++ Reference: `pTempleEvent.bridge_t_check[3]`
 pub const NUM_BRIDGES: usize = 3;
 
 /// Bridge open delays in seconds from event start.
-///
-/// C++ Reference: `TempleEventBridgeCheck()` — 1200, 1800, 2400
 pub const BRIDGE_OPEN_DELAYS: [u64; NUM_BRIDGES] = [1200, 1800, 2400];
 
 // ── Juraid Bridge State ─────────────────────────────────────────────────────
 
 /// Tracks bridge gate state for a Juraid room.
-///
-/// C++ Reference: `_JURAID_ROOM_INFO` bridge fields —
 /// `pkBridges[3]`, `peBridges[3]`, `m_sKarusBridges[3]`, `m_sElmoBridges[3]`
 #[derive(Debug, Clone)]
 pub struct JuraidBridgeState {
@@ -143,8 +127,6 @@ impl Default for JuraidBridgeState {
 // ── Juraid Room Extended State ──────────────────────────────────────────────
 
 /// Extended Juraid room state beyond the generic `EventRoom`.
-///
-/// C++ Reference: `_JURAID_ROOM_INFO` — `m_iKarusKillCount`, `m_iElmoradKillCount`
 #[derive(Debug, Clone)]
 pub struct JuraidRoomState {
     /// Monster kill count for Karus.
@@ -180,7 +162,6 @@ impl Default for JuraidRoomState {
 // ── Juraid Manager ──────────────────────────────────────────────────────────
 
 /// Juraid Mountain event manager — coordinates Juraid-specific logic.
-///
 /// Stored alongside `EventRoomManager` in WorldState.
 #[derive(Debug)]
 pub struct JuraidManager {
@@ -194,7 +175,6 @@ pub struct JuraidManager {
     pub bridge_start_time: u64,
     /// Global bridge check flags (shared across all rooms).
     ///
-    /// C++ Reference: `pTempleEvent.bridge_t_check[3]`
     pub bridge_checks: [bool; NUM_BRIDGES],
 }
 
@@ -240,7 +220,6 @@ impl JuraidManager {
 
     /// Start the bridge timer.
     ///
-    /// C++ Reference: `pTempleEvent.bridge_active = true; bridge_start_min = UNIXTIME`
     pub fn start_bridge_timer(&mut self, now: u64) {
         self.bridge_active = true;
         self.bridge_start_time = now;
@@ -267,11 +246,7 @@ impl Default for JuraidManager {
 // ── Room Assignment ─────────────────────────────────────────────────────────
 
 /// Assign signed-up users to Juraid rooms.
-///
 /// Similar to BDW assignment: distributes users evenly across rooms.
-///
-/// C++ Reference: `TempleEventManageRoom()` Juraid section in `EventMainSystem.cpp:158-257`
-///
 /// Returns the number of users assigned.
 pub fn assign_users_to_rooms(erm: &EventRoomManager, _juraid: &mut JuraidManager) -> usize {
     let users = erm.signed_up_users.read().clone();
@@ -352,12 +327,8 @@ pub fn assign_users_to_rooms(erm: &EventRoomManager, _juraid: &mut JuraidManager
 // ── Monster Kill Tracking ───────────────────────────────────────────────────
 
 /// Record a monster kill in a Juraid room.
-///
 /// The killing nation gets +1 to their kill count. Also updates the generic
 /// room score for winner determination.
-///
-/// C++ Reference: `_JURAID_ROOM_INFO::m_iKarusKillCount++` / `m_iElmoradKillCount++`
-///
 /// Returns the updated (karus_kills, elmorad_kills).
 pub fn record_monster_kill(
     room: &mut EventRoom,
@@ -381,9 +352,6 @@ pub fn record_monster_kill(
 // ── Bridge Timer ────────────────────────────────────────────────────────────
 
 /// Check and open bridges that are due based on elapsed time.
-///
-/// C++ Reference: `TempleEventBridgeCheck()` in `EventMainSystem.cpp:332-382`
-///
 /// Returns a list of bridge indices that were newly opened.
 pub fn check_bridge_timers(juraid: &mut JuraidManager, now: u64) -> Vec<usize> {
     if !juraid.bridge_active {
@@ -407,9 +375,6 @@ pub fn check_bridge_timers(juraid: &mut JuraidManager, now: u64) -> Vec<usize> {
 }
 
 /// Open a bridge for all rooms.
-///
-/// C++ Reference: `TempleEventBridgeCheck(uint8 DoorNumber)` — iterates all rooms
-///
 /// Returns the number of rooms where bridges were opened.
 pub fn open_bridge_for_all_rooms(juraid: &mut JuraidManager, bridge_index: usize) -> usize {
     if bridge_index >= NUM_BRIDGES {
@@ -430,8 +395,6 @@ pub fn open_bridge_for_all_rooms(juraid: &mut JuraidManager, bridge_index: usize
 // ── Winner Determination ────────────────────────────────────────────────────
 
 /// Determine the winner of a Juraid room based on monster kill counts.
-///
-/// C++ Reference: `TempleEventSendWinnerScreen()` Juraid section —
 /// compares `m_iElmoradKillCount` vs `m_iKarusKillCount`
 pub fn determine_winner(juraid_state: &JuraidRoomState) -> u8 {
     if juraid_state.karus_kills > juraid_state.elmorad_kills {
@@ -444,7 +407,6 @@ pub fn determine_winner(juraid_state: &JuraidRoomState) -> u8 {
 }
 
 /// Determine winners for all Juraid rooms and set the room winner_nation.
-///
 /// Returns a list of (room_id, winner_nation) pairs.
 pub fn determine_all_winners(erm: &EventRoomManager, juraid: &JuraidManager) -> Vec<(u8, u8)> {
     let room_ids = erm.list_rooms(TempleEventType::JuraidMountain);

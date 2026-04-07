@@ -1,14 +1,10 @@
 //! WIZ_ITEM_MOVE (0x1F) handler — inventory and equipment item moves.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/ItemHandler.cpp:680-1227`
-//!
 //! Packet format (from client):
 //! ```text
 //! [u8 type] — 1 = InventorySystem, 2 = InventorySystemRefresh, 3 = invalid
 //! For type 1 (InventorySystem):
 //!   [u8 dir] [u32 item_id] [u8 src_pos] [u8 dst_pos]
 //! ```
-//!
 //! Response (WIZ_ITEM_MOVE):
 //! ```text
 //! [u8 command=1] [u8 subcommand] — 0=fail, 1=success
@@ -31,8 +27,6 @@ use super::{
 };
 
 /// Item movement direction types.
-///
-/// C++ Reference: `GameDefine.h:1161-1177` — `enum ItemMovementType`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 enum ItemMoveDir {
@@ -76,8 +70,6 @@ use crate::inventory_constants::{
 };
 
 /// Item slot type values (from m_bSlot field).
-///
-/// C++ Reference: `GameDefine.h:1193-1221` — `enum ItemSlotType`
 const ITEM_SLOT_EITHER_HAND: i32 = 0;
 const ITEM_SLOT_1H_RIGHT: i32 = 1;
 const ITEM_SLOT_1H_LEFT: i32 = 2;
@@ -96,7 +88,6 @@ const ITEM_SLOT_BELT: i32 = 14;
 const ITEM_SLOT_KAUL: i32 = 20;
 
 // ── Cospre (cosmetic) slot layout ───────────────────────────────
-// C++ Reference: `shared/globals.h:282-294`
 
 /// Magic bag slots per bag.
 const MBAG_MAX: usize = 12;
@@ -115,7 +106,6 @@ const INVENTORY_MBAG2: usize = INVENTORY_MBAG + MBAG_MAX; // 65
 const INVENTORY_MBAG3: usize = INVENTORY_MBAG2 + MBAG_MAX; // 77
 
 // Absolute item array indices for special cospre slots.
-// C++ Reference: `shared/globals.h:272-282`
 const CHELMET: usize = 43;
 const CTOP: usize = 46;
 const CEMBLEM: usize = 47;
@@ -129,7 +119,6 @@ const CBAG2: usize = 52;
 const CBAG3: usize = INVENTORY_TOTAL; // 96
 
 // Client-side cospre relative positions (bDstPos/bSrcPos values).
-// C++ Reference: `shared/globals.h:283-294`
 const COSP_WINGS: u8 = 0;
 const COSP_HELMET: u8 = 1;
 const COSP_GLOVE: u8 = 2;
@@ -143,7 +132,6 @@ const COSP_TALISMAN: u8 = 9;
 const COSP_BAG2: u8 = 10;
 
 // Cospre item slot types (m_bSlot values).
-// C++ Reference: `GameDefine.h:1211-1220`
 const ITEM_SLOT_BAG: i32 = 25;
 const ITEM_SLOT_COSP_GLOVES: i32 = 100;
 const ITEM_SLOT_COSP_PAULDRON: i32 = 105;
@@ -155,10 +143,8 @@ const ITEM_SLOT_COSP_TALISMAN: i32 = 113;
 const ITEM_SLOT_COSP_EMBLEM0: i32 = 114;
 const ITEM_SLOT_COSP_EMBLEM1: i32 = 115;
 
-/// C++ Reference: `GameDefine.h:62` — Special fairy item ID.
 pub(crate) const ITEM_OREADS: u32 = 700039768;
 
-/// C++ Reference: `Define.h:371`, `ItemHandler.cpp:991-993`
 /// Robin loot item IDs that enable auto-loot when equipped in SHOULDER slot.
 const ROBIN_LOOT_ITEM: u32 = 950680000;
 const ROBIN_LOOT_ITEM2: u32 = 850680000;
@@ -188,7 +174,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let sid = session.session_id();
 
     // Cannot move items while in a busy state
-    // C++ Reference: ItemHandler.cpp:688-692, 1241-1245
     if world.is_trading(sid)
         || world.is_merchanting(sid)
         || world.is_mining(sid)
@@ -199,7 +184,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Cannot move items in Chaos Dungeon
-    // C++ Reference: ItemHandler.cpp:692
     if world.get_position(sid).map(|p| p.zone_id).unwrap_or(0) == ZONE_CHAOS_DUNGEON {
         return send_item_move_result(session, false).await;
     }
@@ -219,12 +203,8 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle InventorySystemRefresh (type 2) — sort inventory by item_id descending and resend.
-///
-/// C++ Reference: `CUser::InventorySystemReflesh` in `ItemHandler.cpp:608-676`
-///
 /// Sorts the bag portion of inventory (SLOT_MAX..SLOT_MAX+HAVE_MAX) by item_id descending,
 /// then sends all bag items to the client with full item data.
-///
 /// Response packet (WIZ_ITEM_MOVE):
 /// ```text
 /// [u8 type=2] [u8 result=1]
@@ -277,7 +257,6 @@ async fn handle_inventory_refresh(session: &mut ClientSession) -> anyhow::Result
 
     session.send_packet(&pkt).await?;
 
-    // C++ Reference: ItemHandler.cpp:402
     //   if (!send_packet) { SetUserAbility(false); SendItemWeight(); }
     // Weight notification is integrated into set_user_ability().
     world.set_user_ability(sid);
@@ -285,8 +264,6 @@ async fn handle_inventory_refresh(session: &mut ClientSession) -> anyhow::Result
 }
 
 /// Handle InventorySystem — the main item move logic.
-///
-/// C++ Reference: `CUser::InventorySystem` in `ItemHandler.cpp:680-1226`
 async fn handle_inventory_system(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -360,7 +337,6 @@ async fn handle_inventory_system(
         return send_item_move_result(session, false).await;
     }
 
-    // C++ Reference: ItemHandler.cpp:841 — isDuplicate() check on source item
     // Prevent equipping a duplicate-flagged item from inventory to equipment slot.
     if dir == ItemMoveDir::InvenSlot {
         let src_idx = SLOT_MAX + src_pos as usize;
@@ -372,7 +348,6 @@ async fn handle_inventory_system(
     }
 
     // Pet item on SHOULDER: prevent equipping if a pet is already active.
-    // C++ Reference: ItemHandler.cpp:879-886
     //   if (bDstPos == SHOULDER && pTable.isPetItem() && m_PettingOn != nullptr) goto fail_return;
     if dir == ItemMoveDir::InvenSlot && dst_pos as usize == SHOULDER {
         let kind = item_table.kind.unwrap_or(0);
@@ -388,7 +363,6 @@ async fn handle_inventory_system(
     }
 
     // For InvenSlot: prevent equipping weapons on non-hand slots.
-    // C++ Reference: ItemHandler.cpp:846-877
     if dir == ItemMoveDir::InvenSlot {
         let is_non_hand_slot = matches!(
             dst_pos as usize,
@@ -414,7 +388,6 @@ async fn handle_inventory_system(
     let item_slot_type = item_table.slot.unwrap_or(-1);
 
     // Pre-lookup the opposite hand item's slot type for 1H weapon 2H auto-unequip.
-    // C++ Reference: ItemHandler.cpp:898-906, 926-934
     // When equipping a 1H weapon, C++ checks if the OTHER hand holds a 2H weapon
     // and auto-unequips it. We need the item table lookup BEFORE the closure.
     let rh_item_slot_type = world
@@ -429,7 +402,6 @@ async fn handle_inventory_system(
         .and_then(|t| t.slot);
 
     // For SlotInven, validate that any swap-back item is compatible.
-    // C++ Reference: ItemHandler.cpp:1016-1020
     if dir == ItemMoveDir::SlotInven {
         let dst_idx = SLOT_MAX + dst_pos as usize;
         if let Some(dst_slot) = world.get_inventory_slot(sid, dst_idx) {
@@ -449,7 +421,6 @@ async fn handle_inventory_system(
     }
 
     // For SlotSlot, validate the destination item (if any) is compatible.
-    // C++ Reference: ItemHandler.cpp:1048-1052
     if dir == ItemMoveDir::SlotSlot {
         let dst_idx = dst_pos as usize;
         if let Some(dst_slot) = world.get_inventory_slot(sid, dst_idx) {
@@ -467,7 +438,6 @@ async fn handle_inventory_system(
     }
 
     // Pre-validation for ITEM_INVEN_TO_COSP (7).
-    // C++ Reference: ItemHandler.cpp:801-834
     if dir == ItemMoveDir::InvenToCosp
         && (dst_pos as usize >= COSP_MAX + MBAG_COUNT
             || src_pos as usize >= HAVE_MAX
@@ -477,7 +447,6 @@ async fn handle_inventory_system(
     }
 
     // Pre-validation for ITEM_COSP_TO_INVEN (8).
-    // C++ Reference: ItemHandler.cpp:768-799
     if dir == ItemMoveDir::CospToInven {
         if dst_pos as usize >= HAVE_MAX
             || src_pos as usize >= COSP_MAX
@@ -487,7 +456,6 @@ async fn handle_inventory_system(
             return send_item_move_result(session, false).await;
         }
         // If destination has an item, validate the swap is compatible.
-        // C++ Reference: ItemHandler.cpp:792-795
         let dst_idx = SLOT_MAX + dst_pos as usize;
         if let Some(dst_slot) = world.get_inventory_slot(sid, dst_idx) {
             if dst_slot.item_id != 0 {
@@ -506,7 +474,6 @@ async fn handle_inventory_system(
     }
 
     // Pre-validation for ITEM_SLOT_INVEN_TO_MBAG (14).
-    // C++ Reference: ItemHandler.cpp:1077-1092
     if dir == ItemMoveDir::SlotInvenToMbag
         && (dst_pos as usize >= COSP_MAX + MBAG_COUNT
             || src_pos as usize >= HAVE_MAX
@@ -516,7 +483,6 @@ async fn handle_inventory_system(
     }
 
     // Pre-validation for ITEM_INVEN_TO_PET (12).
-    // C++ Reference: ItemHandler.cpp:1055-1064
     if dir == ItemMoveDir::InvenToPet
         && (src_pos as usize >= HAVE_MAX || dst_pos as usize >= PET_INVENTORY_TOTAL)
     {
@@ -524,7 +490,6 @@ async fn handle_inventory_system(
     }
 
     // Pre-validation for ITEM_PET_TO_INVEN (13).
-    // C++ Reference: ItemHandler.cpp:1066-1075
     if dir == ItemMoveDir::PetToInven
         && (src_pos as usize >= PET_INVENTORY_TOTAL || dst_pos as usize >= HAVE_MAX)
     {
@@ -542,7 +507,6 @@ async fn handle_inventory_system(
             }
             match dir {
                 ItemMoveDir::InvenToPet => {
-                    // C++ Reference: ItemHandler.cpp:1055-1064
                     let src_idx = SLOT_MAX + src_pos as usize;
                     let dst_idx = dst_pos as usize;
                     if src_idx >= inv.len() || inv[src_idx].item_id != item_id {
@@ -560,7 +524,6 @@ async fn handle_inventory_system(
                     true
                 }
                 ItemMoveDir::PetToInven => {
-                    // C++ Reference: ItemHandler.cpp:1066-1075
                     let src_idx = src_pos as usize;
                     let dst_idx = SLOT_MAX + dst_pos as usize;
                     if dst_idx >= inv.len() || pet_items[src_idx].item_id != item_id {
@@ -611,7 +574,6 @@ async fn handle_inventory_system(
                     return false;
                 }
                 // Two-handed weapon handling.
-                // C++ Reference: ItemHandler.cpp:894-989
                 handle_two_handed_equip(
                     inv,
                     src_idx,
@@ -654,8 +616,6 @@ async fn handle_inventory_system(
                     return false;
                 }
                 // If same stackable item at dst, merge stacks.
-                // C++ Reference: ItemHandler.cpp:1103 — only merge if `m_bCountable == 1`
-                // C++ Reference: ItemHandler.cpp:1103 — `m_bCountable == 1`
                 // Only items with countable exactly 1 can merge stacks.
                 let is_countable = world
                     .get_item(item_id)
@@ -689,7 +649,6 @@ async fn handle_inventory_system(
             }
             ItemMoveDir::InvenToCosp => {
                 // Inventory bag -> cospre (cosmetic) slot
-                // C++ Reference: ItemHandler.cpp:801-834
                 let src_idx = SLOT_MAX + src_pos as usize;
                 if src_idx >= INVENTORY_TOTAL || inv[src_idx].item_id != item_id {
                     return false;
@@ -722,7 +681,6 @@ async fn handle_inventory_system(
             }
             ItemMoveDir::CospToInven => {
                 // Cospre (cosmetic) slot -> inventory bag
-                // C++ Reference: ItemHandler.cpp:768-799
                 let dst_idx = SLOT_MAX + dst_pos as usize;
                 if dst_idx >= INVENTORY_TOTAL {
                     return false;
@@ -744,7 +702,6 @@ async fn handle_inventory_system(
             }
             ItemMoveDir::InvenToMbag => {
                 // Inventory bag -> magic bag
-                // C++ Reference: ItemHandler.cpp:750-766
                 if (dst_pos as usize) >= MBAG_TOTAL || (src_pos as usize) >= HAVE_MAX {
                     return false;
                 }
@@ -794,7 +751,6 @@ async fn handle_inventory_system(
             }
             ItemMoveDir::MbagToInven => {
                 // Magic bag -> inventory bag
-                // C++ Reference: ItemHandler.cpp:735-748
                 if (dst_pos as usize) >= HAVE_MAX || (src_pos as usize) >= MBAG_TOTAL {
                     return false;
                 }
@@ -812,7 +768,6 @@ async fn handle_inventory_system(
             }
             ItemMoveDir::MbagToMbag => {
                 // Magic bag -> magic bag (within or between bags)
-                // C++ Reference: ItemHandler.cpp:720-733
                 if (dst_pos as usize) >= MBAG_TOTAL || (src_pos as usize) >= MBAG_TOTAL {
                     return false;
                 }
@@ -850,7 +805,6 @@ async fn handle_inventory_system(
             }
             ItemMoveDir::SlotInvenToMbag => {
                 // Inventory bag -> cospre bag slot (equip magic bag)
-                // C++ Reference: ItemHandler.cpp:1077-1092
                 let src_idx = SLOT_MAX + src_pos as usize;
                 // CBAG1: dst_pos=1 → slot 51, CBAG2: dst_pos=2 → slot 52
                 // CBAG3: dst_pos=3 → slot CBAG3 (96, outside normal range to avoid overlap)
@@ -885,7 +839,6 @@ async fn handle_inventory_system(
     }
 
     // Recalculate equipment stats only for equipment/cospre changes (5 directions).
-    // C++ Reference: ItemHandler.cpp:1125-1134 — SetUserAbility for these 5 directions only
     let is_equipment_change = dir == ItemMoveDir::InvenSlot
         || dir == ItemMoveDir::SlotInven
         || dir == ItemMoveDir::SlotSlot
@@ -910,7 +863,6 @@ async fn handle_inventory_system(
     }
 
     // Track fairy item equip/unequip for auto-loot blocking.
-    // C++ Reference: ItemHandler.cpp:833 (InvenToCosp), 797 (CospToInven)
     if dir == ItemMoveDir::InvenToCosp && dst_pos == COSP_FAIRY && item_id == ITEM_OREADS {
         world.update_session(sid, |h| h.fairy_check = true);
     }
@@ -919,7 +871,6 @@ async fn handle_inventory_system(
     }
 
     // Track robin loot item equip/unequip for auto-loot.
-    // C++ Reference: ItemHandler.cpp:991-993 (equip), 1022-1024 (unequip)
     // Robin loot items: 950680000, 850680000, 510000000, 520000000
     if dir == ItemMoveDir::InvenSlot && dst_pos as usize == SHOULDER && is_robin_loot_item(item_id)
     {
@@ -937,12 +888,9 @@ async fn handle_inventory_system(
 }
 
 /// Handle two-handed weapon equip logic within the inventory array.
-///
 /// When equipping a 1H weapon to the right hand and the left hand holds a 2H-left weapon,
 /// the 2H-left weapon is auto-unequipped to the source inventory slot.
 /// Similarly for 1H-left vs 2H-right, and for equipping 2H weapons when one hand is occupied.
-///
-/// C++ Reference: `CUser::InventorySystem` in `ItemHandler.cpp:894-989`
 #[allow(clippy::too_many_arguments)]
 fn handle_two_handed_equip(
     inv: &mut [UserItemSlot],
@@ -1013,9 +961,6 @@ fn handle_two_handed_equip(
 }
 
 /// Check for 1H-right equip: if left hand has a 2H-left weapon, auto-unequip it.
-///
-/// C++ Reference: `ItemHandler.cpp:894-921`
-///
 /// When equipping a 1H weapon to the right hand:
 /// - If left hand is empty → normal swap (src ↔ righthand)
 /// - If left hand has a 2H-left weapon (slot 0x04) → auto-unequip:
@@ -1048,9 +993,6 @@ fn two_hand_check_1h_right(
 }
 
 /// Check for 1H-left equip: if right hand has a 2H-right weapon, auto-unequip it.
-///
-/// C++ Reference: `ItemHandler.cpp:922-949`
-///
 /// When equipping a 1H weapon to the left hand:
 /// - If right hand is empty → normal swap (src ↔ lefthand)
 /// - If right hand has a 2H-right weapon (slot 0x03) → auto-unequip:
@@ -1093,8 +1035,6 @@ fn swap_items(inv: &mut [UserItemSlot], src_idx: usize, dst_idx: usize) {
 }
 
 /// Check if an item is a weapon type (should not be equipped on non-hand slots).
-///
-/// C++ Reference: `ItemHandler.cpp:858-876` — checks `isDagger`, `isSword`, etc.
 fn is_weapon_item(item: &Item) -> bool {
     let kind = item.kind.unwrap_or(0);
     matches!(
@@ -1115,8 +1055,6 @@ fn is_weapon_item(item: &Item) -> bool {
 }
 
 /// Send WIZ_ITEM_MOVE response to the client.
-///
-/// C++ Reference: `CUser::SendItemMove` in `User.cpp:3651-3701`
 async fn send_item_move_result(session: &mut ClientSession, success: bool) -> anyhow::Result<()> {
     let mut pkt = Packet::new(Opcode::WizItemMove as u8);
     pkt.write_u8(1); // command
@@ -1153,8 +1091,6 @@ async fn send_item_move_result(session: &mut ClientSession, success: bool) -> an
 }
 
 /// Check if an item can be equipped in the given cospre slot position.
-///
-/// C++ Reference: `CUser::IsValidSlotPos` in `ItemHandler.cpp:2360-2421`
 /// Handles the cospre-specific item slot types.
 fn is_valid_cosp_slot_pos(item: &Item, dest_pos: u8) -> bool {
     let slot = item.slot.unwrap_or(-1);
@@ -1175,9 +1111,6 @@ fn is_valid_cosp_slot_pos(item: &Item, dest_pos: u8) -> bool {
 }
 
 /// Map a client cospre relative position to the absolute item array index.
-///
-/// C++ Reference: `ItemHandler.cpp:808-831` — special slot mapping for ITEM_INVEN_TO_COSP
-///
 /// Returns `None` if the position is out of range.
 fn cosp_pos_to_abs_index(pos: u8) -> Option<usize> {
     match pos {
@@ -1194,8 +1127,6 @@ fn cosp_pos_to_abs_index(pos: u8) -> Option<usize> {
 }
 
 /// Check if an item can be equipped in the given slot position.
-///
-/// C++ Reference: `CUser::IsValidSlotPos` in `ItemHandler.cpp:2251-2380`
 fn is_valid_slot_pos(item: &Item, dest_pos: usize) -> bool {
     let slot = item.slot.unwrap_or(-1);
     match slot {
@@ -1219,8 +1150,6 @@ fn is_valid_slot_pos(item: &Item, dest_pos: usize) -> bool {
 }
 
 /// Check if the item's class restriction allows this player's class.
-///
-/// C++ Reference: `CUser::ItemClassAvailable` in `ItemHandler.cpp:479-536`
 fn item_class_available(item: &Item, player_class: u16) -> bool {
     let item_class = item.class.unwrap_or(0);
     if item_class == 0 {
@@ -1249,8 +1178,6 @@ fn item_class_available(item: &Item, player_class: u16) -> bool {
 }
 
 /// Check if the player meets the item's stat/level requirements.
-///
-/// C++ Reference: `CUser::ItemEquipAvailable` in `ItemHandler.cpp:543-554`
 fn item_equip_available(item: &Item, ch: &crate::world::CharacterInfo) -> bool {
     let req_level = item.req_level.unwrap_or(0) as u8;
     let req_level_max = item.req_level_max.unwrap_or(255) as u8;
@@ -1265,9 +1192,6 @@ fn item_equip_available(item: &Item, ch: &crate::world::CharacterInfo) -> bool {
 }
 
 /// Broadcast WIZ_USERLOOK_CHANGE to nearby players when equipment changes.
-///
-/// C++ Reference: `CUser::UserLookChange` in `User.cpp:3156-3168`
-/// C++ Reference: `ItemHandler.cpp:1142-1214` — direction-specific broadcast logic
 fn broadcast_look_change(
     session: &mut ClientSession,
     dir: ItemMoveDir,
@@ -1284,7 +1208,6 @@ fn broadcast_look_change(
     let inventory = world.get_inventory(sid);
 
     // Check if player is hiding cosmetics (toggled via WIZ_HELMET).
-    // C++ Reference: User.h:361 — m_bIsHidingCospre
     let is_hiding_cospre = world
         .with_session(sid, |h| h.is_hiding_cospre)
         .unwrap_or(false);
@@ -1297,7 +1220,6 @@ fn broadcast_look_change(
     let should_broadcast_equip_slot = |slot: u8| -> bool {
         match slot as usize {
             HEAD => {
-                // C++: if (pItem != nullptr && (pItem->nNum == 0 || m_bIsHidingCospre))
                 let cosp_empty = inventory
                     .get(CHELMET)
                     .map(|s| s.item_id == 0)
@@ -1305,7 +1227,6 @@ fn broadcast_look_change(
                 cosp_empty || is_hiding_cospre
             }
             BREAST | LEG | GLOVE | FOOT => {
-                // C++: same pattern with GetItem(CTOP)
                 let cosp_empty = inventory.get(CTOP).map(|s| s.item_id == 0).unwrap_or(true);
                 cosp_empty || is_hiding_cospre
             }
@@ -1899,7 +1820,6 @@ mod tests {
 
     // ── Sprint 244: 1H weapon equip with 2H auto-unequip ──────────
 
-    /// C++ Reference: ItemHandler.cpp:894-906
     /// Equip 1H-right weapon when left hand has a 2H-left weapon.
     /// The 2H-left weapon should auto-unequip to inventory src slot.
     #[test]
@@ -1942,7 +1862,6 @@ mod tests {
         assert_eq!(inv[LEFTHAND].item_id, 0);
     }
 
-    /// C++ Reference: ItemHandler.cpp:922-934
     /// Equip 1H-left weapon when right hand has a 2H-right weapon.
     /// The 2H-right weapon should auto-unequip to inventory src slot.
     #[test]
@@ -2733,7 +2652,6 @@ mod tests {
 
     // ── Sprint 121: Browsing merchant guard ────────────────────────
 
-    /// C++ Reference: ItemHandler.cpp:1245 — m_sMerchantsSocketID >= 0 blocks item move.
     #[test]
     fn test_browsing_merchant_blocks_item_move() {
         use crate::world::WorldState;
@@ -2758,19 +2676,16 @@ mod tests {
 
     // ── Sprint 244: Pickaxe and pet item are weapons ────────────────
 
-    /// C++ Reference: ItemHandler.cpp:873 — isPickaxe() (kind 61)
     #[test]
     fn test_is_weapon_item_pickaxe() {
         assert!(is_weapon_item(&make_test_item_with_kind(61)));
     }
 
-    /// C++ Reference: ItemHandler.cpp:874 — isPetItem() (kind 151)
     #[test]
     fn test_is_weapon_item_pet_item() {
         assert!(is_weapon_item(&make_test_item_with_kind(151)));
     }
 
-    /// C++ Reference: ItemHandler.cpp:841 — isDuplicate() check on source item.
     /// Duplicate-flagged items (flag == 3) must not be equipped.
     #[test]
     fn test_duplicate_flag_item_id_constant() {
@@ -2779,7 +2694,6 @@ mod tests {
 
     // ── Sprint 120: Weight update after inventory refresh ────────────
 
-    /// C++ Reference: ItemHandler.cpp:402 — SetUserAbility + SendItemWeight after sort.
     /// Verify the WIZ_WEIGHT_CHANGE packet format is [u16 item_weight].
     #[test]
     fn test_weight_change_packet_format_after_refresh() {
@@ -2800,7 +2714,6 @@ mod tests {
     // ── Sprint 280: Countable strict equality ───────────────────────────
 
     /// Test countable check uses == 1 (not > 0) for stack merging.
-    /// C++ Reference: ItemHandler.cpp:1103 — `pTableSrc.m_bCountable == 1`
     #[test]
     fn test_countable_strict_equality() {
         // countable == 0: not stackable
@@ -2814,7 +2727,6 @@ mod tests {
 
     // ── Sprint 311: Pet item SHOULDER slot check ─────────────────────
 
-    /// C++ Reference: ItemHandler.cpp:879-886
     /// `if (bDstPos == SHOULDER && pTable.isPetItem() && m_PettingOn != nullptr) goto fail_return;`
     /// A pet item (kind 151) cannot be equipped to SHOULDER if a pet is already active.
     #[test]

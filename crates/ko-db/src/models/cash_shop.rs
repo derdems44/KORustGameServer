@@ -2,7 +2,6 @@
 //!
 //! Maps to `pus_category`, `pus_items`, and `pus_refund` PostgreSQL tables.
 //!
-//! C++ Reference:
 //! - `ShoppingMallHandler.cpp` — STORE_OPEN / STORE_CLOSE flow
 //! - PUS is an external web-based shop; items purchased are delivered via
 //!   the `WEB_ITEMMALL` / `STORE_CLOSE` flow to the player's inventory.

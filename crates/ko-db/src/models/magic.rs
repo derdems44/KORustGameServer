@@ -1,9 +1,6 @@
 //! Magic system models — maps to the 10 `magic*` PostgreSQL tables.
-//!
-//! C++ Reference:
 //! - `shared/database/MagicTableSet.h` — `_MAGIC_TABLE` struct
 //! - `shared/database/MagicType1Set.h` through `MagicType9Set.h`
-//!
 //! The magic system stores skill definitions and type-specific parameters
 //! across a master table (`magic`) and 9 type sub-tables (`magic_type1`
 //! through `magic_type9`). Each type corresponds to a category of skill
@@ -11,11 +8,9 @@
 //! crowd-control, teleport, and advanced CC.
 
 /// Master magic/skill definition row.
-///
 /// Keyed by `magic_num`. Contains targeting, cost, cast-time, and type
 /// routing fields. The `type1`/`type2` columns determine which sub-table
 /// to join for type-specific parameters.
-/// C++ equivalent: `_MAGIC_TABLE` (shared/database/structs.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MagicRow {
     /// Unique magic/skill identifier.
@@ -77,10 +72,8 @@ pub struct MagicRow {
 }
 
 /// Melee attack skill parameters.
-///
 /// Keyed by `i_num`. Contains hit type, hit rate, combo system, and
 /// per-target damage modifiers for physical melee skills.
-/// C++ equivalent: `_MAGIC_TYPE1`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MagicType1Row {
     /// Magic number (foreign key to `magic.magic_num`).
@@ -110,9 +103,7 @@ pub struct MagicType1Row {
 }
 
 /// Ranged/archery attack skill parameters.
-///
 /// Keyed by `i_num`. Contains range extensions and arrow requirements.
-/// C++ equivalent: `_MAGIC_TYPE2`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MagicType2Row {
     /// Magic number (foreign key to `magic.magic_num`).
@@ -134,10 +125,8 @@ pub struct MagicType2Row {
 }
 
 /// DOT / direct magic damage skill parameters.
-///
 /// Keyed by `i_num`. Contains initial and periodic damage, duration,
 /// elemental attribute, and area-of-effect radius.
-/// C++ equivalent: `_MAGIC_TYPE3`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MagicType3Row {
     /// Magic number (foreign key to `magic.magic_num`).
@@ -161,10 +150,8 @@ pub struct MagicType3Row {
 }
 
 /// Buff/debuff skill parameters.
-///
 /// Keyed by `i_num`. The largest sub-table with extensive stat modifier
 /// fields covering attack, defense, resistances, and stats.
-/// C++ equivalent: `_MAGIC_TYPE4`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MagicType4Row {
     /// Magic number (foreign key to `magic.magic_num`).
@@ -228,10 +215,8 @@ pub struct MagicType4Row {
 }
 
 /// Resurrection/recovery skill parameters.
-///
 /// Keyed by `i_num`. Contains recovery type, experience recovery, and
 /// material (stone) requirements.
-/// C++ equivalent: `_MAGIC_TYPE5`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MagicType5Row {
     /// Magic number (foreign key to `magic.magic_num`).
@@ -245,10 +230,8 @@ pub struct MagicType5Row {
 }
 
 /// Transformation skill parameters.
-///
 /// Keyed by `i_num`. Contains full stat overrides for the transformed state,
 /// including HP, speed, attack, defense, and all elemental resistances.
-/// C++ equivalent: `_MAGIC_TYPE6`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MagicType6Row {
     /// Magic number (foreign key to `magic.magic_num`).
@@ -306,10 +289,8 @@ pub struct MagicType6Row {
 }
 
 /// Summoning / crowd-control skill parameters (type 7).
-///
 /// Keyed by `n_index`. Contains summon/CC parameters including monster ID,
 /// target changes, state changes, and duration.
-/// C++ equivalent: `_MAGIC_TYPE7`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MagicType7Row {
     /// Magic number (C++: iNum). Column name differs from other tables.
@@ -343,10 +324,8 @@ pub struct MagicType7Row {
 }
 
 /// Teleportation / warp skill parameters.
-///
 /// Keyed by `i_num`. Contains warp type, radius, experience recovery,
 /// and kick-back distance.
-/// C++ equivalent: `_MAGIC_TYPE8`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MagicType8Row {
     /// Magic number (foreign key to `magic.magic_num`).
@@ -368,10 +347,8 @@ pub struct MagicType8Row {
 }
 
 /// Advanced debuff / crowd-control skill parameters (type 9).
-///
 /// Keyed by `i_num`. Similar to type 7 but with wider integer fields
 /// for radius, vision, and damage.
-/// C++ equivalent: `_MAGIC_TYPE9`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MagicType9Row {
     /// Magic number (foreign key to `magic.magic_num`).

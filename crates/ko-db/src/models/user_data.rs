@@ -1,10 +1,6 @@
 //! User data persistence models — genie, daily ops, loot settings, seal exp, return data.
-//!
-//! C++ Reference: Various `USER_*` tables in MSSQL (per-user/per-character data).
 
 /// A row from the `user_genie_data` table — genie persistence per user.
-///
-/// C++ Reference: `CUser::m_GenieOptions`, `m_1098GenieTime`, `m_sFirstUsingGenie`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserGenieDataRow {
     /// User account ID (PK).
@@ -18,8 +14,6 @@ pub struct UserGenieDataRow {
 }
 
 /// A row from the `user_daily_op` table — daily activity cooldowns per user.
-///
-/// C++ Reference: Various `m_*Time` fields on CUser, persisted via USER_DAILY_OP.
 /// All time values are Unix timestamps; -1 means "not yet used".
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserDailyOpRow {
@@ -48,8 +42,6 @@ pub struct UserDailyOpRow {
 }
 
 /// A row from the `user_loot_settings` table — auto-loot filter preferences.
-///
-/// C++ Reference: USER_LOOT_SETTINGS table, filters by class, item type, and price.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserLootSettingsRow {
     /// Auto-increment primary key.
@@ -89,8 +81,6 @@ pub struct UserLootSettingsRow {
 }
 
 /// A row from the `user_seal_exp` table — sealed (banked) experience.
-///
-/// C++ Reference: USER_SEAL_EXP table, `sSealedExp` field.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserSealExpRow {
     /// User account ID (PK).
@@ -100,8 +90,6 @@ pub struct UserSealExpRow {
 }
 
 /// A row from the `user_return_data` table — returning player data.
-///
-/// C++ Reference: USER_RETURN_DATA table, tracks return symbol eligibility.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserReturnDataRow {
     /// Character ID (PK).

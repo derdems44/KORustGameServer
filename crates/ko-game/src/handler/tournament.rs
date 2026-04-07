@@ -1,23 +1,13 @@
 //! Clan-vs-Clan (CvC) Tournament system handler.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/TournamentSystem.cpp`
-//!                `KOOriginalGameServer/GameServer/KnightsManager.cpp:176-220` (KnightsVsLoginList)
-//!                `KOOriginalGameServer/GameServer/ChatHandler.cpp:1129-1232` (HandleTournamentClose)
-//!                `KOOriginalGameServer/GameServer/GameDefine.h:3759-3789` (_TOURNAMENT_DATA struct)
-//!
 //! ## Overview
-//!
 //! The tournament system hosts two types of Clan vs. Clan events:
 //! - **Clan War** (zones 77 = Ardream CvC, 78 = Ronark CvC)
 //! - **Party vs. Party** (zones 96-99)
-//!
 //! A GM admin starts a tournament by specifying two clan names and a zone ID.
 //! The server tracks scores on a per-zone `TournamentState` record and
 //! broadcasts score/timer updates to all players in the arena via
 //! `WIZ_BATTLE_EVENT (0x57)` and `WIZ_BIFROST (0x7B)`.
-//!
 //! ## Packet Formats (all little-endian)
-//!
 //! ### Score broadcast — WIZ_BATTLE_EVENT (0x57)
 //! ```text
 //! u8  sub_opcode = 0x12
@@ -27,13 +17,11 @@
 //! u32 timer_secs
 //! u8  monument_killed_advantage
 //! ```
-//!
 //! ### Timer broadcast — WIZ_BIFROST (0x7B)
 //! ```text
 //! u8  sub_type = 5
 //! u16 timer_secs
 //! ```
-//!
 //! ### KnightsVsList info — WIZ_KNIGHTS_PROCESS (0x6E), sub-opcode 96
 //! Sent on zone login to inform the client about the two competing clans.
 //! ```text
@@ -50,9 +38,7 @@
 //! str    blue_clan_name
 //! str    blue_clan_name
 //! ```
-//!
 //! ## Tournament Zones
-//!
 //! | Zone ID | Type              |
 //! |---------|-------------------|
 //! |  77     | Clan War — Ardream  |
@@ -61,15 +47,11 @@
 //! |  97     | Party VS 2          |
 //! |  98     | Party VS 3          |
 //! |  99     | Party VS 4          |
-//!
 //! ## Timer / State Machine
-//!
 //! - `is_started=true, timer > 0` → battle in progress, scores track kills
 //! - `is_started=false` → battle ended, `out_timer` counts down 300s grace period
 //! - `is_finished=true && out_timer elapsed` → KickOutZone → delete entry
-//!
 //! ## Monument Mechanic
-//!
 //! When a monument is killed by the LOSING clan, they earn half the score gap
 //! as bonus points. See `TournamentMonumentKillProcess` in C++ source.
 
@@ -91,41 +73,27 @@ use crate::zone::SessionId;
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-/// C++ Reference: `GameDefine.h:4972` — TOURNAMENT_MIN_CLAN_COUNT
 pub const TOURNAMENT_MIN_CLAN_COUNT: u16 = 1;
 
-/// C++ Reference: `GameDefine.h:4973` — TOURNAMENT_MAX_CLAN_COUNT
 pub const TOURNAMENT_MAX_CLAN_COUNT: u16 = 50;
 
-/// C++ Reference: `GameDefine.h:4974` — TOURNAMENT_MIN_PARTY_COUNT
 pub const TOURNAMENT_MIN_PARTY_COUNT: u8 = 8;
 
-/// C++ Reference: `GameDefine.h:4975` — TOURNAMENT_MAX_PARTY_COUNT
 pub const TOURNAMENT_MAX_PARTY_COUNT: u8 = 8;
 
 /// Grace period (seconds) after a tournament ends before players are kicked.
-///
-/// C++ Reference: `TournamentSystem.cpp:41` — `UNIXTIME + 300`
 pub const TOURNAMENT_OUT_TIMER_SECS: u64 = 300;
 
 /// WIZ_KNIGHTS_PROCESS sub-opcode for tournament clan list.
-///
-/// C++ Reference: `shared/packets.h:644` — `KNIGHTS_VS_LIST = 96`
 pub const KNIGHTS_VS_LIST_OPCODE: u8 = 96;
 
 /// WIZ_BATTLE_EVENT sub-opcode for tournament score update.
-///
-/// C++ Reference: `TournamentSystem.cpp:423` — `uint8(0x12)`
 pub const BATTLE_EVENT_TOURNAMENT_SCORE: u8 = 0x12;
 
 /// WIZ_BIFROST sub-type for tournament timer.
-///
-/// C++ Reference: `TournamentSystem.cpp:434` — `uint8(5)`
 pub const BIFROST_TOURNAMENT_TIMER: u8 = 5;
 
 /// Tournament arena zones (clan war + party vs).
-///
-/// C++ Reference: `TournamentSystem.cpp` — zones 77, 78, 96-99
 pub const TOURNAMENT_ZONES: [u16; 6] = [
     ZONE_CLAN_WAR_ARDREAM,
     ZONE_CLAN_WAR_RONARK,
@@ -138,9 +106,7 @@ pub const TOURNAMENT_ZONES: [u16; 6] = [
 // ── Types ──────────────────────────────────────────────────────────────────
 
 /// Tournament arena zone state.
-///
-/// Mirrors the C++ `_TOURNAMENT_DATA` struct defined in `GameDefine.h:3759-3789`.
-///
+/// Mirrors the `_TOURNAMENT_DATA` struct defined in `GameDefine.h:3759-3789`.
 /// ```cpp
 /// struct _TOURNAMENT_DATA {
 ///     uint8  aTournamentZoneID;
@@ -199,8 +165,6 @@ impl TournamentState {
 }
 
 /// In-memory registry of active tournament arenas, keyed by zone_id.
-///
-/// C++ Reference: `CGameServerDlg::m_ClanVsDataList` — `CSTLMap<_TOURNAMENT_DATA>`
 pub type TournamentRegistry = DashMap<u16, TournamentState>;
 
 /// Create an empty tournament registry (used in `WorldState::new()`).
@@ -211,8 +175,6 @@ pub fn new_tournament_registry() -> TournamentRegistry {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 /// Return `true` if `zone_id` is one of the six tournament arenas.
-///
-/// C++ Reference: `TournamentSystem.cpp` — `bool TournamentTrueZone` checks.
 pub fn is_tournament_zone(zone_id: u16) -> bool {
     TOURNAMENT_ZONES.contains(&zone_id)
 }
@@ -228,9 +190,6 @@ fn now_secs() -> u64 {
 // ── Packet builders ────────────────────────────────────────────────────────
 
 /// Build a `WIZ_BATTLE_EVENT (0x57)` tournament score update packet.
-///
-/// C++ Reference: `TournamentSystem.cpp:422-429` — score broadcast.
-///
 /// Packet layout:
 /// ```text
 /// u8  sub_opcode  = 0x12
@@ -252,9 +211,6 @@ pub fn build_score_packet(state: &TournamentState) -> Packet {
 }
 
 /// Build a `WIZ_BIFROST (0x7B)` tournament timer packet.
-///
-/// C++ Reference: `TournamentSystem.cpp:433-435`.
-///
 /// Packet layout:
 /// ```text
 /// u8  sub_type   = 5
@@ -268,12 +224,8 @@ pub fn build_timer_packet(timer_secs: u32) -> Packet {
 }
 
 /// Build a `WIZ_KNIGHTS_PROCESS (0x6E)` clan-list packet for tournament arena login.
-///
-/// C++ Reference: `KnightsManager.cpp:206-219` — `KnightsVsLoginList`.
-///
 /// Sent to a player when they enter a tournament zone so their UI can show
 /// both competing clans' names and emblems.
-///
 /// Packet layout:
 /// ```text
 /// SByte (size prefix)
@@ -318,8 +270,6 @@ pub fn build_knights_vs_list_packet(
 }
 
 /// Build a zone-change teleport packet to move a player to `dest_zone`.
-///
-/// C++ Reference: `TournamentSystem.cpp:60` — `KickOutZoneUsers(zone, ZONE_MORADON)`.
 pub fn build_zone_change_to_moradon(nation: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizZoneChange as u8);
     pkt.write_u8(3); // ZONE_CHANGE_TELEPORT
@@ -336,13 +286,9 @@ pub fn build_zone_change_to_moradon(nation: u8) -> Packet {
 // ── Main tournament operations ─────────────────────────────────────────────
 
 /// Called when a player kills an enemy in a tournament zone.
-///
 /// Increments the killer's clan score and broadcasts the updated scoreboard
 /// and timer to all players in the arena.
-///
-/// C++ Reference: `CGameServerDlg::UpdateClanTournamentScoreBoard(CUser* pUser)`
 ///                in `TournamentSystem.cpp:383-440`.
-///
 /// # Arguments
 /// - `world` — shared world state (for zone broadcast and clan lookup)
 /// - `zone_id` — the tournament zone where the kill occurred
@@ -375,13 +321,9 @@ pub fn register_kill(world: &WorldState, zone_id: u16, killer_clan_id: u16) {
 }
 
 /// Called when a tournament monument NPC is killed.
-///
 /// If the LOSING clan killed the monument, they receive a bonus equal to half
 /// the score gap (bringing them closer). The scoreboard is rebroadcast.
-///
-/// C++ Reference: `CNpc::TournamentMonumentKillProcess(CUser* puser)`
 ///                in `TournamentSystem.cpp:443-539`.
-///
 /// # Arguments
 /// - `world` — shared world state
 /// - `zone_id` — the tournament zone containing the monument
@@ -433,8 +375,6 @@ pub fn register_monument_kill(world: &WorldState, zone_id: u16, killer_clan_id: 
 }
 
 /// Broadcast the current score + timer to all players in the tournament zone.
-///
-/// C++ Reference: `TournamentSystem.cpp:422-435` — broadcast sequence used in both
 /// `UpdateClanTournamentScoreBoard` and `TournamentMonumentKillProcess`.
 fn broadcast_score_and_timer(world: &WorldState, zone_id: u16) {
     let (score_pkt, timer_pkt) = world
@@ -460,10 +400,7 @@ fn broadcast_score_and_timer(world: &WorldState, zone_id: u16) {
 }
 
 /// Send the current tournament state (clan list + score + timer) to a single player.
-///
 /// Called when a player enters a tournament zone so their UI is immediately up-to-date.
-///
-/// C++ Reference: `CUser::TournamentSendTimer()` in `TournamentSystem.cpp:543-581` and
 ///                `CKnightsManager::KnightsVsLoginList()` in `KnightsManager.cpp:176-220`.
 pub fn send_state_to_player(world: &WorldState, sid: SessionId) {
     let pos = match world.with_session(sid, |h| h.position) {
@@ -500,20 +437,15 @@ pub fn send_state_to_player(world: &WorldState, sid: SessionId) {
 }
 
 /// GM command: start a new tournament in `zone_id` between two clans.
-///
 /// Validates zone, looks up both clans by name, creates the TournamentState,
 /// and broadcasts the initial packets to all players in the zone.
-///
-/// C++ Reference: `HandleTournamentStart` in `ChatHandler.cpp:1230-1232` (stub in C++,
 /// fully implemented here based on the Close/Timer/ScoreBoard patterns).
-///
 /// # Arguments
 /// - `world` — shared world state
 /// - `zone_id` — arena zone (77/78/96-99)
 /// - `clan_name_red` — name of the Red clan
 /// - `clan_name_blue` — name of the Blue clan
 /// - `duration_secs` — battle duration in seconds
-///
 /// Returns `Err` with a descriptive message if validation fails.
 pub fn start_tournament(
     world: &Arc<WorldState>,
@@ -581,11 +513,7 @@ pub fn start_tournament(
 }
 
 /// GM command: close/cancel a tournament in `zone_id`.
-///
 /// Kicks all players in the arena to Moradon and removes the tournament entry.
-///
-/// C++ Reference: `CGameServerDlg::HandleTournamentClose` in `ChatHandler.cpp:1129-1227`.
-///
 /// # Arguments
 /// - `world` — shared world state
 /// - `zone_id` — arena zone (77/78/96-99) to terminate
@@ -608,11 +536,8 @@ pub fn close_tournament(world: &Arc<WorldState>, zone_id: u16) {
 }
 
 /// Tick function: called once per second from the game timer task.
-///
 /// Decrements each active tournament's timer, announces results when time
 /// expires, and removes finished tournaments after the grace period.
-///
-/// C++ Reference: `CGameServerDlg::ClanTournamentTimer()` in `TournamentSystem.cpp:3-380`.
 pub fn tournament_tick(world: &Arc<WorldState>) {
     let now = now_secs();
 
@@ -656,8 +581,6 @@ pub fn tournament_tick(world: &Arc<WorldState>) {
 }
 
 /// Announce battle result via WAR_SYSTEM_CHAT and set the finished state.
-///
-/// C++ Reference: `TournamentSystem.cpp:15-66` — sends `IDS_CLAN_WAR_NOTICE` or
 /// `IDS_CLAN_WAR_DRAW_NOTICE` to all players server-wide.
 fn handle_battle_end(world: &Arc<WorldState>, zone_id: u16, state: &TournamentState) {
     let red = state.score_board[0];
@@ -679,7 +602,6 @@ fn handle_battle_end(world: &Arc<WorldState>, zone_id: u16, state: &TournamentSt
                     zone_id, clan.name, cid, red, blue
                 );
                 // Broadcast IDS_CLAN_WAR_NOTICE: "Clan War is over. [ClanName] has won!"
-                // C++ Reference: TournamentSystem.cpp:15-40 — SendChat(WAR_SYSTEM_CHAT, IDS_CLAN_WAR_NOTICE)
                 let message = format!("Clan War is over. {} has won!", clan.name);
                 let pkt = crate::handler::chat::build_chat_packet(
                     WAR_SYSTEM_CHAT,
@@ -705,7 +627,6 @@ fn handle_battle_end(world: &Arc<WorldState>, zone_id: u16, state: &TournamentSt
                 zone_id, red, blue
             );
             // Broadcast IDS_CLAN_WAR_DRAW_NOTICE: draw announcement
-            // C++ Reference: TournamentSystem.cpp:42-66 — SendChat(WAR_SYSTEM_CHAT, IDS_CLAN_WAR_DRAW_NOTICE)
             let message = "Clan War is over. The battle ended in a draw!";
             let pkt = crate::handler::chat::build_chat_packet(
                 WAR_SYSTEM_CHAT,
@@ -723,8 +644,6 @@ fn handle_battle_end(world: &Arc<WorldState>, zone_id: u16, state: &TournamentSt
 }
 
 /// Kick all players in `zone_id` to Moradon (zone 21).
-///
-/// C++ Reference: `KickOutZoneUsers(zone_id, ZONE_MORADON)` called in cleanup.
 fn kick_zone_to_moradon(world: &Arc<WorldState>, zone_id: u16) {
     let sessions = world.sessions_in_zone(zone_id);
     for sid in sessions {
@@ -740,11 +659,8 @@ fn kick_zone_to_moradon(world: &Arc<WorldState>, zone_id: u16) {
 }
 
 /// Validate that a player is allowed to be in the tournament zone.
-///
 /// Returns `true` if the player's clan is one of the two competing clans.
 /// Returns `false` if they should be kicked (wrong clan / no active tournament).
-///
-/// C++ Reference: `TournamentSystem.cpp:395-409` (UpdateClanTournamentScoreBoard)
 ///                and `TournamentSystem.cpp:454-469` (TournamentMonumentKillProcess).
 pub fn is_player_allowed_in_zone(world: &WorldState, sid: SessionId, zone_id: u16) -> bool {
     if !is_tournament_zone(zone_id) {
@@ -765,13 +681,9 @@ pub fn is_player_allowed_in_zone(world: &WorldState, sid: SessionId, zone_id: u1
 // ── Background tick task ────────────────────────────────────────────────────
 
 /// Start the tournament timer background task (1-second tick).
-///
 /// Spawns a tokio task that calls [`tournament_tick`] every second,
 /// processing tournament countdowns, battle end, and grace-period kicks.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
-///
-/// C++ Reference: `CGameServerDlg::ClanTournamentTimer()` in `TournamentSystem.cpp:3-380`
 pub fn start_tournament_tick_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));

@@ -1,23 +1,15 @@
 //! WIZ_RANK (0x80) handler — Player ranking system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/NewRankingSystem.cpp`
-//!
-//! ## Rank Types (C++ `RankTypes` enum in `packets.h:706-711`)
-//!
+//! ## Rank Types (`RankTypes` enum in `packets.h:706-711`)
 //! | Type | Name                       | Description                        |
 //! |------|----------------------------|------------------------------------|
 //! | 1    | RANK_TYPE_PK_ZONE          | PK zone daily loyalty ranking      |
 //! | 2    | RANK_TYPE_ZONE_BORDER_DEF  | Border Defence War ranking         |
 //! | 3    | RANK_TYPE_CHAOS_DUNGEON    | Chaos Dungeon kill/death ranking   |
-//!
 //! ## Client -> Server (WIZ_RANK 0x80)
-//!
 //! ```text
 //! [u8 rank_type]
 //! ```
-//!
 //! ## Server -> Client (RANK_TYPE_PK_ZONE = 1)
-//!
 //! ```text
 //! [u8 RANK_TYPE_PK_ZONE]
 //! For each nation (Karus=0, Elmorad=1):
@@ -30,9 +22,7 @@
 //!     [i8 loyalty_symbol_rank]
 //! [u16 my_rank] [u32 my_loyalty_daily] [u16 my_loyalty_premium_bonus]
 //! ```
-//!
 //! ## Server -> Client (RANK_TYPE_ZONE_BORDER_DEFENSE_WAR = 2)
-//!
 //! ```text
 //! [u8 RANK_TYPE_ZONE_BORDER_DEFENSE_WAR]
 //! For each nation (Karus=0, Elmorad=1):
@@ -43,9 +33,7 @@
 //!     [u32 user_point]
 //! [i64 gained_exp] [i64 premium_gained_exp]
 //! ```
-//!
 //! ## Server -> Client (RANK_TYPE_CHAOS_DUNGEON = 3)
-//!
 //! ```text
 //! [u8 RANK_TYPE_CHAOS_DUNGEON]
 //! [u8 count]                                // entries (max 19)
@@ -65,8 +53,6 @@ use crate::world::{
 };
 
 /// Handle incoming WIZ_RANK (0x80) packet.
-///
-/// C++ Reference: `CUser::HandlePlayerRankings()` in `NewRankingSystem.cpp:5-30`
 pub async fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -113,9 +99,6 @@ pub async fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Resu
 }
 
 /// Handle PK zone ranking request (RANK_TYPE_PK_ZONE = 1).
-///
-/// C++ Reference: `CUser::HandleRankingPKZone()` in `NewRankingSystem.cpp:33-145`
-///
 /// Sends top 10 players per nation for the requester's current zone,
 /// sorted by daily loyalty descending. Includes the requester's own rank.
 async fn handle_pk_zone(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -161,9 +144,6 @@ async fn handle_pk_zone(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle special event zone (Zindan War) ranking request.
-///
-/// C++ Reference: `CUser::HandleRankingSpecialEvent()` in `NewRankingSystem.cpp:255-348`
-///
 /// Uses zindan_rankings instead of pk_zone_rankings, but same packet format.
 async fn handle_special_event_zone(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world();
@@ -213,10 +193,8 @@ async fn handle_special_event_zone(session: &mut ClientSession) -> anyhow::Resul
 }
 
 /// Build a PK zone / special event ranking response packet.
-///
 /// Shared logic between `handle_pk_zone` and `handle_special_event_zone`.
 /// The packet format is identical — only the data source differs.
-///
 /// When `use_requester_nation` is true, every entry's nation byte is the
 /// requester's nation instead of the entry's own (C++ parity for special event).
 fn build_pk_ranking_packet(
@@ -314,7 +292,6 @@ fn build_pk_ranking_packet(
         result.put_u16_at(count_offset, count);
     }
 
-    // C++ Reference: NewRankingSystem.cpp:121-127 — out-of-top-10 adjustment.
     // If player is ranked > 10 and total > 9, multiply total by CzRank.
     if my_rank > 10 {
         let my_nation_total = rankings[(nation.saturating_sub(1)) as usize].len() as u16;
@@ -334,9 +311,6 @@ fn build_pk_ranking_packet(
 }
 
 /// Handle Border Defence War ranking request (RANK_TYPE_ZONE_BORDER_DEFENSE_WAR = 2).
-///
-/// C++ Reference: `CUser::HandleRankingBDW()` in `NewRankingSystem.cpp:351-439`
-///
 /// Reads real ranking data from the EventRoom. Each nation's users are sorted by
 /// `bdw_points` descending and up to 8 entries are written per nation. The
 /// requester's own accumulated EXP preview (display-only) is appended.
@@ -435,7 +409,6 @@ async fn handle_bdw(session: &mut ClientSession) -> anyhow::Result<()> {
     result.write_u8(RANK_TYPE_ZONE_BORDER_DEFENSE_WAR);
 
     // Write entries for each nation (max 8 per nation)
-    // C++ Reference: NewRankingSystem.cpp:384-422
     for entries in [&karus_entries, &elmo_entries] {
         let count_offset = result.wpos();
         result.write_u16(0); // placeholder
@@ -486,7 +459,6 @@ async fn handle_bdw(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // Requester's own EXP preview (display-only)
-    // C++ Reference: NewRankingSystem.cpp:426-437
     let (gained_exp, premium_gained_exp) = bdw_user_point_exp(requester_level, my_points);
     result.write_i64(gained_exp);
     result.write_i64(premium_gained_exp);
@@ -506,9 +478,6 @@ async fn handle_bdw(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle Chaos Dungeon ranking request (RANK_TYPE_CHAOS_DUNGEON = 3).
-///
-/// C++ Reference: `CUser::HandleRankingChaosDungeon()` in `NewRankingSystem.cpp:442-506`
-///
 /// Reads real ranking data from the EventRoom. All users in the same room are
 /// sorted by kills descending (deaths ascending as tiebreaker) and up to 19
 /// entries are written. The requester's own EXP preview is appended.
@@ -593,7 +562,6 @@ async fn handle_chaos_dungeon(session: &mut ClientSession) -> anyhow::Result<()>
         (data, mk, md)
     }; // room lock dropped
 
-    // C++ Reference: NewRankingSystem.cpp:466-467
     // Sort by kills descending, then deaths ascending as tiebreaker
     entries.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.3.cmp(&b.3)));
 
@@ -605,7 +573,6 @@ async fn handle_chaos_dungeon(session: &mut ClientSession) -> anyhow::Result<()>
 
     let mut count: u8 = 0;
     for (name, entry_sid, kills, deaths) in &entries {
-        // C++ Reference: NewRankingSystem.cpp:474 — `if (sCount > 18) break;`
         if count > 18 {
             break;
         }
@@ -626,7 +593,6 @@ async fn handle_chaos_dungeon(session: &mut ClientSession) -> anyhow::Result<()>
     result.data[count_offset] = count;
 
     // Requester's own EXP preview (display-only)
-    // C++ Reference: NewRankingSystem.cpp:493-504
     let (gained_exp, premium_gained_exp) = chaos_user_exp(requester_level, my_kills, my_deaths);
     result.write_i32(gained_exp as i32);
     result.write_i32(premium_gained_exp as i32);

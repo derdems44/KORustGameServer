@@ -1,15 +1,10 @@
 //! WIZ_PREMIUM (0x71) handler — premium/VIP subscription system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/PremiumSystem.cpp`
-//!
 //! Sub-opcodes (from client):
 //! - 4 (HandlePremium): Switch the currently active premium type.
-//!
 //! Server-initiated packets:
 //! - 1 (SendPremiumInfo): List of active premiums with remaining time.
 //! - 2 (SendClanPremiumPkt): Clan premium status.
-//!
-//! Premium types (C++ `Define.h:513-528`):
+//! Premium types (`Define.h:513-528`):
 //! -  0: NO_PREMIUM
 //! -  1: NORMAL_PREMIUM
 //! -  2: CLAN_PREMIUM
@@ -24,7 +19,6 @@
 //! - 11: EXP_Premium
 //! - 12: WAR_Premium
 //! - 13: SWITCH_PREMIUM
-//!
 //! Each premium entry stores a type (u8) and expiration unix timestamp (u32).
 //! Maximum `PREMIUM_TOTAL` (6) simultaneous premium slots per account.
 
@@ -36,13 +30,9 @@ use tracing::debug;
 use crate::session::{ClientSession, SessionState};
 
 /// Maximum number of premium slots per account.
-///
-/// C++ Reference: `shared/globals.h:349` — `#define PREMIUM_TOTAL 6`
 const PREMIUM_TOTAL: usize = 6;
 
 /// No premium active.
-///
-/// C++ Reference: `Define.h:512` — `#define NO_PREMIUM 0`
 const NO_PREMIUM: u8 = 0;
 
 /// Sub-opcode: server sends premium info list.
@@ -55,8 +45,6 @@ const SUBOPCODE_CLAN_PREMIUM: u8 = 2;
 const SUBOPCODE_HANDLE_PREMIUM: u8 = 4;
 
 /// Handle WIZ_PREMIUM from the client.
-///
-/// C++ Reference: `CUser::HandlePremium(Packet& pkt)`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -124,7 +112,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         return Ok(());
     }
 
-    // C++ Reference: PremiumSystem.cpp:32 — reset flash bonuses on premium switch
     // `if (m_FlashExpBonus > 0 || m_FlashDcBonus > 0 || m_FlashWarBonus > 0) SetFlashTimeNote(true);`
     crate::systems::flash::remove_flash_bonuses(world, sid);
 
@@ -146,8 +133,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Build the HandlePremium error response.
-///
-/// C++ Reference: `PremiumSystem.cpp:13-16`
 /// Wire: `WIZ_PREMIUM << u8(opcode) << i8(0) << i16(-1)`
 fn build_handle_premium_error(opcode: u8) -> Packet {
     let mut resp = Packet::new(Opcode::WizPremium as u8);
@@ -158,9 +143,6 @@ fn build_handle_premium_error(opcode: u8) -> Packet {
 }
 
 /// Build and return the premium info packet.
-///
-/// C++ Reference: `CUser::SendPremiumInfo()` — `PremiumSystem.cpp:35-68`
-///
 /// Wire layout:
 /// ```text
 /// WIZ_PREMIUM << u8(1) << u8(count)
@@ -222,9 +204,6 @@ pub fn build_premium_info(session: &ClientSession) -> Packet {
 }
 
 /// Build the clan premium status packet.
-///
-/// C++ Reference: `CUser::SendClanPremiumPkt()` — `PremiumSystem.cpp:96-102`
-///
 /// Wire layout:
 /// ```text
 /// WIZ_PREMIUM << u8(2) << u8(status) << u32(time_minutes) << u16(0) << u8(2)
@@ -247,9 +226,6 @@ pub fn build_clan_premium_packet(active: bool, remaining_minutes: u32) -> Packet
 }
 
 /// Give a premium to the player.
-///
-/// C++ Reference: `CUser::GivePremium()` — `PremiumSystem.cpp:236-271`
-///
 /// Adds or extends a premium subscription. If `minute` is true, the time
 /// is in minutes; otherwise it's in days.
 pub fn give_premium(session: &ClientSession, premium_type: u8, time_amount: u16, minute: bool) {

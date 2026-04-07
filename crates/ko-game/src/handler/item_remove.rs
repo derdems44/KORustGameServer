@@ -1,14 +1,9 @@
 //! WIZ_ITEM_REMOVE (0x3F) handler — destroy/delete an item from inventory.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/ItemHandler.cpp:2479-2575`
-//!
 //! Packet format (from client):
 //! ```text
 //! [u8 type] [u8 pos] [u32 item_id]
 //! ```
-//!
 //! type: 0=inventory bag, 1=equipment slot, 2=inventory bag (alternate), 3=COSP/magic bag
-//!
 //! Response (WIZ_ITEM_REMOVE):
 //! ```text
 //! [u8 result] — 0=fail, 1=success
@@ -36,7 +31,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let sid = session.session_id();
 
     // Cannot remove items while mining or fishing
-    // C++ Reference: ItemHandler.cpp:2530-2531
     if world.is_mining(sid) || world.is_fishing(sid) {
         let mut result = Packet::new(Opcode::WizItemRemove as u8);
         result.write_u8(0);
@@ -44,7 +38,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Cannot remove items in Chaos Dungeon
-    // C++ Reference: ItemHandler.cpp:2532
     if world.get_position(sid).map(|p| p.zone_id).unwrap_or(0) == ZONE_CHAOS_DUNGEON {
         let mut result = Packet::new(Opcode::WizItemRemove as u8);
         result.write_u8(0);
@@ -85,7 +78,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         }
         3 => {
             // COSP / magic bag slot
-            // C++ Reference: ItemHandler.cpp:2512-2518
             //   `if (bPos >= SLOT_MAX) goto fail_return; bPos += INVENTORY_COSP + 8;`
             if pos as usize >= SLOT_MAX {
                 result.write_u8(0);
@@ -114,7 +106,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Cannot remove sealed or rented items — use equality, NOT bitmask.
-    // C++ Reference: ItemHandler.cpp:2528-2529 — isSealed/isRented
     if slot.flag == ITEM_FLAG_SEALED || slot.flag == ITEM_FLAG_RENTED {
         result.write_u8(0);
         return session.send_packet(&result).await;
@@ -168,7 +159,6 @@ mod tests {
 
     #[test]
     fn test_cosp_type3_index_calculation() {
-        // C++ Reference: ItemHandler.cpp:2512-2518
         // `if (bType == 3) { if (bPos >= SLOT_MAX) goto fail_return; bPos += INVENTORY_COSP + 8; }`
         assert_eq!(INVENTORY_COSP, 42);
 
@@ -184,7 +174,6 @@ mod tests {
 
     #[test]
     fn test_cosp_type3_bounds_check() {
-        // C++ Reference: ItemHandler.cpp:2513-2514
         // `if (bPos >= SLOT_MAX) goto fail_return;`
         // bPos must be < SLOT_MAX (14) for type 3
         assert!(14 >= SLOT_MAX); // pos=14 should fail
@@ -194,7 +183,6 @@ mod tests {
 
     #[test]
     fn test_item_type_variants() {
-        // C++ Reference: ItemHandler.cpp:2497-2518
         // type 0: inventory bag → SLOT_MAX + pos
         // type 1: equipment slot → pos
         // type 2: inventory bag (alternate) → SLOT_MAX + pos

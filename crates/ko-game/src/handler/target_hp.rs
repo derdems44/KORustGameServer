@@ -1,19 +1,12 @@
 //! WIZ_TARGET_HP (0x22) handler — target HP query/response.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:2712-2857`
-//!
 //! When the client clicks on a target (player or NPC), it sends this opcode
 //! to query the target's HP. The server responds with max/current HP.
-//!
 //! ## Request (Client -> Server)
-//!
 //! | Type  | Description        |
 //! |-------|--------------------|
 //! | u32le | Target ID          |
 //! | u8    | Echo flag          |
-//!
 //! ## Response (Server -> Client)
-//!
 //! | Type  | Description        |
 //! |-------|--------------------|
 //! | u32le | Target ID          |
@@ -48,7 +41,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
     let (max_hp, current_hp) = if target_id >= NPC_BAND {
         // Check bot first — bots use IDs >= BOT_ID_BASE (which is >= NPC_BAND)
-        // C++ Reference: Bot IDs overlap with NPC IDs but are stored separately.
         if let Some(bot) = world.get_bot(target_id) {
             (bot.max_hp as u32, bot.hp.max(0) as u32)
         } else {

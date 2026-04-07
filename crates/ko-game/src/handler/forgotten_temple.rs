@@ -1,10 +1,6 @@
 //! Forgotten Temple (Monster Challenge) event handler.
-//!
-//! C++ Reference: `FTHandler.cpp` (216 LOC), portions of `EventMainSystem.cpp`,
 //!                `EventMainTimer.cpp`
-//!
 //! ## Event Lifecycle
-//!
 //! 1. **Start**: `ForgettenTempleStart()` -- activates event, opens join phase
 //! 2. **Join Phase**: Players can enter zone 55 (ZONE_FORGOTTEN_TEMPLE)
 //! 3. **Summon Phase**: After `summon_time` seconds, summoning begins.
@@ -13,9 +9,7 @@
 //! 5. **All Dead**: When `monster_count == 0` and `is_last_summon`, distribute rewards.
 //! 6. **Waiting**: Wait `waiting_time` seconds, then finish.
 //! 7. **Finish**: Kick all users to Moradon, reset state.
-//!
 //! ## Special Monsters (Proto ID -> Skill on Death)
-//!
 //! | Proto ID | Skill ID | Name              |
 //! |----------|----------|-------------------|
 //! | 9816     | 492059   | Forgotten Princess|
@@ -33,9 +27,6 @@ pub use crate::world::types::ZONE_FORGOTTEN_TEMPLE;
 pub const FT_REWARD_LOCAL_ID: i16 = 13;
 
 /// Forgotten Temple event runtime state.
-///
-/// C++ Reference: `_FORGETTEN_TEMPLE` struct in `GameDefine.h:825-883`
-///
 /// This struct is stored in `WorldState` behind a `tokio::sync::RwLock`.
 /// The timer proc reads/writes this state every tick.
 pub struct ForgettenTempleState {
@@ -98,7 +89,6 @@ impl ForgettenTempleState {
 
     /// Reset the FT state (called on event end or manual close).
     ///
-    /// C++ Reference: `_FORGETTEN_TEMPLE::Initialize(bool init)` in `GameDefine.h:855-882`
     pub fn reset(&self) {
         self.is_active.store(false, Ordering::Relaxed);
         self.is_join.store(false, Ordering::Relaxed);
@@ -126,8 +116,6 @@ impl Default for ForgettenTempleState {
 }
 
 /// FT event timer options loaded from DB.
-///
-/// C++ Reference: `XFTTIMEOPT` in `GameDefine.h:737-746`
 #[derive(Debug, Clone, Default)]
 pub struct FtTimerOptions {
     /// Total playing time in minutes.
@@ -145,9 +133,6 @@ pub struct FtTimerOptions {
 }
 
 /// Retrieve the current stage definition for the FT event.
-///
-/// C++ Reference: `CGameServerDlg::ForgettenTempleGetStage()` in `FTHandler.cpp:3-20`
-///
 /// Returns the stage row matching the current event type and stage number,
 /// or `None` if no matching stage exists (signals end of stages).
 pub fn get_current_stage(
@@ -161,9 +146,6 @@ pub fn get_current_stage(
 }
 
 /// Load spawn list for the current stage.
-///
-/// C++ Reference: `CGameServerDlg::ForgettenTempleLoadSpawn()` in `FTHandler.cpp:22-42`
-///
 /// Returns all summon entries matching the current event type and stage.
 pub fn load_stage_spawns(
     summons: &[FtSummonEntry],
@@ -177,7 +159,6 @@ pub fn load_stage_spawns(
 }
 
 /// Count total monsters that will be spawned for a given stage.
-///
 /// Sums up `sid_count` for all summon entries in the stage.
 pub fn count_stage_monsters(summons: &[FtSummonEntry], event_type: u16, current_stage: u16) -> u32 {
     summons
@@ -188,9 +169,6 @@ pub fn count_stage_monsters(summons: &[FtSummonEntry], event_type: u16, current_
 }
 
 /// Get the death-skill mapping for special FT monsters.
-///
-/// C++ Reference: `CNpc::ForgettenTempleMonsterDead()` in `FTHandler.cpp:189-217`
-///
 /// Returns `Some(skill_id)` if the proto_id is a special FT boss that casts
 /// a skill on death, `None` otherwise.
 pub fn get_death_skill(proto_id: u16) -> Option<u32> {
@@ -205,9 +183,6 @@ pub fn get_death_skill(proto_id: u16) -> Option<u32> {
 }
 
 /// Process FT monster death.
-///
-/// C++ Reference: `CNpc::ForgettenTempleMonsterDead()` in `FTHandler.cpp:189-217`
-///
 /// Decrements the monster count. Returns the skill ID to cast if any.
 pub fn on_monster_dead(state: &ForgettenTempleState, proto_id: u16, zone_id: u16) -> Option<u32> {
     if !state.is_active.load(Ordering::Relaxed) || zone_id != ZONE_FORGOTTEN_TEMPLE {
@@ -240,9 +215,6 @@ pub enum FtTickResult {
 }
 
 /// Run one tick of the FT timer.
-///
-/// C++ Reference: `CGameServerDlg::ForgettenTempleTimerProc()` in `FTHandler.cpp:119-187`
-///
 /// This should be called periodically (e.g. every second) while the event is active.
 /// It returns a `FtTickResult` indicating what action the caller should take.
 pub fn timer_tick(
@@ -340,8 +312,6 @@ pub fn timer_tick(
 }
 
 /// Start the Forgotten Temple event.
-///
-/// C++ Reference: `CGameServerDlg::ForgettenTempleStart()` in `FTHandler.cpp:50-62`
 pub fn start_event(
     state: &ForgettenTempleState,
     options: &FtTimerOptions,
@@ -376,8 +346,6 @@ pub fn start_event(
 }
 
 /// Stop the Forgotten Temple event and reset state.
-///
-/// C++ Reference: `CGameServerDlg::FtFinish()` in `FTHandler.cpp:112-117`
 pub fn finish_event(state: &ForgettenTempleState) {
     state.is_active.store(false, Ordering::Relaxed);
     // Caller is responsible for kicking users and removing NPCs.
@@ -431,7 +399,6 @@ pub struct FtSummonEntry {
 }
 
 /// Collect reward item tuples from a reward row.
-///
 /// Returns up to 3 (item_id, count, expiration) tuples for non-zero items.
 pub fn collect_reward_items(reward: &EventRewardEntry) -> Vec<(i32, i32, i32)> {
     let mut items = Vec::new();

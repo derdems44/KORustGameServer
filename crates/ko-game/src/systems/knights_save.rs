@@ -1,7 +1,4 @@
 //! Periodic knights save — saves clan flag and point fund to DB.
-//!
-//! C++ Reference: `GameServerDlg.cpp:312-326` — ProcDbServerType::UpdateKnights
-//! C++ Reference: `DBAgent.cpp:3584-3594` — KnightsSave(clanID, flag, clanFund)
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,17 +11,13 @@ use tracing::{debug, warn};
 use crate::world::WorldState;
 
 /// Save interval: 5 minutes.
-///
 /// C++ triggers UpdateKnights via event timers and on server shutdown.
 /// We use a fixed 5-minute interval for simplicity.
 const KNIGHTS_SAVE_INTERVAL_SECS: u64 = 5 * 60;
 
 /// Start the periodic knights save background task.
-///
 /// Spawns a tokio task that ticks every 5 minutes and saves all clans'
 /// `clan_point_fund` to the database.
-///
-/// C++ Reference: `GameServerDlg.cpp:312-326` — ProcDbServerType::UpdateKnights
 pub fn start_knights_save_task(
     world: Arc<WorldState>,
     pool: DbPool,
@@ -39,7 +32,6 @@ pub fn start_knights_save_task(
 }
 
 /// Save flag + clan_point_fund + premium for all clans.
-///
 /// Each clan's save is dispatched as a fire-and-forget spawned task
 /// so that one slow DB query does not block the others.
 async fn save_all_knights(world: &WorldState, pool: &DbPool) {

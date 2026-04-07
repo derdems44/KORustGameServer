@@ -1,9 +1,5 @@
 //! WIZ_MOVE (0x06) handler — character movement.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CharacterMovementHandler.cpp:4-176`
-//!
 //! ## Request (C->S)
-//!
 //! | Offset | Type   | Description |
 //! |--------|--------|-------------|
 //! | 0      | u16le  | Destination X (×10) |
@@ -14,9 +10,7 @@
 //! | 9      | u16le  | Current X (×10) |
 //! | 11     | u16le  | Current Z (×10) |
 //! | 13     | u16le  | Current Y (×10) |
-//!
 //! ## Broadcast to nearby players
-//!
 //! `[u32 socket_id] [u16 will_x] [u16 will_z] [u16 will_y] [i16 speed] [u8 echo]`
 
 use ko_protocol::{Opcode, Packet, PacketReader};
@@ -28,22 +22,16 @@ use crate::session::{ClientSession, SessionState};
 use crate::world::{RegionChangeResult, WorldState, ZONE_CHAOS_DUNGEON, ZONE_DUNGEON_DEFENCE};
 use crate::zone::{GameEventType, SessionId};
 
-/// Valid echo values from the C++ `moveop` enum.
-///
-/// C++ Reference: `GameDefine.h:4635` — `enum class moveop { finish, start, nott, move };`
+/// Valid echo values from the `moveop` enum.
 /// Only finish(0), start(1), and move(3) are valid. nott(2) is rejected.
 const ECHO_FINISH: u8 = 0;
 const ECHO_START: u8 = 1;
 const ECHO_MOVE: u8 = 3;
 
 /// Maximum consecutive echo/speed anomaly violations before warping Home.
-///
-/// C++ Reference: `CharacterMovementHandler.cpp:31` — `pMove.caughtcount >= 3`
 const MAX_CAUGHT_COUNT: u8 = 3;
 
 /// Time window (ms) for echo anomaly detection.
-///
-/// C++ Reference: `CharacterMovementHandler.cpp:40` — `pMove.caughttime = UNIXTIME2 + 1100`
 const CAUGHT_TIME_WINDOW_MS: u64 = 1100;
 
 /// Handle WIZ_MOVE from the client.
@@ -67,7 +55,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let sid = session.session_id();
 
     // ── Echo validation (no DashMap needed) ──────────────────────────
-    // C++ Reference: CharacterMovementHandler.cpp:21-22
     // Valid echo: finish(0), start(1), move(3). nott(2) = disconnect.
     if echo != ECHO_FINISH && echo != ECHO_START && echo != ECHO_MOVE {
         tracing::warn!(sid, echo, "invalid move echo value, disconnecting");
@@ -140,19 +127,16 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Block movement if player is dead
-    // C++ Reference: CharacterMovementHandler.cpp:9 — `if (m_bWarp || isDead()) return;`
     if snap.is_dead {
         return Ok(());
     }
 
     // ── Cancel merchant on movement ──────────────────────────────────
-    // C++ Reference: CharacterMovementHandler.cpp:77-78
     if snap.is_selling || snap.is_preparing {
         super::merchant::merchant_close(session).await?;
     }
 
     // ── Cancel mining/fishing on movement ────────────────────────────
-    // C++ Reference: User.cpp MoveProcess lines 141-145
     if snap.is_mining {
         super::mining::stop_mining_internal(&world, sid);
     }
@@ -163,7 +147,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let is_gm = snap.authority == 0;
 
     // ── Echo/speed anomaly detection ─────────────────────────────────
-    // C++ Reference: CharacterMovementHandler.cpp:26-41
     let stable = will_x == cur_x && will_z == cur_z && will_y == cur_y;
     if !is_gm && !stable {
         // Anomaly: echo!=0 but speed==0, or two consecutive echo==0
@@ -216,20 +199,17 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Update old echo/speed state
-    // C++ Reference: CharacterMovementHandler.cpp:42
     world.update_session(sid, |h| {
         h.move_old_echo = echo as i8;
         h.move_old_speed = speed;
     });
 
     // Clear warp-loop prevention flag on first move with speed > 0.
-    // C++ Reference: CharacterMovementHandler.cpp:165-166
     if speed != 0 && snap.check_warp {
         world.set_check_warp_zone_change(sid, false);
     }
 
     // ── Previous destination position for correction ─────────────────
-    // C++ Reference: CharacterMovementHandler.cpp:16,44-48
     let f_will_x = if snap.old_will_x == 0 {
         will_x
     } else {
@@ -242,14 +222,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // ── Position correction based on distance/speed ratio ────────────
-    // C++ Reference: CharacterMovementHandler.cpp:53-72
     if snap.old_speed == 0 && echo == ECHO_START {
-        // C++ Reference: CharacterMovementHandler.cpp:53-58
         will_x = (will_x + cur_x) / 2;
         will_y = (will_y + cur_y) / 2;
         will_z = (will_z + cur_z) / 2;
     } else if speed != 0 {
-        // C++ Reference: CharacterMovementHandler.cpp:59-72
         // GetDistance returns squared distance (no sqrt)
         let dist = get_distance_scaled(f_will_x, f_will_z, will_x, will_z);
         let ratio = dist / speed as f32;
@@ -273,7 +250,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let y = will_y as f32 / 10.0;
 
     // ── Merchant close on move (broadcast, uses cached snap) ─────────
-    // C++ Reference: CharacterMovementHandler.cpp:77-78
     // Note: merchant_close() already called above on snap.is_selling/is_preparing.
     // This second block handles broadcast + state cleanup.
     if snap.is_selling || snap.is_preparing {
@@ -296,7 +272,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Speed value validation (SpeedHackUser) ───────────────────────
-    // C++ Reference: User.cpp:3125-3137 — `CUser::SpeedHackUser()`
     if !is_gm {
         let base_class = snap.class % 100;
         let is_rogue = matches!(base_class, 2 | 7 | 8);
@@ -329,11 +304,9 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
     // NOTE: Distance-based speed hack check (SpeedHackTime) is handled by
     // WIZ_SPEEDHACK_CHECK (0x41) in speedhack.rs — NOT here.
-    // C++ Reference: MoveProcess only calls SpeedHackUser() (speed value check above).
     // SpeedHackTime() is a separate packet handler in KnightCrownGuard.cpp:5-35.
 
     // Update old destination position
-    // C++ Reference: CharacterMovementHandler.cpp:83
     world.update_session(sid, |h| {
         h.move_old_will_x = will_x;
         h.move_old_will_z = will_z;
@@ -341,7 +314,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     });
 
     // ── Stealth break on move ────────────────────────────────────────
-    // C++ Reference: CharacterMovementHandler.cpp:138-139
     //   if (m_bInvisibilityType == INVIS_DISPEL_ON_MOVE)
     //       CMagicProcess::RemoveStealth(this, INVIS_DISPEL_ON_MOVE);
     if snap.invisibility_type == super::stealth::INVIS_DISPEL_ON_MOVE {
@@ -352,7 +324,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let zone_id = snap.zone_id;
 
     // Movement validation — boundary check only
-    // C++ Reference: CharacterMovementHandler.cpp:85 — only IsValidPosition() is checked
     if let Some(zone) = world.get_zone(zone_id) {
         if !zone.is_valid_position(x, z) {
             tracing::warn!(sid, x, z, "movement rejected: out of map bounds");
@@ -368,9 +339,8 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let region_result = world.update_position(sid, zone_id, x, y, z);
 
     // ── GM invisible broadcast suppression ──────────────────────────
-    // C++ Reference: User.cpp MoveProcess lines 149-157
     //   if (isGM() && m_bAbnormalType == ABNORMAL_INVISIBLE) skip broadcast
-    // ABNORMAL_INVISIBLE = 0 (GameDefine.h:1396)
+    // ABNORMAL_INVISIBLE = 0
     let suppress_broadcast = is_gm && snap.abnormal_type == 0;
 
     // Build broadcast packet: [socket_id][will_x][will_z][will_y][speed][echo]
@@ -436,7 +406,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // Send WIZ_REGIONCHANGE to myself (new nearby list)
-            // C++ Reference: CharacterMovementHandler.cpp:100-105 — on RegisterRegion():
             //   RegionNpcInfoForMe();   — NPC ID list (client uses cached templates)
             //   RegionUserInOutForMe(); — user visibility updates
             //   MerchantUserInOutForMe(); — merchant stall visibility
@@ -474,7 +443,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Event check — warp gates and traps
-    // C++ Reference: CharacterMovementHandler.cpp:96 — CheckEvent(real_x, real_z, this)
     if let Some(zone) = world.get_zone(zone_id) {
         if let Some(event) = zone.check_event(x, z) {
             match event.event_type {
@@ -489,7 +457,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                     tracing::debug!(sid, "trap dead event (no-op, matching C++)");
                 }
                 GameEventType::TrapArea => {
-                    // C++ Reference: CUser::TrapProcess() in User.cpp:4092-4103
                     // Apply ZONE_TRAP_DAMAGE (500 HP) every ZONE_TRAP_INTERVAL (2s)
                     const TRAP_INTERVAL_SECS: u64 = 2;
                     const TRAP_DAMAGE: i16 = 500;
@@ -531,14 +498,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── BDW altar delivery check ────────────────────────────────────────
-    // C++ Reference: CharacterMovementHandler.cpp:175 — BDWMonumentPointProcess()
     // Called at end of every move handler when in zone 84.
     if zone_id == crate::systems::bdw::ZONE_BDW {
         bdw_monument_point_process(&world, sid);
     }
 
     // ── Oreads terrain effects ──────────────────────────────────────────
-    // C++ Reference: CharacterMovementHandler.cpp:174 — OreadsZoneTerrainEvent()
     // Evaluates player position in ZONE_BATTLE6 (Oreads) during nation battle
     // and sends terrain type to client (affects combat modifiers + visuals).
     // C++ calls this every move; we only build/send when in ZONE_BATTLE6.
@@ -553,7 +518,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Pet follow on player movement ────────────────────────────────
-    // C++ Reference: CharacterMovementHandler.cpp:107-136
     // When a player with an active pet moves, the pet follows: if distance
     // ≥ 10 m or speed == 0, move pet 2 units toward the player's old position.
     pet_follow_on_move(&world, sid, speed, old_x, old_z);
@@ -562,9 +526,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// BDW altar delivery check — called every movement tick in zone 84.
-///
-/// C++ Reference: `CUser::BDWMonumentPointProcess()` in `JuraidBdwFragSystem.cpp:54-81`
-///
 /// 1. Validates user is in a BDW room with the altar flag
 /// 2. Checks if user is in their nation's delivery zone
 /// 3. On delivery: scores, broadcasts, starts respawn timer
@@ -645,7 +606,6 @@ fn bdw_monument_point_process(world: &WorldState, sid: SessionId) {
         }
 
         // Clear flag from carrier
-        // C++ Reference: JuraidBdwFragSystem.cpp:78
         if nation == 1 {
             if let Some(u) = room.karus_users.get_mut(&user_name) {
                 u.has_altar_obtained = false;
@@ -676,7 +636,6 @@ fn bdw_monument_point_process(world: &WorldState, sid: SessionId) {
     };
 
     // Broadcast altar timer (60 seconds) to all room users
-    // C++ Reference: JuraidBdwFragSystem.cpp:75
     let timer_pkt = event_room::build_altar_timer_packet(bdw::ALTAR_RESPAWN_DELAY_SECS as u16);
     super::dead::broadcast_to_bdw_room(world, room_id, &timer_pkt);
 
@@ -705,7 +664,6 @@ fn bdw_monument_point_process(world: &WorldState, sid: SessionId) {
     }
 
     // Remove speed debuff from carrier on delivery
-    // C++ Reference: JuraidBdwFragSystem.cpp:79 — RemoveType4Buff(BUFF_TYPE_FRAGMENT_OF_MANES)
     world.remove_buff(sid, crate::systems::bdw::BUFF_TYPE_FRAGMENT_OF_MANES);
 
     tracing::info!(
@@ -719,8 +677,6 @@ fn bdw_monument_point_process(world: &WorldState, sid: SessionId) {
 }
 
 /// Calculate distance between two points (×10 scaled coordinates) using C++ GetDistance.
-///
-/// C++ Reference: `CharacterMovementHandler.cpp:61`
 /// `GetDistance(fWillX / 10.0f, fWillZ / 10.0f, will_x / 10.0f, will_z / 10.0f)`
 /// GetDistance returns squared distance (dx² + dz²) without sqrt.
 fn get_distance_scaled(x1: u16, z1: u16, x2: u16, z2: u16) -> f32 {
@@ -730,7 +686,6 @@ fn get_distance_scaled(x1: u16, z1: u16, x2: u16, z2: u16) -> f32 {
 }
 
 /// Determine the zone to warp to when a speed hack Home() is triggered.
-///
 /// Uses bind zone if available, otherwise falls back to nation home zone.
 fn determine_home_zone_raw(bind_zone: u8, nation: u8, world: &crate::world::WorldState) -> u16 {
     let bz = bind_zone as u16;
@@ -748,9 +703,6 @@ fn determine_home_zone_raw(bind_zone: u8, nation: u8, world: &crate::world::Worl
 }
 
 /// Pet follow on player movement.
-///
-/// C++ Reference: `CharacterMovementHandler.cpp:107-136`
-///
 /// When a player with an active pet moves:
 /// 1. Look up pet NPC instance by the pet's runtime NPC ID
 /// 2. If distance from pet to player ≥ 10 m OR speed == 0, move pet closer
@@ -760,8 +712,7 @@ fn determine_home_zone_raw(bind_zone: u8, nation: u8, world: &crate::world::Worl
 fn pet_follow_on_move(world: &WorldState, sid: SessionId, speed: i16, old_x: f32, old_z: f32) {
     /// Distance threshold for pet follow (squared): 10 m.
     ///
-    /// C++ Reference: `CharacterMovementHandler.cpp:114` — `GetDistanceSqrt(pPet) >= 10`
-    /// Note: C++ `GetDistanceSqrt` returns ACTUAL distance (with sqrt), not squared.
+    /// Note: `GetDistanceSqrt` returns ACTUAL distance (with sqrt), not squared.
     const PET_FOLLOW_DIST: f32 = 10.0;
 
     use super::pet::MODE_ATTACK;
@@ -800,7 +751,6 @@ fn pet_follow_on_move(world: &WorldState, sid: SessionId, speed: i16, old_x: f32
     let distance = dist_sq.sqrt();
 
     // Trigger follow if: player stopped (speed==0) OR pet too far (≥10m)
-    // C++ Reference: CharacterMovementHandler.cpp:113-114
     if speed != 0 && distance < PET_FOLLOW_DIST {
         return;
     }
@@ -810,7 +760,6 @@ fn pet_follow_on_move(world: &WorldState, sid: SessionId, speed: i16, old_x: f32
     }
 
     // Cancel active attack if pet is in attack mode
-    // C++ Reference: CharacterMovementHandler.cpp:124-128
     if pet_mode == MODE_ATTACK && attack_started {
         world.update_session(sid, |h| {
             if let Some(ref mut pet) = h.pet_data {
@@ -821,7 +770,6 @@ fn pet_follow_on_move(world: &WorldState, sid: SessionId, speed: i16, old_x: f32
     }
 
     // Normalize direction from pet to player and move 2 units
-    // C++ Reference: CharacterMovementHandler.cpp:129-131
     //   warp_x /= distance; warp_z /= distance;
     //   warp_x *= 2; warp_z *= 2;
     //   warp_x += m_oldx; warp_z += m_oldz;
@@ -834,7 +782,6 @@ fn pet_follow_on_move(world: &WorldState, sid: SessionId, speed: i16, old_x: f32
     world.update_npc_position(pet_nid as u32, new_x, new_z);
 
     // Broadcast pet move: WIZ_NPC_MOVE
-    // C++ Reference: Npc.cpp:7184-7195 — SendMoveResult(warp_x, 0, warp_z, distance)
     let mut move_pkt = Packet::new(Opcode::WizNpcMove as u8);
     move_pkt.write_u8(1); // move type
     move_pkt.write_u32(pet_nid as u32);
@@ -990,7 +937,6 @@ mod tests {
 
     #[test]
     fn test_merchant_close_on_move() {
-        // C++ Reference: CharacterMovementHandler.cpp:77-78
         // MERCHANT_CLOSE sub-opcode is 2
         let close_sub_opcode: u8 = 2;
         assert_eq!(close_sub_opcode, 2);
@@ -1011,7 +957,6 @@ mod tests {
 
     // ── Sprint 320: Merchant auto-close on movement ─────────────────
 
-    /// C++ Reference: CharacterMovementHandler.cpp:77-78
     /// Moving while selling merchant should auto-close the merchant.
     #[test]
     fn test_merchant_auto_close_on_move_check() {
@@ -1065,7 +1010,6 @@ mod tests {
     // ── Sprint 327: Warp-loop prevention flag tests ─────────────────
 
     /// Test that check_warp_zone_change flag is cleared on move with speed > 0.
-    /// C++ Reference: CharacterMovementHandler.cpp:165-166
     #[test]
     fn test_warp_loop_flag_cleared_on_move() {
         use crate::world::WorldState;

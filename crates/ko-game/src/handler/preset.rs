@@ -1,13 +1,9 @@
 //! WIZ_PRESET (0xB9) handler — stat/skill preset system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/UserSkillStatPointSystem.cpp:903-1026`
-//!
 //! **v2525 CONFLICT**: Client opcode 0xB9 = WIZ_PET_STAT (pet statistics panel),
 //! NOT WIZ_PRESET. The v2525 client's handler at 0xB9 dispatches sub-types 1/2
 //! with inner sub-opcodes for pet stat updates and mode changes. Sending preset
 //! S2C packets on 0xB9 causes the client to misinterpret data as pet stat commands,
 //! corrupting the pet UI panel.
-//!
 //! We accept C2S but respond with a WIZ_CHAT notice instead of 0xB9 packets.
 
 use ko_protocol::{Opcode, Packet, PacketReader};
@@ -29,10 +25,7 @@ const PRESET_FAILED: u8 = 3;
 const SKILL_CEIL: [u8; 4] = [83, 83, 83, 23];
 
 /// Build a stat preset response.
-///
 /// Wire: `[u8 1] [u8 result] [u8 str..cha] [u16 free_points]`
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:1141-1143` — `GetStat()` returns `uint8`
 #[cfg(test)]
 fn build_stat_response(result: u8, stats: [u8; 5], free_points: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizPreset as u8);
@@ -48,7 +41,6 @@ fn build_stat_response(result: u8, stats: [u8; 5], free_points: u16) -> Packet {
 }
 
 /// Build a skill preset response.
-///
 /// Wire: `[u8 2] [u8 result] [u8 skill0..3] [u8 free_skill_pts]`
 #[cfg(test)]
 fn build_skill_response(result: u8, skills: [u8; 4], free_skill_pts: u8) -> Packet {
@@ -65,9 +57,6 @@ fn build_skill_response(result: u8, skills: [u8; 4], free_skill_pts: u8) -> Pack
 }
 
 /// Handle WIZ_PRESET from the client.
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:903-937` — `CUser::StatPresetHandle()`
-///
 /// **v2525 CONFLICT**: Client opcode 0xB9 = WIZ_PET_STAT (pet statistics),
 /// NOT WIZ_PRESET. The v2525 client will never send C2S 0xB9 as a preset request
 /// (the pet stat panel uses a different sub-opcode structure). If a packet does
@@ -95,8 +84,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Original stat preset implementation (v2525 conflict blocks this — preserved for future).
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:1028-1147` — `CUser::PresetMyStatReset()`
 #[cfg(test)]
 #[allow(dead_code)]
 async fn handle_stat_preset(
@@ -106,7 +93,6 @@ async fn handle_stat_preset(
     sid: u16,
 ) -> anyhow::Result<()> {
     // Read requested stat values (u8 each: str, sta, dex, int, cha)
-    // C++ Reference: UserSkillStatPointSystem.cpp:1033-1034 — `pkt >> point[i]` where point is uint8[]
     let mut stats = [0u8; 5];
     for stat in &mut stats {
         *stat = reader.read_u8().unwrap_or(0);
@@ -120,7 +106,6 @@ async fn handle_stat_preset(
     let level = char_info.level as u16;
 
     // Total available free points: 10 + (level-1)*3, +2*(level-60) if level>60
-    // C++ Reference: UserSkillStatPointSystem.cpp:1075-1076
     let mut total_free: u16 = 10 + (level.saturating_sub(1)) * 3;
     if level > 60 {
         total_free += 2 * (level - 60);
@@ -180,8 +165,6 @@ async fn handle_stat_preset(
 }
 
 /// Original skill preset implementation (v2525 conflict blocks this — preserved for future).
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:939-1026` — `CUser::PresetMySkillReset()`
 #[cfg(test)]
 #[allow(dead_code)]
 async fn handle_skill_preset(
@@ -197,7 +180,6 @@ async fn handle_skill_preset(
     }
 
     // Validate: each must be within ceiling
-    // C++ Reference: UserSkillStatPointSystem.cpp:946-957
     for (i, pt) in skill_pts.iter().enumerate() {
         if *pt > SKILL_CEIL[i] {
             let fail = build_skill_response(PRESET_FAILED, [0; 4], 0);
@@ -221,7 +203,6 @@ async fn handle_skill_preset(
     let level = char_info.level as u16;
 
     // Must be level 10+ to use skill presets
-    // C++ Reference: UserSkillStatPointSystem.cpp:972
     if level < 10 {
         let fail = build_skill_response(PRESET_FAILED, [0; 4], 0);
         session.send_packet(&fail).await?;
@@ -229,7 +210,6 @@ async fn handle_skill_preset(
     }
 
     // Max skill points = (level - 9) * 2
-    // C++ Reference: UserSkillStatPointSystem.cpp:968
     let max_points: u16 = (level - 9) * 2;
     let used: u16 = skill_pts.iter().map(|p| *p as u16).sum();
 
@@ -242,7 +222,6 @@ async fn handle_skill_preset(
     let free = (max_points - used) as u8;
 
     // Update character skill points in world state
-    // C++ m_bstrSkill layout: [0]=free, [5..8]=tree allocations
     world.update_character_stats(sid, |ch| {
         ch.skill_points[0] = free;
         ch.skill_points[5] = skill_pts[0];
@@ -281,7 +260,6 @@ mod tests {
     #[test]
     fn test_stat_preset_request_format() {
         // Client -> Server: [u8 1] [u8 str] [u8 sta] [u8 dex] [u8 int] [u8 cha]
-        // C++ Reference: UserSkillStatPointSystem.cpp:1033 — point is uint8[]
         let mut pkt = Packet::new(Opcode::WizPreset as u8);
         pkt.write_u8(1); // type = stat
         pkt.write_u8(80); // str

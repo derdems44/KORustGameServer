@@ -1,6 +1,4 @@
 //! Anti-AFK NPC list repository.
-//!
-//! C++ Reference: `CGameServerDlg::m_AntiAfkList` loaded from ANTIAFKLIST table.
 
 use sqlx::PgPool;
 

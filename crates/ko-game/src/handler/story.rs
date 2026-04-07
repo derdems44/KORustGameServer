@@ -1,27 +1,18 @@
 //! WIZ_STORY (0x81) — story/intro cutscene packet (server→client only).
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CharacterSelectionHandler.cpp:1041-1043`
-//!
 //! Sent during game start to signal story/cutscene state to the client.
 //! The client does not send this opcode; it is purely server-initiated.
-//!
 //! ## Wire format (Server→Client)
-//!
 //! `[u32 story_id=0] [u16 flags=0]`
-//!
 //! In the C++ reference, `story_id` and `flags` are always 0.
 
 use ko_protocol::{Opcode, Packet};
 
 /// Build a WIZ_STORY packet to send to the client during game start.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:1041-1043`
 /// ```c++
 /// Packet newpkt(WIZ_STORY);
 /// newpkt << uint32(0) << uint16(0);
 /// Send(&newpkt);
 /// ```
-///
 /// Wire: `[u32 story_id] [u16 flags]`
 pub fn build_story_packet(story_id: u32, flags: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizStory as u8);

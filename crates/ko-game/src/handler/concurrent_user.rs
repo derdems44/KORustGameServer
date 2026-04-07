@@ -1,6 +1,4 @@
 //! WIZ_CONCURRENT_USER (0x33) handler — GM-only online user count.
-//!
-//! C++ Reference: `User.cpp:3325-3346` — `CUser::CountConcurrentUser()`
 
 use ko_protocol::{Opcode, Packet};
 use tracing::debug;

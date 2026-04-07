@@ -1,7 +1,4 @@
 //! Shared world state â€” session registry, position tracking, and broadcasting.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/GameServerDlg.h` (CGameServerDlg)
-//!
 //! All sessions share a single `WorldState` via `Arc`. Handlers access it
 //! through `session.world()` to broadcast packets or query nearby players.
 
@@ -93,13 +90,11 @@ pub struct WorldState {
     next_npc_id: AtomicU32,
     /// Class coefficient table keyed by s_class (101-115 Karus, 201-215 El Morad).
     ///
-    /// C++ Reference: `CGameServerDlg::m_CoefficientArray`
     coefficients: DashMap<u16, CoefficientRow>,
 
     // â”€â”€ Magic / Skill Tables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Master magic table keyed by `magic_num`.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MagicTableArray`
     magic_table: DashMap<i32, MagicRow>,
     /// Type 1 (melee) sub-table keyed by `i_num`.
     magic_type1: DashMap<i32, MagicType1Row>,
@@ -122,20 +117,17 @@ pub struct WorldState {
 
     /// Runtime NPC HP tracking (separate from immutable NpcInstance).
     ///
-    /// C++ Reference: `CNpc::m_iHP` â€” mutable HP stored separately from the
     /// static template data. Keyed by NpcId (runtime ID >= NPC_BAND).
     npc_hp: DashMap<NpcId, i32>,
 
     /// Per-NPC damage accumulator: tracks total damage dealt by each player.
     ///
-    /// C++ Reference: `CNpc::m_sMaxDamageUserid` â€” the player who dealt the
     /// most total damage gets loot rights (not the last-hitter).
     /// Outer key = NpcId, inner key = SessionId, value = cumulative damage.
     npc_damage: DashMap<NpcId, DashMap<SessionId, i32>>,
 
     /// Runtime NPC AI state (mutable per-NPC: position, state, target).
     ///
-    /// C++ Reference: Various mutable fields on `CNpc` class.
     /// Only populated for NPCs that participate in AI (monsters with
     /// `search_range > 0` and `act_type >= 1`).
     npc_ai: DashMap<NpcId, NpcAiState>,
@@ -143,17 +135,14 @@ pub struct WorldState {
     // â”€â”€ Item Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Static item definitions keyed by item num.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemtableArray`
     items: DashMap<u32, Item>,
 
     // â”€â”€ Party System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Runtime party groups keyed by party ID.
     ///
-    /// C++ Reference: `CGameServerDlg::m_PartyArray`
     parties: DashMap<u16, Party>,
     /// Atomic counter for assigning unique party IDs.
     ///
-    /// C++ Reference: `CGameServerDlg::m_sPartyIndex`
     next_party_id: AtomicU16,
     /// Pending party invitations: invitee_sid -> (party_id, inviter_sid).
     ///
@@ -164,45 +153,36 @@ pub struct WorldState {
     // â”€â”€ Knights (Clan) System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Runtime knights (clan) data keyed by clan ID.
     ///
-    /// C++ Reference: `CGameServerDlg::m_KnightsArray`
     knights: DashMap<u16, KnightsInfo>,
     /// Runtime alliance data keyed by main alliance clan ID.
     ///
-    /// C++ Reference: `CGameServerDlg::m_KnightsAllianceArray`
     alliances: DashMap<u16, KnightsAlliance>,
 
     // â”€â”€ Ground Bundle System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Ground item bundles keyed by bundle ID.
     ///
-    /// C++ Reference: `C3DMap::m_RegionItemArray`
     ground_bundles: DashMap<u32, GroundBundle>,
     /// Atomic counter for assigning unique bundle IDs.
     next_bundle_id: AtomicU32,
     /// Atomic counter for generating unique item serial numbers.
     ///
-    /// C++ Reference: `CGameServerDlg::GenerateItemSerial()` in `HelperMethods.cpp:10-35`
     next_item_serial: std::sync::atomic::AtomicU64,
 
     // â”€â”€ Quest System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Quest helper definitions keyed by nIndex.
     ///
-    /// C++ Reference: `CGameServerDlg::m_QuestHelperArray`
     quest_helpers: DashMap<u32, QuestHelperRow>,
     /// Quest monster kill requirements keyed by sQuestNum (sEventDataIndex).
     ///
-    /// C++ Reference: `CGameServerDlg::m_QuestMonsterArray`
     quest_monsters: DashMap<u16, QuestMonsterRow>,
     /// NPC â†’ quest helper list for fast NPC-based lookup.
     ///
-    /// C++ Reference: `CGameServerDlg::m_QuestNpcList`
     quest_npc_list: DashMap<u16, Vec<u32>>,
     /// Quest menu options keyed by iNum.
     ///
-    /// C++ Reference: `CGameServerDlg::m_QuestMenuArray`
     quest_menus: DashMap<i32, QuestMenuRow>,
     /// Quest talk text keyed by iNum.
     ///
-    /// C++ Reference: `CGameServerDlg::m_QuestTalkArray`
     quest_talks: DashMap<i32, QuestTalkRow>,
     /// Quest skill closed check entries keyed by nIndex.
     quest_skills_closed_check: DashMap<i32, QuestSkillsClosedCheckRow>,
@@ -212,107 +192,83 @@ pub struct WorldState {
     // â”€â”€ Ranking System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// PK zone ranking arrays per nation (index 0=Karus, 1=El Morad).
     ///
-    /// C++ Reference: `CGameServerDlg::m_UserPlayerKillingZoneRankingArray[2]`
     pk_zone_rankings: [DashMap<SessionId, PkZoneRanking>; 2],
     /// Special event (Zindan War) zone ranking arrays per nation.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ZindanWarZoneRankingArray[2]`
     zindan_rankings: [DashMap<SessionId, PkZoneRanking>; 2],
     /// Border Defence War ranking arrays per nation.
     ///
-    /// C++ Reference: `CGameServerDlg::m_UserBorderDefenceWarRankingArray[2]`
     bdw_rankings: [DashMap<SessionId, BdwRanking>; 2],
     /// Chaos Expansion ranking (all players, keyed by session ID).
     ///
-    /// C++ Reference: `CGameServerDlg::m_UserChaosExpansionRankingArray`
     chaos_rankings: DashMap<SessionId, ChaosRanking>,
     /// Whether a ranking update/reset is currently in progress.
     ///
-    /// C++ Reference: `CGameServerDlg::m_IsPlayerRankingUpdateProcess`
     ranking_update_in_progress: std::sync::atomic::AtomicBool,
 
     // â”€â”€ Level-Up Experience Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Required XP per level, keyed by (level, rebirth_level).
     ///
-    /// C++ Reference: `CGameServerDlg::m_LevelUpArray`
     level_up_table: DashMap<(u8, u8), i64>,
 
     // â”€â”€ King System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Per-nation king system data (index 0=Karus, 1=Elmorad).
     ///
-    /// C++ Reference: `CGameServerDlg::m_KingSystemArray`
     king_systems: DashMap<u8, KingSystem>,
 
     // â”€â”€ Item Upgrade Tables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// New upgrade recipes keyed by origin_number â†’ Vec of possible upgrades.
     ///
-    /// C++ Reference: `CGameServerDlg::m_sLoadUpgradeArray`
     upgrade_recipes: DashMap<i32, Vec<NewUpgradeRow>>,
     /// Item upgrade settings (success rates, required materials, costs).
     ///
-    /// C++ Reference: `CGameServerDlg::m_sUpgradeSettingArray`
     upgrade_settings: DashMap<u32, ItemUpgradeSettingsRow>,
     /// Item upgrade probability configuration.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemUpProbability`
     itemup_probability: parking_lot::RwLock<Option<ItemUpProbabilityRow>>,
 
     // â”€â”€ Item Reference Tables (Extended) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Item special effects keyed by item_id â†’ Vec of effects.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemOpArray`
     item_ops: DashMap<i32, Vec<ItemOpRow>>,
     /// Set item bonuses keyed by set_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_SetItemArray`
     set_items: DashMap<i32, SetItemRow>,
     /// Monster drop tables keyed by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MonsterItemArray`
     monster_items: DashMap<i16, MonsterItemRow>,
     /// NPC drop tables keyed by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_NpcItemArray`
     npc_items: DashMap<i16, NpcItemRow>,
     /// Item exchange/crafting recipes keyed by n_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemExchangeArray`
     item_exchanges: DashMap<i32, ItemExchangeRow>,
     /// Item upgrade recipes (NPC-based) keyed by n_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemUpgradeArray`
     item_upgrades: DashMap<i32, ItemUpgradeRow>,
     /// Weapon crafting templates keyed by by_level.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeWeaponItemTableArray`
     make_weapons: DashMap<i16, MakeWeaponRow>,
     /// Defensive crafting templates keyed by by_level.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeDefensiveItemTableArray`
     make_defensives: DashMap<i16, MakeDefensiveRow>,
     /// Crafting grade codes keyed by item_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeGradeItemTableArray`
     make_grade_codes: DashMap<i16, MakeItemGradeCodeRow>,
     /// Crafting rarity codes keyed by level_grade.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeLareItemTableArray`
     make_lare_codes: DashMap<i16, MakeItemLareCodeRow>,
     /// Crafting item groups keyed by group_num.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeItemGroupArray`
     make_item_groups: DashMap<i32, MakeItemGroupRow>,
     /// Random crafting item group mappings keyed by n_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeItemGroupRandomArray`
     make_item_group_randoms: DashMap<i32, MakeItemGroupRandomRow>,
     /// Crafting item code lookup keyed by s_index (1..10000).
     ///
-    /// C++ Reference: `CNpc::ItemProdution()` â€” used for loot generation.
     make_items: DashMap<i16, MakeItemRow>,
     /// Rental items keyed by rental_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_RentalItemArray`
     rental_items: DashMap<i32, RentalItemRow>,
     /// Atomic counter for generating unique rental indices.
     rental_index_counter: std::sync::atomic::AtomicI32,
@@ -322,7 +278,6 @@ pub struct WorldState {
     /// Used at buy time to validate that the requested item is actually
     /// sold by the NPC. Grouped by selling_group for O(1) lookup.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemSellTableArray`
     item_sell_table: DashMap<i32, Vec<ItemSellTableRow>>,
 
     /// Item special sewing (crafting) recipes: npc_id â†’ list of recipes.
@@ -330,7 +285,6 @@ pub struct WorldState {
     /// The Shozin Exchange / Special Part Sewing system uses this table.
     /// Grouped by NPC ID for efficient lookup during crafting.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemSpecialExchangeArray`
     special_sewing: DashMap<i32, Vec<ItemSpecialSewingRow>>,
 
     /// Item smash (old man exchange) entries: n_index â†’ smash row.
@@ -338,89 +292,71 @@ pub struct WorldState {
     /// Used by the item disassemble system. Entries are grouped by index range
     /// (1M=shields, 2M=weapons, 3M=armor, 4M=earrings, 5M=necklaces/rings).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemExchangeCrashArray`
     item_smash: DashMap<i32, ItemSmashRow>,
 
     // â”€â”€ Premium System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Premium type definitions keyed by premium_type (1-13).
     ///
-    /// C++ Reference: `CGameServerDlg::m_PremiumItemArray`
     pub(crate) premium_item_types: DashMap<u8, PremiumItemRow>,
     /// Premium XP bonus entries (level-range based).
     ///
-    /// C++ Reference: `CGameServerDlg::m_PremiumItemExpArray`
     pub(crate) premium_item_exp: parking_lot::RwLock<Vec<PremiumItemExpRow>>,
     /// Premium gift items keyed by premium_type -> list of gifts.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemPremiumGiftArray` â€” multimap keyed
     /// by `bPremiumType`. Loaded from MSSQL `PREMIUM_GIFT_ITEM` table.
     premium_gift_items: DashMap<u8, Vec<PremiumGiftItem>>,
 
     // â”€â”€ Pet System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Pet stats info keyed by pet level (1-60).
     ///
-    /// C++ Reference: `CGameServerDlg::m_PetInfoSystemArray`
     pet_stats_info: DashMap<u8, PetStatsInfoRow>,
     /// Pet image change/transform recipes keyed by sIndex.
     ///
-    /// C++ Reference: `CGameServerDlg::m_PetTransformSystemArray`
     pet_image_changes: DashMap<i32, PetImageChangeRow>,
 
     // â”€â”€ Achievement System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Master achievement definitions keyed by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveMainArray`
     achieve_main: DashMap<i32, AchieveMainRow>,
     /// War-type achievement sub-table keyed by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveWarArray`
     achieve_war: DashMap<i32, AchieveWarRow>,
     /// Normal-type achievement sub-table keyed by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveNormalArray`
     achieve_normal: DashMap<i32, AchieveNormalRow>,
     /// Monster-kill achievement sub-table keyed by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveMonsterArray`
     achieve_monster: DashMap<i32, AchieveMonsterRow>,
     /// Composite (requirement-based) achievement sub-table keyed by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveComArray`
     achieve_com: DashMap<i32, AchieveComRow>,
     /// Achievement title bonuses keyed by title index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveTitleArray`
     achieve_title: DashMap<i32, AchieveTitleRow>,
 
     // â”€â”€ Perk System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Perk definitions keyed by p_index (0-12).
     ///
-    /// C++ Reference: `CGameServerDlg::m_PerksArray`
     perk_definitions: DashMap<i32, PerkRow>,
 
     /// JackPot settings: index 0 = EXP, index 1 = Noah.
     ///
-    /// C++ Reference: `CGameServerDlg::pJackPot[2]` (`_JACKPOT_SETTING`)
     jackpot_settings: parking_lot::RwLock<[JackPotSetting; 2]>,
 
     //â”€â”€ Mining & Fishing System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Mining/fishing item drop table keyed by n_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MiningFishingItemArray`
     mining_fishing_items: DashMap<i32, MiningFishingItemRow>,
     /// Mining exchange (ore craft) table keyed by n_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MiningExchangeArray`
     mining_exchanges: DashMap<i16, MiningExchangeRow>,
 
     // â”€â”€ Bot System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Farm bot population data keyed by bot id (+ MAX_USER offset).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ArtificialIntelligenceArray`
     bot_farm_data: DashMap<i32, BotHandlerFarmRow>,
     /// Merchant bot item templates keyed by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ArtificialMerchantArray`
     bot_merchant_templates: DashMap<i16, BotHandlerMerchantRow>,
     /// Pre-configured merchant bot stall data keyed by n_index.
     bot_merchant_data: DashMap<i32, BotMerchantDataRow>,
@@ -434,73 +370,60 @@ pub struct WorldState {
     // ── User Rankings (periodic reload every 15 minutes) ──────────────
     /// User personal rank: uppercase char_name → rank_pos (1-based).
     ///
-    /// C++ Reference: `m_UserKarusPersonalRankMap` / `m_UserElmoPersonalRankMap`
     /// Populated by `ReloadKnightAndUserRanks()` every 15 minutes.
     pub(crate) user_personal_rank: parking_lot::RwLock<std::collections::HashMap<String, u8>>,
     /// User knights (clan) rank: uppercase char_name → rank_pos (1-based).
     ///
-    /// C++ Reference: `m_UserKarusKnightsRankMap` / `m_UserElmoKnightsRankMap`
     pub(crate) user_knights_rank: parking_lot::RwLock<std::collections::HashMap<String, u8>>,
 
     /// Runtime spawned bot instances keyed by BotId.
     ///
-    /// C++ Reference: `CGameServerDlg::m_sMapBotListArray` — the live bot registry.
     /// Bots are inserted here when spawned (UserInOut INOUT_IN) and removed on
     /// despawn (UserInOut INOUT_OUT / RemoveMapBotList).
     pub(crate) bots: DashMap<BotId, BotInstance>,
     /// Atomic counter for assigning unique BotId values.
     ///
-    /// C++ Reference: Bot socket IDs are assigned from a free-slot pool above MAX_USER.
     /// We use a simple monotonic counter starting at BOT_ID_BASE.
     next_bot_id: AtomicU32,
 
     // â”€â”€ Tournament (CvC / Party VS) System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Active tournament arenas keyed by zone_id (77, 78, 96-99).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ClanVsDataList` — `CSTLMap<_TOURNAMENT_DATA>`
     tournament_registry: crate::handler::tournament::TournamentRegistry,
 
     // â”€â”€ Siege Warfare â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Castle siege warfare state (one per castle, typically just Delos).
     ///
-    /// C++ Reference: `CGameServerDlg::pSiegeWar`
     siege_war: tokio::sync::RwLock<SiegeWarfare>,
 
     /// Castle siege warfare runtime event state (lifecycle, timers, clan kill list).
     ///
-    /// C++ Reference: `CGameServerDlg::pCswEvent`
     csw_event: tokio::sync::RwLock<CswEventState>,
 
     // â”€â”€ Knights Cape System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Cape definitions keyed by cape index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_KnightsCapeArray`
     knights_capes: DashMap<i16, KnightsCapeRow>,
     /// Castellan cape bonus definitions keyed by bonus type.
     ///
-    /// C++ Reference: `CGameServerDlg::m_CapeCastellanBonusArray`
     castellan_bonuses: DashMap<i16, KnightsCapeCastellanBonusRow>,
     /// Castle siege war configuration (single row).
     ///
-    /// C++ Reference: `CGameServerDlg::m_KnightsCswOpt`
     csw_opt: parking_lot::RwLock<Option<KnightsCswOptRow>>,
 
     // â”€â”€ Game Time / Weather â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Shared game-time and weather state, updated by background tasks.
     ///
-    /// C++ Reference: `CGameServerDlg::m_byWeather`, `m_sWeatherAmount`
     game_time_weather: Arc<GameTimeWeather>,
 
     // â”€â”€ Party BBS (Seeking Party) System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// In-memory list of users/parties seeking party members.
     ///
-    /// C++ Reference: `CGameServerDlg::m_SeekingPartyArray`
     seeking_party: parking_lot::RwLock<Vec<SeekingPartyUser>>,
 
     // â”€â”€ Chat Room System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// In-memory chat rooms keyed by room index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ChatRoomArray`
     chat_rooms: DashMap<u16, ChatRoom>,
     /// Atomic counter for assigning unique chat room IDs.
     next_chat_room_id: AtomicU16,
@@ -508,29 +431,24 @@ pub struct WorldState {
     // â”€â”€ Server Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Server-wide configuration (single row, loaded once at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::pServerSetting`
     server_settings: parking_lot::RwLock<Option<ServerSettingsRow>>,
 
     /// Persistent login messages (send_type=1) cached at startup.
     ///
-    /// C++ Reference: `CGameServerDlg::m_SendMessageArray` — filtered by SendType==1
     /// on login in `CharacterSelectionHandler.cpp:1106-1127`.
     send_messages: parking_lot::RwLock<Vec<ko_db::models::SendMessage>>,
 
     /// Scheduled automatic commands loaded from DB.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AutomaticCommandArray` — processed every
     /// second in `ServerStartStopHandler.cpp:64-84`.
     pub(crate) automatic_commands: parking_lot::RwLock<Vec<ko_db::models::AutomaticCommand>>,
 
     /// Damage balance multipliers (single row, loaded once at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::pDamageSetting`
     damage_settings: parking_lot::RwLock<Option<DamageSettingsRow>>,
 
     /// Burning feature rate multipliers per flame level (3 tiers, index 0-2).
     ///
-    /// C++ Reference: `CGameServerDlg::pBurningFea[3]`
     pub burning_features: parking_lot::RwLock<[BurningFeatureRates; 3]>,
 
     /// Per-nation home/respawn coordinates keyed by nation (1=Karus, 2=Elmorad).
@@ -540,31 +458,25 @@ pub struct WorldState {
 
     /// Per-zone start positions for nation-specific respawn.
     ///
-    /// C++ Reference: `CGameServerDlg::m_StartPositionArray`
     start_positions: DashMap<u16, StartPositionRow>,
 
     /// Random spawn points for special zones, keyed by zone_id.
     ///
-    /// C++ Reference: `CGameServerDlg::m_StartPositionRandomArray`
     start_positions_random: DashMap<u16, Vec<StartPositionRandomRow>>,
 
     // -- Monster Summon / Respawn / Boss Random Spawn ----------------------
     /// Monster summon list keyed by s_sid (monster template ID).
     ///
-    /// C++ Reference: `CGameServerDlg::m_MonsterSummonListArray`
     monster_summon_list: DashMap<i16, MonsterSummonRow>,
     /// Monster respawn loop keyed by dead-monster s_sid.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MonsterRespawnListArray`
     monster_respawn_loop: DashMap<i16, MonsterRespawnLoopRow>,
     /// Scheduled respawn queue — NPC deaths that trigger delayed respawns.
     ///
-    /// C++ Reference: `Npc.cpp:909-915` — respawn chain via SpawnEventNpc with deadtime delay.
     /// Entries are checked each NPC AI tick; when their deadline passes, the NPC is spawned.
     scheduled_respawns: parking_lot::Mutex<Vec<ScheduledRespawn>>,
     /// Boss random spawn pool keyed by stage -> Vec of candidate positions.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MonsterBossRandomSpawnArray`
     boss_random_spawn: DashMap<i32, Vec<MonsterBossRandomSpawnRow>>,
 
     // â”€â”€ NPC DOT System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -573,291 +485,230 @@ pub struct WorldState {
     /// Each NPC can have up to `MAX_TYPE3_REPEAT` active DOT slots,
     /// processed alongside player DOTs by the `dot_tick` system.
     ///
-    /// C++ Reference: NPCs share `Unit::m_durationalSkills[]` with players.
     npc_dots: DashMap<NpcId, Vec<NpcDotSlot>>,
 
     // â”€â”€ NPC Buff System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Active Type4 buffs/debuffs on NPCs, keyed by NpcId.
     ///
-    /// Inner HashMap is keyed by buff_type (matching C++ `m_buffMap`).
+    /// Inner HashMap is keyed by buff_type (matching buffMap).
     /// The `buff_tick` system checks expiry every tick.
     ///
-    /// C++ Reference: `CNpc::m_buffMap` â€” `Type4BuffMap` in `Npc.h`
     npc_buffs: DashMap<NpcId, HashMap<i32, NpcBuffEntry>>,
 
     // â”€â”€ Bifrost Event State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Remaining seconds for the active bifrost event (0 = inactive).
     ///
-    /// C++ Reference: `CGameServerDlg::m_sBifrostRemainingTime`
     bifrost_remaining_secs: std::sync::atomic::AtomicU32,
 
     // â”€â”€ Item Exchange / Special Stone Tables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Special stone definitions keyed by n_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_SpecialStoneArray`
     special_stones: DashMap<i32, SpecialStoneRow>,
     /// Monster resource kill notices keyed by proto_id (sid).
     ///
-    /// C++ Reference: `CGameServerDlg::m_MonsterResourceArray`
     monster_resources: DashMap<i16, ko_db::models::MonsterResource>,
     /// Random item table keyed by n_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemRandomArray`
     item_random: DashMap<i32, ItemRandomRow>,
     /// Item group table keyed by group_id.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemGroupArray`
     item_groups: DashMap<i16, ItemGroupRow>,
     /// Item exchange experience table keyed by n_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemExchangeExpArray`
     item_exchange_exp: DashMap<i32, ItemExchangeExpRow>,
     /// Item give exchange table keyed by exchange_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemGiveExchangeArray`
     item_give_exchange: DashMap<i32, ItemGiveExchangeRow>,
     /// Right-click exchange mapping keyed by item_id.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemRightClickExchangeArray`
     item_right_click_exchange: DashMap<i32, ItemRightClickExchangeRow>,
     /// Right exchange definitions keyed by item_id.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemRightExchangeArray`
     item_right_exchange: DashMap<i32, ItemRightExchangeRow>,
 
     // â”€â”€ Event Room System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Event room manager â€” handles BDW, Chaos, Juraid, FT room lifecycle,
     /// event scheduling, sign-up tracking, and timer state machine.
-    ///
-    /// C++ Reference: `CGameServerDlg::pTempleEvent`, `m_TempleEventBDWRoomList`,
-    ///                `m_TempleEventJuraidRoomList`, `m_TempleEventChaosRoomList`
     pub(crate) event_room_manager: EventRoomManager,
 
     /// BDW per-room state (altar, monument counts, respawn timer).
     ///
-    /// C++ Reference: `CGameServerDlg::m_TempleEventBDWRoomList` (per-room extra data)
     pub(crate) bdw_manager: parking_lot::RwLock<BdwManager>,
 
     /// Event rewards keyed by local_id (e.g. 9=BDW, 11=Juraid).
     ///
-    /// C++ Reference: `CGameServerDlg::m_EventRewardArray`
     event_rewards: DashMap<i16, Vec<EventRewardRow>>,
 
     /// Event timer show list entries for client UI.
     ///
-    /// C++ Reference: `CGameServerDlg::m_EventTimerShowArray`
     pub(crate) event_timer_show_list:
         parking_lot::RwLock<Vec<ko_db::models::event_schedule::EventTimerShowRow>>,
 
     /// Server info notice message 1 (broadcast every 30 min).
     ///
-    /// C++ Reference: `CGameServerDlg::GameInfo1Packet()` — `IDS_NOTICE_INFO_1`
     pub(crate) game_info_notice1: parking_lot::RwLock<String>,
 
     /// Server info notice message 2 (broadcast every 60 min).
     ///
-    /// C++ Reference: `CGameServerDlg::GameInfo2Packet()` — `IDS_NOTICE_INFO_2`
     pub(crate) game_info_notice2: parking_lot::RwLock<String>,
 
     // â”€â”€ Forgotten Temple Event â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// FT stage definitions loaded from DB at startup.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ForgettenTempleStages[]`
     ft_stages: parking_lot::RwLock<Vec<FtStageRow>>,
     /// FT monster summon definitions loaded from DB at startup.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ForgettenTempleSummon[]`
     ft_summons: parking_lot::RwLock<Vec<FtSummonRow>>,
     /// Forgotten Temple runtime event state (timer, stage, monster count).
     ///
-    /// C++ Reference: `CGameServerDlg::pForgettenTemple`
     forgotten_temple_state: ForgettenTempleState,
 
     // â”€â”€ Dungeon Defence (Full Moon Rift) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// DD stage definitions loaded from DB at startup.
     ///
-    /// C++ Reference: `CGameServerDlg::m_DungeonDefenceStageListArray`
     dd_stages: parking_lot::RwLock<Vec<DfStageRow>>,
     /// DD monster spawn definitions loaded from DB at startup.
     ///
-    /// C++ Reference: `CGameServerDlg::m_DungeonDefenceMonsterListArray`
     dd_monsters: parking_lot::RwLock<Vec<DfMonsterRow>>,
     /// DD runtime room pool (60 rooms, pre-initialized at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::m_DungeonDefenceRoomList`
     dd_rooms: Vec<crate::handler::dungeon_defence::DdRoomInfo>,
 
     //â”€â”€ Under The Castle Event â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Under The Castle monster spawn definitions loaded from DB at startup.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MonsterUnderTheCastleArray`
     utc_spawns: parking_lot::RwLock<Vec<MonsterUnderTheCastleRow>>,
     /// Under The Castle runtime event state.
     ///
-    /// C++ Reference: `CGameServerDlg::pUnderTheCastle`
     under_the_castle_state: crate::handler::under_castle::UnderTheCastleState,
 
     // â”€â”€ Daily Quest Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Daily quest definitions keyed by quest id (1-53).
     ///
-    /// C++ Reference: `CGameServerDlg::m_DailyQuestArray`
     daily_quests: DashMap<i16, DailyQuestRow>,
 
     // ── Daily Rank Cache ─────────────────────────────────────────────────
     /// Cached daily rank data loaded from `daily_rank` table at startup.
     ///
-    /// C++ Reference: `CGameServerDlg::m_DailyRank` map
     daily_rank_cache: parking_lot::RwLock<Vec<ko_db::models::daily_rank::DailyRankRow>>,
 
     // â”€â”€ Draki Tower Event â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Draki Tower stage definitions loaded from DB at startup (41 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::m_DrakiRoomListArray`
     draki_tower_stages: parking_lot::RwLock<Vec<DrakiTowerStageRow>>,
     /// Draki Tower monster spawn definitions loaded from DB at startup (166 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::m_DrakiMonsterListArray`
     draki_monster_list: parking_lot::RwLock<Vec<DrakiMonsterListRow>>,
     /// Draki Tower runtime room pool (60 rooms, keyed by room_id 1-60).
     ///
-    /// C++ Reference: `CGameServerDlg::m_MonsterDrakiTowerList`
     draki_tower_rooms: parking_lot::RwLock<std::collections::HashMap<u16, DrakiTowerRoomInfo>>,
 
     // â”€â”€ Chaos Stone Event â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Chaos stone spawn point definitions loaded from DB at startup (12 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ChaosStoneRespawnCoordinateArray`
     chaos_stone_spawns: parking_lot::RwLock<Vec<ChaosStoneSpawnRow>>,
     /// Chaos stone monster summon list loaded from DB at startup (18 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ChaosStoneSummonListArray`
     chaos_stone_summon_list: parking_lot::RwLock<Vec<ChaosStoneSummonListRow>>,
     /// Chaos stone stage/family definitions loaded from DB at startup (9 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ChaosStoneStageArray`
     chaos_stone_stages: parking_lot::RwLock<Vec<ChaosStoneSummonStageRow>>,
     /// Chaos stone event rewards by rank (18 rows).
     ///
-    /// C++ Reference: `EVENT_CHAOS_REWARDS` table
     chaos_stone_rewards: parking_lot::RwLock<Vec<EventChaosRewardRow>>,
     /// Runtime chaos stone info map: chaos_index -> ChaosStoneInfo.
     ///
     /// Loaded from `chaos_stone_spawns` at startup via `load_chaos_stones()`.
-    /// C++ Reference: `CGameServerDlg::m_ChaosStoneInfoArray`
     pub(crate) chaos_stone_infos:
         parking_lot::RwLock<HashMap<u8, crate::handler::chaos_stone::ChaosStoneInfo>>,
 
     // â”€â”€ Character Creation Data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Starting equipment per class, keyed by class_type â†’ Vec of slot entries.
     ///
-    /// C++ Reference: MSSQL `CREATE_NEW_CHAR_SET` table, loaded via `LOAD_NEW_CHAR_SET` SP
     new_char_set: DashMap<i16, Vec<CreateNewCharSetRow>>,
     /// Starting stats/level/gold per (class_type, job_type).
     ///
-    /// C++ Reference: MSSQL `CREATE_NEW_CHAR_VALUE` table, loaded via `LOAD_NEW_CHAR_VALUE` SP
     new_char_value: DashMap<(i16, i16), CreateNewCharValueRow>,
 
     // â”€â”€ Monster Event Spawns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Monster stone respawn definitions loaded from DB at startup.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMonsterStoneRespawnList()`
     monster_stone_respawn: parking_lot::RwLock<Vec<MonsterStoneRespawnRow>>,
     /// Monster Stone room pool manager (750 rooms).
     ///
-    /// C++ Reference: `CGameServerDlg::m_TempleEventMonsterStoneRoomList`
     pub(crate) monster_stone_manager: parking_lot::RwLock<MonsterStoneManager>,
     /// Boss random stage definitions loaded from DB at startup (33 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMonsterBossRandomStages()`
     monster_boss_random_stages: parking_lot::RwLock<Vec<MonsterBossRandomStageRow>>,
     /// Juraid Mountain per-room bridge state snapshot.
     ///
     /// Synced from event_system when bridges open; used by `CheckDevaAttack()` in
     /// `handle_npc_attack()`. Key = room_id (1-based).
     ///
-    /// C++ Reference: `_JURAID_ROOM_INFO::m_sKarusBridges[3]`, `m_sElmoBridges[3]`
     juraid_bridge_states: DashMap<u8, JuraidBridgeState>,
 
     /// Juraid Mountain monster respawn definitions loaded from DB at startup (136 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadJuraidMountainRespawnList()`
     monster_juraid_respawn: parking_lot::RwLock<Vec<MonsterJuraidRespawnRow>>,
     /// Monster challenge config entries loaded from DB at startup (3 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMonsterChallenge()`
     monster_challenge: parking_lot::RwLock<Vec<MonsterChallengeRow>>,
     /// Monster challenge summon list loaded from DB at startup (168 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMonsterChallengeSummonList()`
     monster_challenge_summon: parking_lot::RwLock<Vec<MonsterChallengeSummonRow>>,
 
     // â”€â”€ Sheriff System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// In-memory sheriff reports (player reporting / voting system).
     ///
-    /// C++ Reference: `CGameServerDlg::m_SheriffReportList`
     sheriff_reports: Arc<SheriffReportMap>,
 
     // â”€â”€ Cinderella War (Fun Class) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Cinderella War tier settings loaded from DB at startup (5 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::pCindWar.pSetting[5]`
     cindwar_settings: parking_lot::RwLock<Vec<CindwarSettingRow>>,
     /// Cinderella War equipment items per tier, keyed by (tier, class).
     ///
-    /// C++ Reference: `CGameServerDlg::m_CindirellaItemsArray[5]`
     cindwar_items: parking_lot::RwLock<Vec<CindwarItemRow>>,
     /// Cinderella War rank-based rewards (20 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::pCindWar.pReward[200]`
     cindwar_rewards: parking_lot::RwLock<Vec<CindwarRewardRow>>,
     /// Cinderella War reward items (normalized from flat arrays).
     ///
-    /// C++ Reference: `_CINDWAR_REWARD::itemid[10]`
     cindwar_reward_items: parking_lot::RwLock<Vec<CindwarRewardItemRow>>,
     /// Cinderella War per-class stat/skill presets (16 rows).
     ///
-    /// C++ Reference: `CGameServerDlg::m_CindirellaStatArray`
     cindwar_stats: parking_lot::RwLock<Vec<CindwarStatRow>>,
     /// Whether a Cinderella War event is currently active.
     ///
-    /// C++ Reference: `CGameServerDlg::pCindWar.isON()` / `pCindWar.isStarted()`
     pub cindwar_active: std::sync::atomic::AtomicBool,
     /// Zone ID where the current Cinderella War is taking place (0 = none).
     ///
-    /// C++ Reference: `CGameServerDlg::isCindirellaZone(zone)` â€” checks against event zone
     pub cindwar_zone_id: AtomicU16,
     /// Set of session IDs that are participants in the active Cinderella War.
     ///
-    /// C++ Reference: `CUser::pCindWar.isEventUser()` â€” per-user event membership check
     cindwar_event_users: DashMap<SessionId, ()>,
     /// Per-player Cinderella War state (original data backup, cooldowns, KDA).
     ///
-    /// C++ Reference: `CUser::pCindWar` (_CINDWARUSER per-user struct)
     cindwar_player_states: DashMap<SessionId, crate::handler::cinderella::CindirellaPlayerState>,
     /// Global Cinderella War event lifecycle state.
     ///
-    /// C++ Reference: `CGameServerDlg::pCindWar` (_CINDWARGAME global struct)
     cindwar_event_state: parking_lot::RwLock<crate::handler::cinderella::CindirellaEventState>,
 
     // â”€â”€ Cash Shop (PUS) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Whether the Zindan War (special event) is currently opened/active.
     ///
-    /// C++ Reference: `CGameServerDlg::pSpecialEvent.opened`
     /// When true, attacks and magic are allowed in SPBATTLE zones (105-115).
     pub zindan_event_opened: std::sync::atomic::AtomicBool,
 
     /// Zindan War score/timer state (names, kill counts, finish time).
     ///
-    /// C++ Reference: `CGameServerDlg::pSpecialEvent` (ekillcount, kkillcount, etc.)
     pub(crate) zindan_war_state: parking_lot::RwLock<ZindanWarState>,
 
     /// Active PUS categories keyed by category_id (5 rows).
     ///
-    /// C++ Reference: External PUS system â€” loaded at startup for validation.
     pub(crate) pus_categories: DashMap<i16, PusCategoryRow>,
     /// PUS item listings keyed by category_id -> Vec of items.
     ///
-    /// C++ Reference: External PUS system â€” grouped by category for browsing.
     pub(crate) pus_items_by_category: DashMap<i16, Vec<PusItemRow>>,
     /// PUS item lookup keyed by listing ID for direct purchase validation.
     pub(crate) pus_items_by_id: DashMap<i32, PusItemRow>,
@@ -865,78 +716,63 @@ pub struct WorldState {
     // â”€â”€ Soccer Event System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Per-zone soccer event rooms (Moradon 21-25), purely in-memory.
     ///
-    /// C++ Reference: `CGameServerDlg::m_TempleSoccerEventRoomList`
     soccer_state: crate::handler::soccer::SharedSoccerState,
 
     // â”€â”€ Battle (War) System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Nation battle state â€” all war-related counters, flags, and timers.
-    ///
-    /// C++ Reference: `CGameServerDlg` fields `m_byBattleOpen`, `m_bVictory`,
-    ///                `m_sKarusDead`, `m_sElmoradDead`, `m_bKarusFlag`, etc.
     battle_state: parking_lot::RwLock<crate::systems::war::BattleState>,
 
     /// War commander names — top-ranked clan leaders designated during war.
     ///
-    /// C++ Reference: `CGameServerDlg::m_CommanderArray` — populated by
     /// `BattleZoneSelectCommanders()` / `LoadKnightsRankTable()`.
     /// On login during war, matching players get `COMMAND_CAPTAIN` fame.
     war_commanders: parking_lot::RwLock<std::collections::HashSet<String>>,
 
     /// Permanent chat banner state.
     ///
-    /// C++ Reference: `GameServerDlg.h:1152-1153` — `m_bPermanentChatMode`, `m_strPermanentChat`
     /// When `Some(text)`, the banner is displayed to all players. `None` = off.
     permanent_chat: parking_lot::RwLock<Option<String>>,
 
     /// Banish-of-winner spawn definitions loaded from `banish_of_winner` table.
     ///
-    /// C++ Reference: `GameServerDlg.h:1039` — `m_WarBanishOfWinnerArray`
     /// Used by `BattleZoneRemnantSpawn()` to spawn event NPCs after a war victory.
     banish_of_winner: parking_lot::RwLock<Vec<ko_db::models::BanishOfWinner>>,
 
     /// Gold cost discount for stat/skill reset: 0=off, 1=winning nation, 2=all.
     ///
-    /// C++ Reference: `CGameServerDlg::m_sDiscount`
     /// Set by GM commands `+discount` (1), `+alldiscount` (2), `+offdiscount` (0).
     /// When active, stat/skill reset gold costs are halved.
     pub(crate) discount: std::sync::atomic::AtomicU8,
 
     /// Whether NPC war buffs are currently active (BATTLEZONE_OPEN applied).
     ///
-    /// C++ Reference: `CNpc::ChangeAbility(BATTLEZONE_OPEN)` — nation NPCs
     /// (type > 10, nation in {Karus, Elmorad}) get HP×1.2, AC×1.2, Damage×0.5,
     /// Resist×2 during war. Reverted on BATTLEZONE_CLOSE.
     pub(crate) npc_war_buffed: std::sync::atomic::AtomicBool,
     // â”€â”€ PVP Monument System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Per-zone PVP monument ownership by nation (0=neutral, 1=Karus, 2=Elmorad).
     ///
-    /// C++ Reference: `CGameServerDlg::m_nPVPMonumentNation[MAX_ZONE_ID]`
     pub(crate) pvp_monument_nation: DashMap<u16, u8>,
 
     // â”€â”€ Beef Roast (Bifrost) Event State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Bifrost/beef roast event runtime state.
     ///
-    /// C++ Reference: `CGameServerDlg::pBeefEvent`
     beef_event: parking_lot::RwLock<BeefEventState>,
 
     // ── Bowl Event ──────────────────────────────────────────────────────
     /// Whether the bowl event is currently active.
     ///
-    /// C++ Reference: `CGameServerDlg::isBowlEventActive`
     bowl_event_active: std::sync::atomic::AtomicBool,
     /// Remaining seconds for the bowl event timer (0 = inactive).
     ///
-    /// C++ Reference: `CGameServerDlg::tBowlEventTime`
     bowl_event_time: std::sync::atomic::AtomicU16,
     /// Zone ID where the bowl event is running.
     ///
-    /// C++ Reference: `CGameServerDlg::tBowlEventZone`
     bowl_event_zone: std::sync::atomic::AtomicU8,
 
     // â”€â”€ Lua Quest Engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Lua quest scripting engine for NPC dialog and quest logic.
     ///
-    /// C++ Reference: `CGameServerDlg::m_luaEngine` (CLuaEngine)
     lua_engine: Arc<LuaEngine>,
 
     // â”€â”€ Daily Operation Tracking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -945,64 +781,52 @@ pub struct WorldState {
     /// Tracks when each daily-limited action was last performed so the
     /// server can enforce 24-hour (1440 minute) cooldowns.
     ///
-    /// C++ Reference: `CGameServerDlg::m_UserDailyOpMap`
     pub(crate) daily_ops: DashMap<String, UserDailyOp>,
 
     /// Temporary GM socket for `/plc` program check command.
     /// Stores the requesting GM's session ID so the client response can be routed back.
     ///
-    /// C++ Reference: `CGameServerDlg::TempPlcCodeGameMasterSocket`
     pub(crate) plc_gm_socket: AtomicU32,
 
     // â”€â”€ Notice Board System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Notice board entries (title, message) pairs â€” type=2, max 5 entries.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ppNotice[20][128]` â€” lines 0..9 paired
     /// as (title=even, message=odd), used in `CUser::SendNotice()`.
     notice_board_entries: parking_lot::RwLock<Vec<(String, String)>>,
     /// Top-right notice messages â€” type=1, max 20 entries.
     ///
-    /// C++ Reference: `CGameServerDlg::m_peNotice[20][128]` â€” loaded from
     /// `Notice_up.txt`, used in `CUser::TopSendNotice()`.
     top_notice_entries: parking_lot::RwLock<Vec<String>>,
     /// Cape bonus notice entries (title, message) pairs â€” type=2, max 5 entries.
     ///
-    /// C++ Reference: `CGameServerDlg::m_CapeBonusNotice[20][256]` â€” loaded from
     /// `CapeBonus.txt`, sent via `CUser::SendCapeBonusNotice()`.
     cape_bonus_entries: parking_lot::RwLock<Vec<(String, String)>>,
     /// Clan premium notice entries (title, message) pairs â€” type=2, max 5 entries.
     ///
-    /// C++ Reference: `CGameServerDlg::m_CPNotice[20][128]` â€” loaded from
     /// `ClanPremiumNotice.txt`, sent via `CUser::SendClanPremiumNotice()`.
     clan_premium_entries: parking_lot::RwLock<Vec<(String, String)>>,
     /// Right-top title messages (title, message) pairs — sent via WIZ_NOTICE sub=4.
     ///
-    /// C++ Reference: `CGameServerDlg::m_RightTopTitleArray` — loaded from
     /// `RIGHT_TOP_TITLE` DB table, sent via `CUser::RightTopTitleMsg()`.
     right_top_titles: parking_lot::RwLock<Vec<(String, String)>>,
 
     // â”€â”€ Zone Reward Tables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Zone kill reward definitions (all rows, iterated per kill).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ZoneKillReward`
     zone_kill_rewards: parking_lot::RwLock<Vec<ZoneKillReward>>,
     /// Zone online reward definitions (all rows, used for periodic online rewards).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ZoneOnlineRewardArray`
     zone_online_rewards: parking_lot::RwLock<Vec<ZoneOnlineReward>>,
 
     // â”€â”€ Wanted Event System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /// Per-room wanted event state (3 rooms: Ronark Land, Ardream, Ronark Land Base).
     ///
-    /// C++ Reference: `CGameServerDlg::pWantedMain[3]`
     wanted_rooms: parking_lot::RwLock<[WantedEventRoom; MAX_WANTED_ROOMS]>,
     /// Whether the auto-wanted event system is enabled.
     ///
-    /// C++ Reference: `CGameServerDlg::pServerSetting.AutoWanted`
     pub(crate) wanted_auto_enabled: std::sync::atomic::AtomicBool,
     /// Last time the wanted system broadcast position to the map (unix timestamp).
     ///
-    /// C++ Reference: `CGameServerDlg::m_WantedSystemMapShowTime`
     pub(crate) wanted_map_show_time: std::sync::atomic::AtomicU64,
     // ── Login Lock ──────────────────────────────────────────────────────
     /// Set of account IDs currently being processed in the login flow.
@@ -1014,7 +838,6 @@ pub struct WorldState {
 
     /// Names of currently connected GM users.
     ///
-    /// C++ Reference: `CGameServerDlg::m_GmList` + `m_GmListlock`
     gm_list: parking_lot::RwLock<Vec<String>>,
 
     // â”€â”€ Database Pool â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1029,61 +852,51 @@ pub struct WorldState {
     // ── Lottery Event System ─────────────────────────────────────────────
     /// Global lottery event runtime state.
     ///
-    /// C++ Reference: `CGameServerDlg::pLotteryProc` — `_RIMA_LOTTERY_PROCESS`
     /// Shared via `Arc<RwLock<...>>` so the timer task and handlers can both access it.
     lottery_process: crate::handler::lottery::SharedLotteryProcess,
 
     // ── Collection Race Event System ──────────────────────────────────────
     /// Global Collection Race event runtime state.
     ///
-    /// C++ Reference: `CGameServerDlg::pCollectionRaceEvent` — `_COLLECTION_RACE_EVENT`
     /// Shared via `Arc<RwLock<...>>` so the timer task and handlers can both access it.
     pub(crate) collection_race_event: crate::handler::collection_race::SharedCollectionRaceEvent,
 
     /// Collection Race event definition table (loaded from DB at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::m_CollectionRaceListArray`
     pub(crate) collection_race_settings: DashMap<i16, crate::handler::collection_race::CrEventDef>,
 
     // ── Wheel of Fun ─────────────────────────────────────────────────────────
     /// Wheel of Fun settings loaded from DB at startup.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemWheelArray`
     wheel_of_fun_settings:
         parking_lot::RwLock<Vec<ko_db::models::wheel_of_fun::WheelOfFunSettings>>,
 
     // ── Anti-AFK NPC List ──────────────────────────────────────────────────
     /// Anti-AFK NPC IDs sent to the client on game entry.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AntiAfkList`
     anti_afk_npc_ids: parking_lot::RwLock<Vec<u16>>,
 
     // ── Flying Santa/Angel Event ────────────────────────────────────────────
     /// Flying Santa/Angel visual event state (0=none, 1=santa, 2=angel).
     ///
-    /// C++ Reference: `CGameServerDlg::m_bSantaOrAngel` — `FlyingSantaOrAngel` enum
     pub(crate) santa_or_angel: std::sync::atomic::AtomicU8,
 
     // ── RANKBUG Configuration ───────────────────────────────────────────────
     /// Ranking system multiplier configuration.
     ///
-    /// C++ Reference: `CGameServerDlg::pRankBug` — loaded from `RANKBUG` table
     pub(crate) rank_bug: parking_lot::RwLock<ko_db::models::rankbug::RankBugConfig>,
 
     // ── Player Ranking Rewards ──────────────────────────────────────────────
     /// Loyalty (NP) given to top-10 PK zone ranked players every minute.
     ///
-    /// C++ Reference: `CGameServerDlg::m_nPlayerRankingLoyaltyReward` (INI default: 0)
     pub(crate) player_ranking_loyalty_reward: std::sync::atomic::AtomicU32,
 
     /// Knight Cash given to top-10 PK zone ranked players every minute.
     ///
-    /// C++ Reference: `CGameServerDlg::m_nPlayerRankingKnightCashReward` (INI default: 0)
     pub(crate) player_ranking_kc_reward: std::sync::atomic::AtomicU32,
 
     /// Zone IDs where player ranking rewards are distributed.
     ///
-    /// C++ Reference: `CGameServerDlg::m_sPlayerRankingsRewardZones` (INI default: "71,72,73")
     pub(crate) player_ranking_reward_zones: parking_lot::RwLock<Vec<u16>>,
 }
 
@@ -1334,7 +1147,6 @@ impl WorldState {
     ///
     /// This is the primary constructor for production use.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadZoneInfoFromDB()` + `C3DMap::Initialize()`
     pub async fn load(pool: &DbPool, map_dir: &Path) -> anyhow::Result<Self> {
         let world = Self {
             sessions: DashMap::new(),
@@ -1572,21 +1384,18 @@ impl WorldState {
 
     /// Get a clone of the current notice board entries (title, message pairs).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ppNotice` â€” used by `CUser::SendNotice()`.
     pub fn get_notice_board(&self) -> Vec<(String, String)> {
         self.notice_board_entries.read().clone()
     }
 
     /// Get a clone of the current top-right notice entries.
     ///
-    /// C++ Reference: `CGameServerDlg::m_peNotice` â€” used by `CUser::TopSendNotice()`.
     pub fn get_top_notices(&self) -> Vec<String> {
         self.top_notice_entries.read().clone()
     }
 
     /// Replace the notice board entries (max 5 title+message pairs).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadNoticeData()` â€” loads 10 lines
     /// from `Notice.txt`, paired as (title=even, message=odd).
     pub fn set_notice_board(&self, entries: Vec<(String, String)>) {
         let truncated: Vec<_> = entries.into_iter().take(5).collect();
@@ -1595,7 +1404,6 @@ impl WorldState {
 
     /// Replace the top-right notice entries (max 20 messages).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadNoticeUpData()` â€” loads up to
     /// 20 lines from `Notice_up.txt`.
     pub fn set_top_notices(&self, entries: Vec<String>) {
         let truncated: Vec<_> = entries.into_iter().take(20).collect();
@@ -1604,15 +1412,12 @@ impl WorldState {
 
     /// Get a clone of cape bonus notice entries.
     ///
-    /// C++ Reference: `CGameServerDlg::m_CapeBonusNotice` â€” used by
-    /// `CUser::SendCapeBonusNotice()`.
     pub fn get_cape_bonus_entries(&self) -> Vec<(String, String)> {
         self.cape_bonus_entries.read().clone()
     }
 
     /// Replace the cape bonus notice entries (max 5 title+message pairs).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadCapeBonusNotice()` â€” loads 10 lines
     /// from `CapeBonus.txt`, paired as (title=even, message=odd).
     pub fn set_cape_bonus_entries(&self, entries: Vec<(String, String)>) {
         let truncated: Vec<_> = entries.into_iter().take(5).collect();
@@ -1621,15 +1426,12 @@ impl WorldState {
 
     /// Get a clone of clan premium notice entries.
     ///
-    /// C++ Reference: `CGameServerDlg::m_CPNotice` â€” used by
-    /// `CUser::SendClanPremiumNotice()`.
     pub fn get_clan_premium_entries(&self) -> Vec<(String, String)> {
         self.clan_premium_entries.read().clone()
     }
 
     /// Replace the clan premium notice entries (max 5 title+message pairs).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadClanPremiumNotice()` â€” loads 10 lines
     /// from `ClanPremiumNotice.txt`, paired as (title=even, message=odd).
     pub fn set_clan_premium_entries(&self, entries: Vec<(String, String)>) {
         let truncated: Vec<_> = entries.into_iter().take(5).collect();
@@ -1637,7 +1439,6 @@ impl WorldState {
     }
     /// Get right-top title messages.
     ///
-    /// C++ Reference: `CGameServerDlg::m_RightTopTitleArray`
     pub fn get_right_top_titles(&self) -> Vec<(String, String)> {
         self.right_top_titles.read().clone()
     }
@@ -1649,14 +1450,12 @@ impl WorldState {
 
     /// Set the permanent chat banner text and broadcast to all players.
     ///
-    /// C++ Reference: `CGameServerDlg::SetPermanentMessage()` in `ChatHandler.cpp:1401-1414`
     pub fn set_permanent_chat(&self, text: String) {
         *self.permanent_chat.write() = Some(text);
     }
 
     /// Clear the permanent chat banner.
     ///
-    /// C++ Reference: `CGameServerDlg::HandlePermanentChatOffCommand` in `ChatHandler.cpp:1417-1424`
     pub fn clear_permanent_chat(&self) {
         *self.permanent_chat.write() = None;
     }
@@ -1670,7 +1469,6 @@ impl WorldState {
 
     /// Get all banish-of-winner spawn entries for the given winning nation.
     ///
-    /// C++ Reference: `BattleSystem.cpp:222` — filters `m_WarBanishOfWinnerArray` by `sNationID`.
     pub fn get_banish_of_winner(&self, winner_nation: u8) -> Vec<ko_db::models::BanishOfWinner> {
         self.banish_of_winner
             .read()
@@ -1689,7 +1487,6 @@ impl WorldState {
 
     /// Return a reference to the shared lottery process handle.
     ///
-    /// C++ Reference: `CGameServerDlg::pLotteryProc`
     pub fn lottery_process(&self) -> &crate::handler::lottery::SharedLotteryProcess {
         &self.lottery_process
     }
@@ -1698,7 +1495,6 @@ impl WorldState {
 
     /// Return a reference to the shared Collection Race event handle.
     ///
-    /// C++ Reference: `CGameServerDlg::pCollectionRaceEvent`
     pub fn collection_race_event(
         &self,
     ) -> &crate::handler::collection_race::SharedCollectionRaceEvent {
@@ -1707,7 +1503,6 @@ impl WorldState {
 
     /// Get the Collection Race event definition for the given index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_CollectionRaceListArray.GetData(index)`
     pub fn get_collection_race_def(
         &self,
         index: i16,
@@ -1719,7 +1514,6 @@ impl WorldState {
 
     /// Read-lock the runtime chaos stone info map.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ChaosStoneInfoArray`
     pub fn chaos_stone_infos(
         &self,
     ) -> parking_lot::RwLockReadGuard<'_, HashMap<u8, crate::handler::chaos_stone::ChaosStoneInfo>>
@@ -1806,7 +1600,6 @@ fn get_3x3_cells(rx: u16, rz: u16, max_x: u16, max_z: u16) -> HashSet<(u16, u16)
 impl WorldState {
     /// Collect sessions whose stealth duration has expired.
     ///
-    /// C++ Reference: `CUser::Type9Duration()` in `UserDurationSkillSystem.cpp:224-240`
     /// When `tEndTime != -1 && UNIXTIME >= tEndTime`, the stealth is expired.
     ///
     /// Returns a list of session IDs whose stealth_end_time > 0 and <= now.
@@ -1851,7 +1644,6 @@ impl WorldState {
 
     /// Collect sessions whose rivalry has expired.
     ///
-    /// C++ Reference: `User.h:1126-1127`
     /// `hasRival()` = `GetRivalID() >= 0`
     /// `hasRivalryExpired()` = `UNIXTIME >= m_tRivalExpiryTime`
     ///

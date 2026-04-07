@@ -1,20 +1,12 @@
 //! WIZ_KISS (0x66) handler -- Kiss emote / NPC interaction animation.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/NPCHandler.cpp:219-225`
-//!
 //! Triggered when a player interacts with a "kiss" NPC event. The server
 //! broadcasts the kiss animation to nearby players.
-//!
 //! ## Client -> Server
-//!
 //! Empty -- the client triggers this via NPC event system (m_sEventNid).
-//!
 //! ## Server -> Client (broadcast)
-//!
 //! ```text
 //! [u32 player_id] [i16 event_npc_id]
 //! ```
-//!
 //! The client uses this to play the kiss animation effect between the
 //! player and the referenced NPC.
 
@@ -26,9 +18,6 @@ use tracing::debug;
 use crate::session::{ClientSession, SessionState};
 
 /// Handle WIZ_KISS (0x66) -- kiss emote via NPC event.
-///
-/// C++ Reference: `CUser::KissUser()` in `NPCHandler.cpp:219-225`
-///
 /// The client sends this when interacting with a kiss-event NPC.
 /// Server broadcasts `[u32 player_id] [i16 event_npc_id]` to the region.
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
@@ -78,7 +67,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Build WIZ_KISS S2C packet.
-///
 /// Format: `[u32 player_id] [i16 event_npc_id]`
 fn build_kiss_packet(player_id: u32, event_npc_id: i16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizKiss as u8);

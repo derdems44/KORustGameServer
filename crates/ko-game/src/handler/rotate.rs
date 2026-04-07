@@ -1,15 +1,9 @@
 //! WIZ_ROTATE (0x09) handler — character rotation.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/ZoneChangeWarpHandler.cpp:809-819`
-//!
 //! ## Request (C->S)
-//!
 //! | Offset | Type   | Description |
 //! |--------|--------|-------------|
 //! | 0      | i16le  | Direction angle |
-//!
 //! ## Broadcast to nearby players
-//!
 //! `[u32 socket_id] [i16 direction]`
 
 use ko_protocol::{Opcode, Packet, PacketReader};
@@ -26,7 +20,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
 
-    // C++ Reference: ZoneChangeWarpHandler.cpp:811 — if (isDead()) return;
     if world.is_player_dead(sid) {
         return Ok(());
     }
@@ -45,7 +38,6 @@ pub fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     bcast.write_i16(direction);
 
     // GM invisible broadcast suppression
-    // C++ Reference: CharacterMovementHandler.cpp:151 — if (m_bAbnormalType != ABNORMAL_INVISIBLE)
     let is_gm = world
         .get_character_info(sid)
         .map(|ch| ch.authority == 0)

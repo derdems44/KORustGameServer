@@ -100,7 +100,6 @@ impl<'a> AccountRepository<'a> {
     /// Clear all online entries — called at server startup to clean stale sessions
     /// from a previous crash.
     ///
-    /// C++ Reference: `CDBAgent::ClearAllOnlineEntries()` — `DELETE FROM CURRENTUSER`
     pub async fn clear_all_online(&self) -> Result<u64, sqlx::Error> {
         let result = sqlx::query("DELETE FROM currentuser")
             .execute(self.pool)
@@ -194,7 +193,6 @@ impl<'a> AccountRepository<'a> {
 
     /// Update account security info (email, phone, seal password, OTP).
     ///
-    /// C++ Reference: `DatabaseThread.cpp:541-564` — `ACCOUNT_INFO_SAVE` procedure
     pub async fn update_account_info(
         &self,
         account_id: &str,
@@ -238,7 +236,6 @@ impl<'a> AccountRepository<'a> {
 
     /// Update the authority level for an account.
     ///
-    /// C++ Reference: `UserAuthorityUpdate` in `DatabaseThread.cpp:23`
     /// Used by +block (set to -1) and +unblock (set to 1).
     pub async fn update_authority(
         &self,

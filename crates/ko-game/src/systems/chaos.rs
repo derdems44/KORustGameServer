@@ -1,25 +1,16 @@
 //! Chaos Dungeon event system — free-for-all PvP room event.
-//!
-//! C++ Reference: `EventMainSystem.cpp` (Chaos sections), `EventMainTimer.cpp`
-//!
 //! Chaos Dungeon is an FFA PvP event where all players compete against each
 //! other regardless of nation. Each room holds up to 18 players.
-//!
 //! ## Differences from BDW/Juraid
-//!
 //! - **No nation split**: players from both nations are mixed in the same room.
 //! - **No priest balancing**: players are assigned FIFO by join order.
 //! - **No automatic party creation**: Chaos has no `TempleEventCreateParties()` call.
 //! - **Kill/death ranking**: individual per-player ranking, not nation-based.
-//!
 //! ## Scoring
-//!
 //! - Each player tracks kills and deaths independently.
 //! - Ranking is calculated as: `kills * 5 - deaths` (C++ EXP formula base).
 //! - Chaos entry requires a "Chaos Map" item which is consumed on teleport.
-//!
 //! ## Rewards
-//!
 //! Loaded from `event_rewards` table (local_id=10 for Chaos).
 //! Rewards are rank-based, not nation-based.
 
@@ -35,15 +26,11 @@ pub use crate::world::types::ZONE_CHAOS;
 pub const DEFAULT_CHAOS_ROOMS: u8 = 10;
 
 /// Maximum users per Chaos room.
-///
-/// C++ Reference: `nMaxUserCount = 18` in `TempleEventManageRoom()` Chaos section
 pub const MAX_USERS_PER_ROOM: usize = MAX_CHAOS_ROOM_USERS;
 
 // ── Chaos Player Stats ─────────────────────────────────────────────────────
 
 /// Per-player kill/death tracking inside a Chaos room.
-///
-/// C++ Reference: `ChaosExpansionAddPlayerRank()`, `pow(level^3 * 0.15 * (5*kills - deaths))`
 #[derive(Debug, Clone, Default)]
 pub struct ChaosPlayerStats {
     /// Number of kills in this event session.
@@ -55,7 +42,6 @@ pub struct ChaosPlayerStats {
 impl ChaosPlayerStats {
     /// Calculate the ranking score (higher is better).
     ///
-    /// C++ Reference: `5 * kills - deaths`
     pub fn ranking_score(&self) -> i64 {
         (self.kills as i64) * 5 - (self.deaths as i64)
     }
@@ -64,7 +50,6 @@ impl ChaosPlayerStats {
 // ── Chaos Manager ──────────────────────────────────────────────────────────
 
 /// Chaos Dungeon event manager — coordinates Chaos-specific logic.
-///
 /// Stored alongside `EventRoomManager` in the event system background task.
 /// Provides Chaos-specific operations that build on the generic room system.
 #[derive(Debug)]
@@ -154,12 +139,8 @@ impl Default for ChaosManager {
 // ── Room Assignment ────────────────────────────────────────────────────────
 
 /// Assign signed-up users to Chaos Dungeon rooms.
-///
 /// Unlike BDW/Juraid, Chaos does NOT separate by nation or balance priests.
 /// Players are assigned FIFO (by join order) up to 18 per room.
-///
-/// C++ Reference: `TempleEventManageRoom()` Chaos section in `EventMainSystem.cpp:260-303`
-///
 /// Returns the number of users assigned to rooms.
 pub fn assign_users_to_rooms(erm: &EventRoomManager, chaos: &mut ChaosManager) -> usize {
     let users = erm.signed_up_users.read().clone();
@@ -219,13 +200,9 @@ pub fn assign_users_to_rooms(erm: &EventRoomManager, chaos: &mut ChaosManager) -
 }
 
 /// Determine "winners" for all Chaos rooms.
-///
 /// Chaos is FFA — there is no nation-based winner. This returns `(room_id, 0)`
 /// for each active room to maintain the same interface as BDW/Juraid.
 /// The actual per-player ranking is handled by `ChaosManager::get_room_rankings()`.
-///
-/// C++ Reference: `TempleEventSendWinnerScreen()` Chaos section sends `winner_nation=0`
-///
 /// Returns a list of `(room_id, winner_nation)` — winner_nation is always 0 for Chaos.
 pub fn determine_all_winners(erm: &EventRoomManager) -> Vec<(u8, u8)> {
     let room_ids = erm.list_rooms(TempleEventType::ChaosDungeon);

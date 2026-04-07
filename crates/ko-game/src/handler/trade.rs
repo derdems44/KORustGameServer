@@ -1,14 +1,10 @@
 //! WIZ_EXCHANGE (0x30) handler — player-to-player trade.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/TradeHandler.cpp`
-//!
 //! Sub-opcodes:
 //! - EXCHANGE_REQ (1): Initiate trade with target player
 //! - EXCHANGE_AGREE (2): Accept/decline trade
 //! - EXCHANGE_ADD (3): Add item to trade window
 //! - EXCHANGE_DECIDE (5): Lock in / confirm trade
 //! - EXCHANGE_CANCEL (8): Cancel trade at any point
-//!
 //! Server-to-client only:
 //! - EXCHANGE_OTHERADD (4): Other player added an item
 //! - EXCHANGE_OTHERDECIDE (6): Other player confirmed
@@ -51,7 +47,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Cannot trade while dead or in busy state
-    // C++ Reference: TradeHandler.cpp:53-60
     if world.is_player_dead(sid)
         || world.is_merchanting(sid)
         || world.is_mining(sid)
@@ -83,8 +78,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// EXCHANGE_REQ (1): Request a trade with another player.
-///
-/// C++ Reference: `CUser::ExchangeReq()` in `TradeHandler.cpp:40-113`
 async fn exchange_req(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -126,14 +119,12 @@ async fn exchange_req(
     }
 
     // Same-account trade prevention
-    // C++ Reference: TradeHandler.cpp:70-72 — `pUser->GetAccountName() == GetAccountName()`
     // Prevents item duplication between characters on the same account.
     if !my_account.is_empty() && my_account.to_lowercase() == target_account.to_lowercase() {
         return send_cancel(session).await;
     }
 
     // Cross-nation trade check
-    // C++ Reference: TradeHandler.cpp:86 — nation check + canTradeWithOtherNation()
     if my_info.nation != target_info.nation {
         let can_trade = world
             .get_zone(my_pos.zone_id)
@@ -144,7 +135,6 @@ async fn exchange_req(
     }
 
     // Target must not be busy
-    // C++ Reference: TradeHandler.cpp:76-87
     if world.is_player_dead(target_id)
         || world.is_trading(target_id)
         || world.is_merchanting(target_id)
@@ -160,7 +150,6 @@ async fn exchange_req(
     }
 
     // Minimum trade level check from server settings
-    // C++ Reference: TradeHandler.cpp:95-98 — `GetLevel() < g_pMain->pServerSetting.TradeLevel`
     let trade_level = world
         .get_server_settings()
         .map(|s| s.trade_level)
@@ -182,8 +171,6 @@ async fn exchange_req(
 }
 
 /// EXCHANGE_AGREE (2): Accept or decline a trade request.
-///
-/// C++ Reference: `CUser::ExchangeAgree()` in `TradeHandler.cpp:116-193`
 async fn exchange_agree(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -204,7 +191,6 @@ async fn exchange_agree(
     let accepted = reader.read_u8().unwrap_or(0);
 
     // Self-trade prevention: the acceptor must NOT be the request sender
-    // C++ Reference: TradeHandler.cpp:163-169 — m_isRequestSender + account checks
     // C++ uses goDisconnect() for exploit detection. We reset + warn.
     if world.get_trade_state(sid) == TRADE_STATE_SENDER {
         // Packet manipulation attempt — sender trying to accept own request
@@ -218,7 +204,6 @@ async fn exchange_agree(
     }
 
     // Validate partner is still valid, alive, and in correct state
-    // C++ Reference: TradeHandler.cpp:135-161
     let partner_state = world.get_trade_state(partner_sid);
     if partner_state != TRADE_STATE_SENDER || world.is_player_dead(partner_sid) {
         world.reset_trade(sid);
@@ -227,7 +212,6 @@ async fn exchange_agree(
     }
 
     // Zone equality + partner busy-state + nation cross-trade validation
-    // C++ Reference: TradeHandler.cpp:147-161
     let my_pos = world.get_position(sid).unwrap_or_default();
     let partner_pos = world.get_position(partner_sid).unwrap_or_default();
     if my_pos.zone_id != partner_pos.zone_id
@@ -244,7 +228,6 @@ async fn exchange_agree(
     }
 
     // Same-account trade prevention
-    // C++ Reference: TradeHandler.cpp:163-169 — `pUser->GetAccountName() == GetAccountName()`
     let (my_account, my_nation) = world
         .with_session(sid, |h| {
             let nation = h.character.as_ref().map(|c| c.nation).unwrap_or(0);
@@ -264,7 +247,6 @@ async fn exchange_agree(
     }
 
     // Nation cross-trade check at agree phase
-    // C++ Reference: TradeHandler.cpp:159-161
     {
         if my_nation != partner_nation {
             let can_trade = world
@@ -302,8 +284,6 @@ async fn exchange_agree(
 }
 
 /// EXCHANGE_ADD (3): Add an item to the trade window.
-///
-/// C++ Reference: `CUser::ExchangeAdd()` in `TradeHandler.cpp:205-378`
 async fn exchange_add(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -315,7 +295,6 @@ async fn exchange_add(
     let item_id = reader.read_u32().unwrap_or(0);
     let count = reader.read_u32().unwrap_or(0);
 
-    // C++ Reference: TradeHandler.cpp:220-221
     if world.is_mining(sid)
         || world.is_fishing(sid)
         || world.is_merchanting(sid)
@@ -330,13 +309,11 @@ async fn exchange_add(
     };
 
     // Must be in TRADING state
-    // C++ Reference: TradeHandler.cpp:223
     if world.get_trade_state(sid) != TRADE_STATE_TRADING {
         return send_add_fail(session).await;
     }
 
     // Validate partner is still in a valid state (including zone equality)
-    // C++ Reference: TradeHandler.cpp:232-250
     let my_zone = world.get_position(sid).map(|p| p.zone_id).unwrap_or(0);
     let partner_zone = world
         .get_position(partner_sid)
@@ -357,7 +334,6 @@ async fn exchange_add(
     }
 
     // Nation re-validation: cannot trade cross-nation in restricted zones.
-    // C++ Reference: TradeHandler.cpp:241
     {
         let my_nation = world.get_character_info(sid).map(|c| c.nation).unwrap_or(0);
         let partner_nation = world
@@ -376,7 +352,6 @@ async fn exchange_add(
     }
 
     // Identity re-validation: prevent same-account/name trading (item dupe protection).
-    // C++ Reference: TradeHandler.cpp:244-247
     {
         let (my_account, my_name) = world
             .with_session(sid, |h| {
@@ -485,7 +460,6 @@ async fn exchange_add(
         }
 
         // Check flags: rented, sealed, bound, duplicate — use equality, NOT bitmask.
-        // C++ Reference: TradeHandler.cpp:293-297 — isRented/isSealed/isBound/isDuplicate/isExpirationTime
         if slot.flag == ITEM_FLAG_RENTED
             || slot.flag == ITEM_FLAG_SEALED
             || slot.flag == ITEM_FLAG_BOUND
@@ -577,8 +551,6 @@ async fn exchange_add(
 }
 
 /// EXCHANGE_DECIDE (5): Confirm the trade.
-///
-/// C++ Reference: `CUser::ExchangeDecide()` in `TradeHandler.cpp:380-547`
 async fn exchange_decide(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -592,7 +564,6 @@ async fn exchange_decide(session: &mut ClientSession) -> anyhow::Result<()> {
         None => return Ok(()),
     };
 
-    // C++ Reference: TradeHandler.cpp:385-394 — validate partner (zone + state)
     let my_zone = world.get_position(sid).map(|p| p.zone_id).unwrap_or(0);
     let partner_zone = world
         .get_position(partner_sid)
@@ -644,7 +615,6 @@ async fn exchange_decide(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // Second validation pass: item placement (kind=255 unique, slot collision, item table)
-    // C++ Reference: CheckExecuteExchange() in TradeHandler.cpp:828-887
     let can_execute2 =
         check_execute_exchange(&world, sid) && check_execute_exchange(&world, partner_sid);
 
@@ -679,7 +649,6 @@ async fn exchange_decide(session: &mut ClientSession) -> anyhow::Result<()> {
             Some(s) => s,
             None => continue,
         };
-        // C++ Reference: TradeHandler.cpp:802-805
         // Non-countable items always have count=1 after trade.
         let item_countable = world
             .get_item(ex_item.item_id)
@@ -692,7 +661,6 @@ async fn exchange_decide(session: &mut ClientSession) -> anyhow::Result<()> {
             let is_new = inv[slot].item_id == 0;
             inv[slot].item_id = ex_item.item_id;
             inv[slot].count = (inv[slot].count + ex_item.count as u16).min(ITEMCOUNT_MAX);
-            // C++: if (!pTable.m_bCountable) pDstItem->sCount = 1;
             if item_countable == 0 {
                 inv[slot].count = 1;
             }
@@ -728,7 +696,6 @@ async fn exchange_decide(session: &mut ClientSession) -> anyhow::Result<()> {
                 Some(s) => s,
                 None => continue,
             };
-        // C++ Reference: TradeHandler.cpp:802-805
         let item_countable = world
             .get_item(ex_item.item_id)
             .and_then(|i| i.countable)
@@ -740,7 +707,6 @@ async fn exchange_decide(session: &mut ClientSession) -> anyhow::Result<()> {
             let is_new = inv[slot].item_id == 0;
             inv[slot].item_id = ex_item.item_id;
             inv[slot].count = (inv[slot].count + ex_item.count as u16).min(ITEMCOUNT_MAX);
-            // C++: if (!pTable.m_bCountable) pDstItem->sCount = 1;
             if item_countable == 0 {
                 inv[slot].count = 1;
             }
@@ -849,7 +815,6 @@ async fn exchange_decide(session: &mut ClientSession) -> anyhow::Result<()> {
     world.send_to_session_owned(partner_sid, partner_pkt);
 
     // Recalculate ability and finish trade for both
-    // C++ Reference: TradeHandler.cpp:539,543 — SetUserAbility + SendItemWeight for both
     // Weight notification is integrated into set_user_ability().
     world.set_user_ability(sid);
     world.set_user_ability(partner_sid);
@@ -883,8 +848,6 @@ async fn exchange_decide(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// EXCHANGE_CANCEL (8): Cancel the trade.
-///
-/// C++ Reference: `CUser::ExchangeCancel()` in `TradeHandler.cpp:586-620`
 pub(crate) async fn exchange_cancel(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -905,7 +868,6 @@ pub(crate) async fn exchange_cancel(session: &mut ClientSession) -> anyhow::Resu
     session.send_packet(&cancel_pkt).await?;
 
     // Send inventory refresh (WIZ_ITEM_MOVE type=2) so client resyncs
-    // C++ Reference: TradeHandler.cpp:597-608
     send_inventory_refresh(&world, session.pool(), sid).await;
 
     // Cancel partner too
@@ -922,8 +884,6 @@ pub(crate) async fn exchange_cancel(session: &mut ClientSession) -> anyhow::Resu
 }
 
 /// Validate that a player can receive the partner's exchange items.
-///
-/// C++ Reference: `CUser::CheckExchange()` in `TradeHandler.cpp:655-732`
 fn check_exchange(world: &crate::world::WorldState, sid: u16) -> bool {
     let partner_sid = match world.get_exchange_user(sid) {
         Some(p) => p,
@@ -971,8 +931,6 @@ fn check_exchange(world: &crate::world::WorldState, sid: u16) -> bool {
 }
 
 /// Second-pass validation before executing the trade: verify item placement.
-///
-/// C++ Reference: `CUser::CheckExecuteExchange()` in `TradeHandler.cpp:828-887`
 /// Validates:
 /// - Player is in TRADE_STATE_DECIDING
 /// - Each partner item exists in the item table
@@ -1092,8 +1050,6 @@ async fn send_add_fail(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Send a full inventory refresh packet (WIZ_ITEM_MOVE type=2) after exchange cancel.
-///
-/// C++ Reference: `TradeHandler.cpp:597-608` — sends all HAVE slots so the client
 /// resyncs its inventory UI after items are returned from the exchange.
 /// Calls `SetSpecialItemBuffer` per slot for Cypher Ring / pet data (C++ line 604).
 pub async fn send_inventory_refresh(world: &crate::world::WorldState, pool: &ko_db::DbPool, sid: u16) {
@@ -1299,7 +1255,7 @@ mod tests {
         assert_eq!(TRADE_STATE_DECIDING, 5);
     }
 
-    /// Test exchange sub-opcode constants match C++ reference.
+    /// Test exchange sub-opcode constants match protocol specification.
     #[test]
     fn test_exchange_sub_opcode_constants() {
         assert_eq!(EXCHANGE_REQ, 1);
@@ -1330,7 +1286,7 @@ mod tests {
         assert!(!(ITEM_NO_TRADE_MIN..=ITEM_NO_TRADE_MAX).contains(&ITEM_GOLD));
     }
 
-    /// Test gold add uses pos=255 as C++ reference.
+    /// Test gold add uses pos=255 as protocol specification.
     #[test]
     fn test_exchange_gold_add_pos() {
         let mut pkt = Packet::new(Opcode::WizExchange as u8);
@@ -1667,7 +1623,6 @@ mod tests {
     // ── Sprint 108: C++ Parity Tests ──────────────────────────────────
 
     /// Test that partner bidirectional exchange user check works.
-    /// C++ Reference: TradeHandler.cpp:233 — `pUser->m_sExchangeUser != GetSocketID()`
     #[test]
     fn test_exchange_bidirectional_partner_check() {
         let world = WorldState::new();
@@ -1701,7 +1656,6 @@ mod tests {
     }
 
     /// Test DECIDING state: after one player decides, both states are valid.
-    /// C++ Reference: TradeHandler.cpp:249-250 — partner can be state 4 or 5.
     #[test]
     fn test_exchange_deciding_state_allows_partner_add() {
         let world = WorldState::new();
@@ -1751,7 +1705,6 @@ mod tests {
     }
 
     /// Verify item expiration check constant is used in exchange_add.
-    /// C++ Reference: TradeHandler.cpp:297 — `pSrcItem->isExpirationTime()`
     #[test]
     fn test_expiration_time_blocks_trade() {
         // An item with expire_time > 0 is considered an expiration item.
@@ -1766,7 +1719,6 @@ mod tests {
     // ── Sprint 275: Exchange Agree Validation Tests ──────────────────────
 
     /// Test that the trade acceptor must NOT be in SENDER state.
-    /// C++ Reference: TradeHandler.cpp:163-169 — m_isRequestSender check
     #[test]
     fn test_exchange_agree_sender_cannot_accept() {
         let world = WorldState::new();
@@ -1799,7 +1751,6 @@ mod tests {
     }
 
     /// Test that zone mismatch blocks exchange_agree.
-    /// C++ Reference: TradeHandler.cpp:147 — GetZoneID() != GetZoneID()
     #[test]
     fn test_exchange_agree_blocks_different_zones() {
         let world = WorldState::new();
@@ -1834,7 +1785,6 @@ mod tests {
     }
 
     /// Test that mutual exchange user link is validated in exchange_add.
-    /// C++ Reference: TradeHandler.cpp:233 — zone equality for exchange_add
     #[test]
     fn test_exchange_add_zone_check() {
         // Zone equality is now checked in exchange_add partner validation
@@ -1844,7 +1794,6 @@ mod tests {
     }
 
     /// Test that exchange_cancel sends inventory refresh packet.
-    /// C++ Reference: TradeHandler.cpp:597-608 — WIZ_ITEM_MOVE type=2
     #[tokio::test]
     async fn test_exchange_cancel_sends_inventory_refresh() {
         let world = WorldState::new();
@@ -2000,7 +1949,6 @@ mod tests {
 
     // ── Sprint 314: Same-account trade prevention ────────────────────
 
-    /// C++ Reference: TradeHandler.cpp:70-72 (ExchangeReq) and 163-169 (ExchangeAgree)
     /// `if (pUser->GetAccountName() == GetAccountName())` — blocks same-account trade
     /// to prevent item duplication between characters on the same account.
     #[test]
@@ -2036,7 +1984,6 @@ mod tests {
     // ── Sprint 327: exchange_add re-validation tests ─────────────────
 
     /// Test that exchange_add re-validates nation during item addition.
-    /// C++ Reference: TradeHandler.cpp:241
     #[test]
     fn test_exchange_add_nation_revalidation() {
         let world = WorldState::new();
@@ -2073,7 +2020,6 @@ mod tests {
     }
 
     /// Test that exchange_add re-validates identity (same account) during item addition.
-    /// C++ Reference: TradeHandler.cpp:244-247
     #[test]
     fn test_exchange_add_identity_revalidation() {
         // Simulates the re-validation checks at exchange_add time:
@@ -2118,7 +2064,6 @@ mod tests {
     /// to default (item_id=0). On cancel, the restore must reconstruct the slot
     /// from exchange data rather than failing the item_id match check.
     ///
-    /// C++ Reference: TradeHandler.cpp:313 — C++ only decrements count, never
     /// clears slot, so restore always finds matching item_id. Our Rust code
     /// clears at count=0, so restore must handle the empty-slot case.
     #[test]

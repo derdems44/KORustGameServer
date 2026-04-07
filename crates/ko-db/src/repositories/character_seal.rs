@@ -1,6 +1,4 @@
 //! Character Seal repository — DB operations for character sealing/unsealing.
-//!
-//! C++ Reference: `SealHandler.cpp`, `DBAgent.cpp` (CharacterSealProcess, CharacterUnSealProcess)
 
 use sqlx::PgPool;
 
@@ -19,7 +17,6 @@ impl<'a> CharacterSealRepository<'a> {
 
     /// Get all seal mappings for an account.
     ///
-    /// C++ Reference: `CUser::ReqCharacterSealShowList()` — loads sealed character info.
     pub async fn get_seal_list(
         &self,
         account_id: &str,
@@ -35,7 +32,6 @@ impl<'a> CharacterSealRepository<'a> {
 
     /// Load a sealed character item by its unique_id.
     ///
-    /// C++ Reference: `m_CharacterSealItemMapping.GetData(nUniqueID)` +
     /// `m_CharacterSealItemArray.GetData(nItemSerial)`
     pub async fn load_seal_item_by_unique_id(
         &self,
@@ -54,7 +50,6 @@ impl<'a> CharacterSealRepository<'a> {
 
     /// Seal a character: snapshot userdata into character_seal_items.
     ///
-    /// C++ Reference: `CDBAgent::CharacterSealProcess()` — calls `CHARACTER_SEAL_PROCEED` SP.
     ///
     /// Returns the seal_item_id (PK) on success.
     pub async fn seal_character(
@@ -127,7 +122,6 @@ impl<'a> CharacterSealRepository<'a> {
 
     /// Restore a sealed character back to userdata.
     ///
-    /// C++ Reference: `CDBAgent::CharacterUnSealProcess()` — calls `CHARACTER_UNSEAL_PROCEED` SP.
     pub async fn unseal_character(
         &self,
         unique_id: i32,
@@ -218,7 +212,6 @@ impl<'a> CharacterSealRepository<'a> {
 
     /// Delete character data (userdata + user_items) after sealing.
     ///
-    /// C++ Reference: After `CHARACTER_SEAL_PROCEED`, the original character data is removed.
     pub async fn delete_character_data(&self, char_name: &str) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM user_items WHERE str_user_id = $1")
             .bind(char_name)
@@ -233,7 +226,6 @@ impl<'a> CharacterSealRepository<'a> {
 
     /// Load a sealed character summary by item serial number.
     ///
-    /// C++ Reference: `ShowCyperRingItemInfo(pkt, nSerialNum)` in `SealHandler.cpp:796`
     /// — looks up `m_CharacterSealItemArray.GetData(nSerialNum)`.
     ///
     /// Returns (unique_id, char_name, class, level, exp, race) or None.

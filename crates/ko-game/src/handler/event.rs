@@ -1,13 +1,5 @@
 //! WIZ_EVENT (0x5F) handler -- Temple / Event System.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/EventSigningSystem.cpp`
-//!                `KOOriginalGameServer/GameServer/MonsterStoneSystem.cpp`
-//!                `KOOriginalGameServer/GameServer/DrakiTowerSystem.cpp`
-//!                `KOOriginalGameServer/GameServer/DungeonDefenceSystem.cpp`
-//!                `KOOriginalGameServer/GameServer/EventMainSystem.cpp`
-//!
 //! ## Sub-opcodes (TempleProcess dispatch)
-//!
 //! | Value | Name                       | Description                              |
 //! |-------|----------------------------|------------------------------------------|
 //! | 6     | MONSTER_STONE              | Monster Stone dungeon entry               |
@@ -41,13 +33,10 @@ use crate::inventory_constants::RIGHTHAND;
 use super::mining::{FISHING_ROD, GOLDEN_FISHING_ROD, GOLDEN_MATTOCK, MATTOCK};
 
 /// Event sub-opcode constants.
-///
-/// C++ Reference: `packets.h` enum values
 mod sub_opcode {
     /// Monster Stone dungeon entry.
     pub const MONSTER_STONE: u8 = 6;
     /// Active event info request/response (C++ TEMPLE_EVENT = 7).
-    /// C++ Reference: `EventMainSystem.cpp:1971` — `TempleEventGetActiveEventTime()`
     pub const TEMPLE_EVENT: u8 = 7;
     /// Join an ongoing temple event (BDW / Juraid / Chaos).
     pub const TEMPLE_EVENT_JOIN: u8 = 8;
@@ -73,8 +62,6 @@ mod sub_opcode {
 }
 
 /// Event type IDs used by the temple event system.
-///
-/// C++ Reference: `packets.h` enum `EventOpCode`. Used in tests.
 #[allow(dead_code)]
 mod event_type {
     /// Border Defence War (BDW).
@@ -90,9 +77,6 @@ mod event_type {
 }
 
 /// Handle incoming WIZ_EVENT (0x5F) packet.
-///
-/// C++ Reference: `CUser::TempleProcess()` in `EventSigningSystem.cpp:44-76`
-///
 /// The first byte is a sub-opcode that determines the event action.
 /// Prison zone players are blocked from event participation (C++ check).
 pub async fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Result<()> {
@@ -127,12 +111,7 @@ pub async fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Resu
 }
 
 /// Send active temple event info to the client.
-///
-/// C++ Reference: `CGameServerDlg::TempleEventGetActiveEventTime()` in
-/// `EventMainSystem.cpp:1971-1983`
-///
 /// Wire: `WIZ_EVENT(0x5F) << u8(7) << i16(active_event) << u16(remain_seconds)`
-///
 /// If no event is active, sends `active_event = -1, remain_seconds = 0`.
 async fn handle_temple_event_info(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world();
@@ -170,9 +149,6 @@ async fn handle_temple_event_info(session: &mut ClientSession) -> anyhow::Result
 }
 
 /// Monster Stone sub-opcode handler.
-///
-/// C++ Reference: `CUser::MonsterStoneProcess()` in `MonsterStoneSystem.cpp:10-395`
-///
 /// The client sends a u32 item ID identifying the monster stone to activate.
 /// Server validates the request, allocates a room, spawns monsters, and
 /// teleports the player to the Monster Stone zone.
@@ -390,7 +366,6 @@ async fn handle_monster_stone(
     }
 
     // ── Set event_room on all members (1-based) + Monster Stone status flag ──
-    // C++ Reference: MonsterStoneSystem.cpp:231,241,393 — m_sMonsterStoneStatus = true
     for &member_sid in &eligible_members {
         world.update_session(member_sid, |h| {
             h.event_room = event_room_id;
@@ -440,7 +415,6 @@ async fn handle_monster_stone(
     }
 
     // ── Teleport all members (C++ lines 207-243) ─────────────────────────
-    // C++ Reference: MonsterStoneSystem.cpp:228-232 — ZoneChange + timer per member
     let timer_pkt = monster_stone::build_timer_packet(monster_stone::ROOM_DURATION_SECS as u16);
     let select_pkt =
         monster_stone::build_select_msg_timer(monster_stone::ROOM_DURATION_SECS as u16);
@@ -453,7 +427,6 @@ async fn handle_monster_stone(
             session.send_packet(&select_pkt).await?;
         } else {
             // Party member — server-initiated teleport
-            // C++ Reference: MonsterStoneSystem.cpp:228-232
             super::zone_change::server_teleport_to_zone(
                 &world,
                 member_sid,
@@ -479,12 +452,8 @@ async fn handle_monster_stone(
 }
 
 /// Temple event join handler.
-///
-/// C++ Reference: `CUser::TempleJoinEvent()` in `EventSigningSystem.cpp:82-213`
-///
 /// Validates the player can join the active event, then adds them to the event
 /// sign-up queue via `EventRoomManager::add_signed_up_user()`.
-///
 /// Validation checks (per C++):
 /// 1. Player is not already an event user
 /// 2. Player is not in prison zone
@@ -493,7 +462,6 @@ async fn handle_monster_stone(
 /// 5. Level requirements (if automatic event)
 /// 6. Loyalty requirements (if automatic event)
 /// 7. Gold requirements (if automatic event)
-///
 /// Response: `WIZ_EVENT(0x5F) + TEMPLE_EVENT_JOIN(8) + result(u8) + active_event(i16)`
 /// - result=1: success
 /// - result=4: fail
@@ -509,7 +477,6 @@ async fn handle_temple_join(session: &mut ClientSession) -> anyhow::Result<()> {
         .read_temple_event(|s| (s.active_event, s.allow_join, s.is_active));
 
     // Check: player already signed up or in prison
-    // C++ Reference: `if (isEventUser() || GetZoneID() == ZONE_PRISON || isInTempleEventZone())`
     let player_zone = world.get_position(sid).map(|p| p.zone_id).unwrap_or(0);
 
     if player_zone == ZONE_PRISON {
@@ -555,7 +522,6 @@ async fn handle_temple_join(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // CHAOS event: reject players who are mining, fishing, or holding tools
-    // C++ Reference: EventSigningSystem.cpp:182-190
     if active_event == event_type::TEMPLE_EVENT_CHAOS {
         if world.is_mining(sid) || world.is_fishing(sid) {
             let mut resp = Packet::new(Opcode::WizEvent as u8);
@@ -639,19 +605,14 @@ async fn handle_temple_join(session: &mut ClientSession) -> anyhow::Result<()> {
     );
 
     // Broadcast updated counter to all signed-up users.
-    // C++ Reference: per-event counter functions in EventSigningSystem.cpp:158-204
     event_room::broadcast_event_counter(&world);
 
     Ok(())
 }
 
 /// Temple event disband handler.
-///
-/// C++ Reference: `CUser::TempleDisbandEvent()` in `EventSigningSystem.cpp:215-331`
-///
 /// Removes the player from the sign-up queue if still in the signing phase.
 /// If the event has moved to active phase, disband is rejected.
-///
 /// Response: `WIZ_EVENT(0x5F) + TEMPLE_EVENT_DISBAND(9) + result(u8) + active_event(u16)`
 /// - result=1: success
 /// - result=4: fail
@@ -691,7 +652,6 @@ async fn handle_temple_disband(session: &mut ClientSession) -> anyhow::Result<()
     }
 
     // Check: event already in active phase (can't disband)
-    // C++ Reference: `if (g_pMain->pTempleEvent.isActive)` → fail
     if is_active {
         let mut resp = Packet::new(Opcode::WizEvent as u8);
         resp.write_u8(sub_opcode::TEMPLE_EVENT_DISBAND);
@@ -721,7 +681,6 @@ async fn handle_temple_disband(session: &mut ClientSession) -> anyhow::Result<()
     };
 
     // Update nation counts
-    // C++ Reference: `GetNation() == KARUS ? KarusUserCount-- : ElMoradUserCount--`
     world.event_room_manager.update_temple_event(|s| {
         if removed_user.nation == 1 {
             s.karus_user_count = s.karus_user_count.saturating_sub(1);
@@ -748,7 +707,6 @@ async fn handle_temple_disband(session: &mut ClientSession) -> anyhow::Result<()
     );
 
     // Broadcast updated counter to all signed-up users.
-    // C++ Reference: per-event counter functions in EventSigningSystem.cpp:270-324
     // C++ also sends the counter directly to the disbanding user (who was already removed
     // from the signed-up list and thus won't receive the broadcast).
     if let Some(counter_pkt) = event_room::broadcast_event_counter(&world) {
@@ -759,9 +717,6 @@ async fn handle_temple_disband(session: &mut ClientSession) -> anyhow::Result<()
 }
 
 /// Draki Tower enter handler.
-///
-/// C++ Reference: `CUser::DrakiTowerTempleEnter()` in `DrakiTowerSystem.cpp:14-96`
-///
 /// The client sends item_id(u32) + enter_dungeon(u8).
 /// Validates the player is in their nation's castle zone (Luferson/Elmorad),
 /// has the entrance item or remaining entrance limit, and allocates a room.
@@ -884,7 +839,6 @@ async fn handle_draki_enter(
     };
 
     // ── Consume entrance: decrement limit or remove certificate ────────
-    // C++ Reference: DatabaseThread.cpp:80-85, 109-110
     if entrance_limit > 0 {
         let new_limit = entrance_limit.saturating_sub(1);
         world.update_session(sid, |h| {
@@ -937,7 +891,6 @@ async fn handle_draki_enter(
     });
 
     // ── Spawn initial monsters for the first sub-stage ─────────────────
-    // C++ Reference: DatabaseThread.cpp:148 → SendDrakiTempleDetail(true)
     let spawn_list: Vec<(u16, bool, f32, f32)> = {
         let stages = world.draki_tower_stages();
         let monsters = world.draki_monster_list();
@@ -975,7 +928,6 @@ async fn handle_draki_enter(
     }
 
     // Set the kill counter = number of monsters spawned (countdown pattern)
-    // C++ Reference: NpcThread.cpp:857-858 — incremented per monster at spawn time
     {
         let monster_count = spawn_list.iter().filter(|(_, is_m, _, _)| *is_m).count() as u32;
         let mut rooms = world.draki_tower_rooms_write();
@@ -995,7 +947,6 @@ async fn handle_draki_enter(
     .await?;
 
     // ── Send timer packets (BUG-9 fix: match C++ SendDrakiTempleDetail format) ──
-    // C++ Reference: SendDrakiTempleDetail(true) lines 161-184
     {
         let time_limit = draki_tower::SUB_STAGE_TIME_LIMIT as u16;
 
@@ -1037,12 +988,8 @@ async fn handle_draki_enter(
 }
 
 /// Draki Tower list handler.
-///
-/// C++ Reference: `CUser::DrakiTowerList()` → `CDBAgent::ReqDrakiTowerList()`
-///                `DBAgent.cpp:4516-4631`
-///
 /// Builds the ranking list packet: 5 class-rank entries + 1 user entry.
-/// Packet format matches C++ `pkt.SByte()` mode.
+/// Packet format matches `pkt.SByte()` mode.
 async fn handle_draki_list(session: &mut ClientSession) -> anyhow::Result<()> {
     use crate::handler::draki_tower;
     use ko_db::repositories::draki_tower::DrakiTowerRepository;
@@ -1092,7 +1039,6 @@ async fn handle_draki_list(session: &mut ClientSession) -> anyhow::Result<()> {
     };
 
     // Build response packet
-    // C++ Reference: DBAgent.cpp:4585-4631
     let mut resp = Packet::new(Opcode::WizEvent as u8);
     resp.write_u8(sub_opcode::TEMPLE_DRAKI_TOWER_LIST);
 
@@ -1142,9 +1088,6 @@ async fn handle_draki_list(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Draki Tower return to town handler.
-///
-/// C++ Reference: `CUser::DrakiTowerTown()` in `DrakiTowerSystem.cpp:500-525`
-///
 /// Initiates a 20-second countdown to return to town from Draki Tower.
 async fn handle_draki_town(session: &mut ClientSession) -> anyhow::Result<()> {
     use crate::handler::draki_tower;
@@ -1167,7 +1110,6 @@ async fn handle_draki_town(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // Apply town return state (sets 20s timer)
-    // C++ Reference: DrakiTowerTown() in DrakiTowerSystem.cpp:500-524
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -1222,9 +1164,6 @@ async fn handle_draki_town(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Dungeon Defence sign-up handler.
-///
-/// C++ Reference: `CUser::DungeonDefenceSign()` in `DungeonDefenceSystem.cpp:8-200`
-///
 /// Validates the party, finds a free room, determines difficulty,
 /// spawns guardian NPCs, and teleports all party members into zone 89.
 async fn handle_dungeon_defence_sign(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -1291,7 +1230,6 @@ async fn handle_dungeon_defence_sign(session: &mut ClientSession) -> anyhow::Res
     // ── Validate all party members (C++ lines 30-115) ─────────────────
     for &msid in &members {
         // BUG-5 fix: must be a Full Moon Rift party (party_type == 2)
-        // C++ Reference: DungeonDefenceSystem.cpp — m_sUserPartyType check
         let m_party_type = world.with_session(msid, |h| h.party_type).unwrap_or(0);
         if m_party_type != 2 {
             session
@@ -1486,7 +1424,6 @@ mod tests {
 
     #[test]
     fn test_temple_join_success_packet() {
-        // C++ Reference: result << uint8(1) << nActiveEvent;
         let active_event: i16 = TempleEventType::BorderDefenceWar as i16; // 4
         let mut resp = Packet::new(Opcode::WizEvent as u8);
         resp.write_u8(sub_opcode::TEMPLE_EVENT_JOIN);
@@ -1518,7 +1455,6 @@ mod tests {
 
     #[test]
     fn test_temple_disband_success_packet() {
-        // C++ Reference: result << uint8(1) << nActiveEvent;
         let active_event_u16: u16 = TempleEventType::JuraidMountain as u16; // 100
         let mut resp = Packet::new(Opcode::WizEvent as u8);
         resp.write_u8(sub_opcode::TEMPLE_EVENT_DISBAND);
@@ -1535,7 +1471,6 @@ mod tests {
 
     #[test]
     fn test_zone_prison_constant() {
-        // C++ Reference: Define.h:207 — ZONE_PRISON = 92
         assert_eq!(ZONE_PRISON, 92);
     }
 
@@ -1861,7 +1796,6 @@ mod tests {
 
     #[test]
     fn test_monster_stone_vendor_npc_ids() {
-        // C++ Reference: MonsterStoneSystem.cpp:191-205, 371-385
         // Three vendor NPCs spawned per room
         let vendor_npcs: [u16; 3] = [16062, 12117, 31508];
         assert_eq!(vendor_npcs.len(), 3);
@@ -1873,7 +1807,6 @@ mod tests {
 
     #[test]
     fn test_monster_stone_vendor_coords_per_zone() {
-        // C++ Reference: MonsterStoneSystem.cpp:191-205 (Zone 81 coords)
         let z81: [(f32, f32); 3] = [(204.0, 201.0), (204.0, 197.0), (204.0, 193.0)];
         let z82: [(f32, f32); 3] = [(203.0, 202.0), (203.0, 197.0), (203.0, 193.0)];
         let z83: [(f32, f32); 3] = [(204.0, 207.0), (204.0, 200.0), (204.0, 194.0)];
@@ -1889,7 +1822,6 @@ mod tests {
 
     #[test]
     fn test_monster_stone_event_room_id_is_one_based() {
-        // C++ Reference: event_room = roomid + 1 (1-based)
         // room_id 0 → event_room_id 1
         // room_id 749 → event_room_id 750
         let room_id: u16 = 0;

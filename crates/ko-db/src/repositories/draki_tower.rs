@@ -1,6 +1,4 @@
 //! Draki Tower instance dungeon repository.
-//!
-//! C++ Reference: `DrakiTowerSystem.cpp`, DB agent calls for
 //!                stage/monster loading and user data persistence.
 
 use crate::models::draki_tower::{
@@ -21,7 +19,6 @@ impl<'a> DrakiTowerRepository<'a> {
 
     /// Load all stage definitions from the database.
     ///
-    /// C++ Reference: Loading `m_DrakiRoomListArray`
     pub async fn load_all_stages(&self) -> Result<Vec<DrakiTowerStageRow>, sqlx::Error> {
         sqlx::query_as::<_, DrakiTowerStageRow>(
             "SELECT id, draki_stage, draki_sub_stage, draki_tower_npc_state \
@@ -33,7 +30,6 @@ impl<'a> DrakiTowerRepository<'a> {
 
     /// Load all monster spawn definitions from the database.
     ///
-    /// C++ Reference: Loading `m_DrakiMonsterListArray`
     pub async fn load_all_monsters(&self) -> Result<Vec<DrakiMonsterListRow>, sqlx::Error> {
         sqlx::query_as::<_, DrakiMonsterListRow>(
             "SELECT id, stage_id, monster_id, pos_x, pos_z, s_direction, is_monster \
@@ -45,7 +41,6 @@ impl<'a> DrakiTowerRepository<'a> {
 
     /// Load user Draki Tower progress data.
     ///
-    /// C++ Reference: `g_DBAgent.ReqDrakiTowerList()`
     pub async fn load_user_data(
         &self,
         user_id: &str,
@@ -67,7 +62,6 @@ impl<'a> DrakiTowerRepository<'a> {
     /// - same stage but faster time.
     ///   Entrance limit is always updated.
     ///
-    /// C++ Reference: `g_DBAgent.UpdateDrakiTowerData()` — MSSQL SP checks
     /// `IF @bDrakiStage > bDrakiStage OR (@bDrakiStage = bDrakiStage AND @iDrakiTime <= iDrakiTime)`
     pub async fn save_user_data(
         &self,
@@ -110,7 +104,6 @@ impl<'a> DrakiTowerRepository<'a> {
 
     /// Update only the entrance limit for a user.
     ///
-    /// C++ Reference: `g_DBAgent.UpdateDrakiTowerLimitLastUpdate()`
     pub async fn update_entrance_limit(
         &self,
         user_id: &str,
@@ -129,7 +122,6 @@ impl<'a> DrakiTowerRepository<'a> {
 
     /// Reset all users' entrance limits to 3 (daily reset at 18:00).
     ///
-    /// C++ Reference: `CGameServerDlg::DrakiTowerLimitReset()`
     pub async fn reset_all_entrance_limits(&self) -> Result<u64, sqlx::Error> {
         let result = sqlx::query("UPDATE user_draki_tower_data SET b_draki_enterance_limit = 3")
             .execute(self.pool)
@@ -139,7 +131,6 @@ impl<'a> DrakiTowerRepository<'a> {
 
     /// Load all rift rankings ordered by class then rank.
     ///
-    /// C++ Reference: `g_DBAgent.ReqDrakiTowerList()` ranking portion
     pub async fn load_rift_ranks(&self) -> Result<Vec<DrakiTowerRiftRankRow>, sqlx::Error> {
         sqlx::query_as::<_, DrakiTowerRiftRankRow>(
             "SELECT s_index, class, class_name, rank_id, str_user_id, b_stage, finish_time \
@@ -151,7 +142,6 @@ impl<'a> DrakiTowerRepository<'a> {
 
     /// Upsert a rift ranking entry for a user in a specific class.
     ///
-    /// C++ Reference: `g_DBAgent.UpdateDrakiTowerRank()`
     pub async fn upsert_rift_rank(
         &self,
         class: i32,

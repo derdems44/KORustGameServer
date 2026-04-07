@@ -5,7 +5,7 @@ use super::*;
 impl WorldState {
     // ── Equipment Stat Calculation ──────────────────────────────────
 
-    /// Weapon kind constants from C++ `GameDefine.h:1224-1245`.
+    /// Weapon kind constants from `GameDefine.h:1224-1245`.
     const WEAPON_KIND_DAGGER: i32 = 11;
 
     const WEAPON_KIND_1H_SWORD: i32 = 21;
@@ -42,26 +42,23 @@ impl WorldState {
 
     // ── Warehouse (Inn) Methods ────────────────────────────────────────
 
-    /// Maximum warehouse slots (C++ `WAREHOUSE_MAX = 192`, 8 pages * 24).
+    /// Maximum warehouse slots (`WAREHOUSE_MAX = 192`, 8 pages * 24).
     pub const WAREHOUSE_MAX: usize = crate::inventory_constants::WAREHOUSE_MAX;
 
     // ── Repurchase (Trash Item) Methods ──────────────────────────────
 
     /// Maximum number of trash items per user.
     ///
-    /// C++ Reference: `m_sFreeRepurchaseID` initialised with 10,000 IDs.
     pub const TRASH_ITEM_MAX: usize = 10_000;
 
     /// Maximum number of items displayed in the repurchase list.
     ///
-    /// C++ Reference: `SendRepurchaseMsg()` — `if (sCount >= 250) break;`
     pub const TRASH_DISPLAY_MAX: u16 = 250;
 
     // ── Inventory Methods ────────────────────────────────────────────
 
     /// Set the full inventory for a session (called on game entry).
     ///
-    /// C++ Reference: `CUser::m_sItemArray` — populated from DB on login.
     pub fn set_inventory(&self, id: SessionId, inventory: Vec<UserItemSlot>) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             handle.inventory = inventory;
@@ -115,7 +112,6 @@ impl WorldState {
     /// Used by item_move handler for directions 12 (InvenToPet) and 13 (PetToInven).
     /// Returns false if the session has no active pet.
     ///
-    /// C++ Reference: `ItemHandler.cpp:1055-1075` — pet inventory transfer
     pub fn update_inventory_and_pet(
         &self,
         id: SessionId,
@@ -135,7 +131,6 @@ impl WorldState {
 
     /// Get the right-hand weapon's item definition, if one is equipped.
     ///
-    /// C++ Reference: `GetItemPrototype(RIGHTHAND)` in `AttackHandler.cpp:60`
     ///
     /// Returns `None` if no weapon is in the right hand slot or the item is not found.
     pub fn get_right_hand_weapon(&self, id: SessionId) -> Option<Item> {
@@ -149,7 +144,6 @@ impl WorldState {
     }
     /// Get the left-hand weapon's item definition, if one is equipped.
     ///
-    /// C++ Reference: `GetItemPrototype(LEFTHAND)` in `AttackHandler.cpp:60`
     pub fn get_left_hand_weapon(&self, id: SessionId) -> Option<Item> {
         self.sessions.get(&id).and_then(|h| {
             let slot = h.inventory.get(Self::LEFTHAND)?;
@@ -161,7 +155,6 @@ impl WorldState {
     }
     /// Get the weapon coefficient for a class based on the equipped weapon kind.
     ///
-    /// C++ Reference: `CUser::SetCoefficient()` in `UserAbilityHandler.cpp:3-91`
     fn get_weapon_coefficient(&self, class: u16, inventory: &[UserItemSlot]) -> f32 {
         let coeff = match self.get_coefficient(class) {
             Some(c) => c,
@@ -205,9 +198,9 @@ impl WorldState {
     const BAG_SLOT_1: usize = Self::INVENTORY_COSP + 6 + 3; // 51
     /// Bag slot 2 (absolute index): INVENTORY_COSP + COSP_BAG2(10) = 52.
     const BAG_SLOT_2: usize = Self::INVENTORY_COSP + 10; // 52
-    /// Item kind for cospre items (C++ `ITEM_KIND_COSPRE = 252`).
+    /// Item kind for cospre items
     const ITEM_KIND_COSPRE: i32 = 252;
-    /// Duplicate item flag value (C++ `isDuplicate()`).
+    /// Duplicate item flag value
     /// Uses the central ITEM_FLAG_DUPLICATE constant from types.rs.
     const ITEM_FLAG_DUPLICATE: u8 = super::ITEM_FLAG_DUPLICATE;
 
@@ -235,7 +228,6 @@ impl WorldState {
 
     /// Compute equipment stats from all inventory items (SetSlotItemValue).
     ///
-    /// C++ Reference: `CUser::SetSlotItemValue()` in `User.cpp:2191-2401`
     ///
     /// This iterates ALL inventory slots (equipped + bag + cospre + mbag):
     /// - Weight: accumulated for all items (bags add to max_weight_bonus instead)
@@ -412,7 +404,6 @@ impl WorldState {
 
     /// Apply set item or cospre set bonuses to equipped stats.
     ///
-    /// C++ Reference: `CUser::ApplySetItemBonuses()` in `User.cpp:2449-2485`
     fn apply_set_item_bonuses(stats: &mut EquippedStats, set: &SetItemRow) {
         stats.item_ac += set.ac_bonus;
         stats.item_max_hp += set.hp_bonus;
@@ -460,7 +451,6 @@ impl WorldState {
 
     /// Apply castellan cape bonuses to equipped stats.
     ///
-    /// C++ Reference: `CUser::ApplyCastellanCapeBonueses()` in `User.cpp:2403-2447`
     fn apply_castellan_cape_bonuses(
         stats: &mut EquippedStats,
         bonus: &KnightsCapeCastellanBonusRow,
@@ -497,7 +487,6 @@ impl WorldState {
     }
     /// Generate a unique item serial number.
     ///
-    /// C++ Reference: `CGameServerDlg::GenerateItemSerial()` in `HelperMethods.cpp:10-35`
     /// C++ encodes server_no + date + increment into a u64.
     /// We use a monotonically-increasing atomic counter for simplicity.
     pub fn generate_item_serial(&self) -> u64 {
@@ -507,7 +496,6 @@ impl WorldState {
 
     /// Full equipment stat recalculation (SetUserAbility).
     ///
-    /// C++ Reference: `CUser::SetUserAbility()` in `UserAbilityHandler.cpp:93-383`
     ///
     /// Lock optimization: snapshot session data under a brief read lock, compute
     /// all stats without holding any session lock, then apply results under a
@@ -628,7 +616,6 @@ impl WorldState {
             }
 
             // Weapon power calculation
-            // C++ Reference: UserAbilityHandler.cpp:99-118 — m_bAddWeaponDamage added BEFORE halving
             let weapon_dmg_bonus = buff.weapon_damage;
             let mut rightpower: u16 = 0;
             let mut leftpower: u16 = 0;
@@ -669,7 +656,6 @@ impl WorldState {
             let totalpower = (rightpower + leftpower).max(3);
 
             // Stat calculations
-            // C++ Reference: GetStatBonusTotal() = GetStatBuff() + GetRebStatBuff() + GetStatItemBonus() + GetStatAchieveBonus()
             let main_str = ch.str as i32
                 + ch.reb_str as i32
                 + stats.stat_bonuses[0] as i32
@@ -686,7 +672,6 @@ impl WorldState {
                 + achieve_stat[3] as i32
                 + buff.intel_mod;
 
-            // C++ Reference: UserAbilityHandler.cpp:127-136
             // C++ uses getStat() (raw base stat, no bonuses) for base_ap threshold.
             let base_str = ch.str as i32;
             let base_int = ch.intel as i32;
@@ -706,7 +691,6 @@ impl WorldState {
             let total_int = main_int;
 
             // Max weight (base + bag/set/cape bonus + weight buff)
-            // C++ Reference: UserAbilityHandler.cpp:142-150
             let str_with_bonus = ch.str as u32
                 + ch.reb_str as u32
                 + stats.stat_bonuses[0] as u32
@@ -718,7 +702,6 @@ impl WorldState {
             if weight_buff > 100 {
                 stats.max_weight += weight_buff as u32;
             }
-            // C++ Reference: UserAbilityHandler.cpp — perk weight bonus
             // `m_sMaxWeight += (perkCount * perkType[weight]) * 10`
             let perk_weight = perk_bonus(perk_levels[0], 0, true);
             if perk_weight > 0 {
@@ -730,7 +713,6 @@ impl WorldState {
             let class_base = ch.class % 100;
             let is_rogue = matches!(class_base, 2 | 7 | 8);
 
-            // C++ Reference: UserAbilityHandler.cpp:161 — BonusAp from cospre/set APBonusPercent
             let bonus_ap = (stats.ap_bonus_amount as f32 + 100.0) / 100.0;
 
             let formula_f = if is_rogue {
@@ -738,7 +720,6 @@ impl WorldState {
                     + (weapon_coeff * power * ch.level as f32 * total_dex as f32)
                     + 3.0
             } else {
-                // C++ Reference: UserAbilityHandler.cpp:170-189
                 // When STR == INT, priest defaults to INT, warrior defaults to STR.
                 let is_priest = matches!(class_base, 4 | 11 | 12);
                 let use_int = ch.intel > ch.str || (ch.intel == ch.str && is_priest);
@@ -751,19 +732,16 @@ impl WorldState {
                     + (weapon_coeff * power * ch.level as f32 * stat)
                     + 3.0
             };
-            // C++: m_sTotalHit = (uint16)(formula * BonusAp) + BaseAp
             // BaseAp is added AFTER BonusAp multiplication (C++ parity)
             stats.total_hit = (formula_f * bonus_ap) as u16;
             if !is_rogue {
                 stats.total_hit = stats.total_hit.wrapping_add(base_ap as u16);
             }
 
-            // C++ Reference: UserAbilityHandler.cpp:336-337 — +1 total_hit if weapon damage buff active
             if weapon_dmg_bonus > 0 {
                 stats.total_hit += 1;
             }
 
-            // C++ Reference: UserAbilityHandler.cpp:2397-2400 — BUFF_TYPE_WEAPON_AC (14)
             // m_sAddArmourAc > 0 → m_sItemAc += m_sAddArmourAc
             // else → m_sItemAc = m_sItemAc * m_bPctArmourAc / 100
             // Pre-computed from single-pass buff aggregation in Phase 1.
@@ -779,7 +757,6 @@ impl WorldState {
                 (coeff_row.ac as f32 * (ch.level as f32 + adjusted_item_ac as f32)) as i16;
 
             // ── Passive skill defense + resistance bonus ─────────────────
-            // C++ Reference: UserAbilityHandler.cpp:218-348
             // PRO_SKILL2 = skill_points[6]
             {
                 let pro_skill2 = ch.skill_points[6];
@@ -905,7 +882,6 @@ impl WorldState {
             }
 
             // Low HP passives
-            // C++ Reference: UserAbilityHandler.cpp:318-333
             {
                 let class_type = ch.class;
                 // MasteredPriest (12) or MasteredWarrior (6): +20% AC at <30% HP
@@ -931,7 +907,6 @@ impl WorldState {
                 }
             }
 
-            // C++ Reference: UserAbilityHandler.cpp:339-340 — +1 total_ac if armour AC buff active
             if buff.armour_ac_flat > 0 || buff.armour_ac_pct > 100 {
                 stats.total_ac += 1;
             }
@@ -942,7 +917,6 @@ impl WorldState {
             }
 
             // INT > 100 bonus resistance
-            // C++ Reference: UserAbilityHandler.cpp:346-348 — uses GetStat() (base stat only)
             {
                 let base_int = ch.intel as i32;
                 if base_int > 100 {
@@ -950,7 +924,6 @@ impl WorldState {
                 }
             }
 
-            // C++ Reference: UserAbilityHandler.cpp:163-164, 191, 352 — achievement bonuses
             // achieve_stat_bonuses[5] = attack, [6] = defense
             let achieve_attack = achieve_stat[5];
             let achieve_defense = achieve_stat[6];
@@ -961,12 +934,10 @@ impl WorldState {
                 stats.total_ac += achieve_defense;
             }
 
-            // C++ Reference: UserAbilityHandler.cpp:207-211 — perk attack bonus
             let perk_attack = perk_bonus(perk_levels[12], 4, true);
             if perk_attack > 0 {
                 stats.total_hit += perk_attack as u16;
             }
-            // C++ Reference: UserAbilityHandler.cpp:201-205 — perk defence bonus
             let perk_defence = perk_bonus(perk_levels[11], 3, true);
             if perk_defence > 0 {
                 stats.total_ac += perk_defence as i16;
@@ -995,9 +966,7 @@ impl WorldState {
         }
 
         // ── HP/MP computation (still Phase 2, no session lock) ──────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:246-247 — SetMaxHp:
         //   m_MaxHp = formula(total_sta) + m_sMaxHPAmount + m_sItemMaxHp + 20
-        // C++ Reference: UserHealtMagicSpSystem.cpp:326-327 — SetMaxMp:
         //   m_MaxMp = formula(total_intel) + m_sMaxMPAmount + m_sItemMaxMp + 20
         // When coefficient exists, base is from formula; otherwise use existing max_hp/max_mp.
         let hp_before_buff = {
@@ -1017,7 +986,6 @@ impl WorldState {
                 // No coefficient: use existing max_hp + item bonus as base
                 (ch.max_hp as i32 + stats.item_max_hp as i32).max(20)
             };
-            // C++ Reference: UserHealtMagicSpSystem.cpp:249-254 — perk HP bonus
             // Does NOT check status, only perkCount.
             let perk_hp = perk_bonus(perk_levels[1], 1, false);
             base + perk_hp
@@ -1029,7 +997,6 @@ impl WorldState {
         };
         let mut new_max_hp = (hp_before_buff + buff_hp_bonus).clamp(20, i16::MAX as i32) as i16;
 
-        // C++ Reference: UserHealtMagicSpSystem.cpp:268-269
         //   if (m_MaxHp > pServerSetting.maxplayerhp && !isGM())
         //       m_MaxHp = pServerSetting.maxplayerhp;
         let max_player_hp = self
@@ -1068,7 +1035,6 @@ impl WorldState {
             } else {
                 (ch.max_mp as i32 + stats.item_max_mp as i32).max(0)
             };
-            // C++ Reference: UserHealtMagicSpSystem.cpp:329-345 — perk MP bonus
             // Applied in both MP and SP branches. Does NOT check status.
             let perk_mp = perk_bonus(perk_levels[2], 2, false);
             base + perk_mp
@@ -1106,7 +1072,6 @@ impl WorldState {
         }
 
         // Send WIZ_WEIGHT_CHANGE only when weight actually changed.
-        // C++ Reference: UserAbilityHandler.cpp:158 — `if (tempMaxWeight != m_sMaxWeight) SendItemWeight();`
         // This ensures all callers (mining, crafting, loot, repair, zone change, etc.)
         // automatically sync the client's weight display without manual per-handler sends.
         {
@@ -1129,7 +1094,6 @@ impl WorldState {
 
     /// Check if the player has at least one empty inventory slot (bag area).
     ///
-    /// C++ Reference: `CUser::GetEmptySlot()` in `User.cpp` — returns -1 if no empty slot.
     pub fn has_empty_inventory_slot(&self, sid: SessionId) -> bool {
         self.sessions
             .get(&sid)
@@ -1143,7 +1107,6 @@ impl WorldState {
 
     /// Find a free slot for an item in the inventory (bag area).
     ///
-    /// C++ Reference: `CUser::FindSlotForItem()` in `User.cpp:3726-3761`
     pub fn find_slot_for_item(&self, sid: SessionId, item_id: u32, count: u16) -> Option<usize> {
         let item = self.get_item(item_id)?;
         let countable = item.countable.unwrap_or(0);
@@ -1179,7 +1142,6 @@ impl WorldState {
     }
     /// Count free inventory slots (HAVE_MAX range).
     ///
-    /// C++ Reference: `GiveItemExchange.cpp:12-18` — counts empty slots in HAVE range.
     pub fn count_free_inventory_slots(&self, sid: SessionId) -> u32 {
         self.sessions
             .get(&sid)
@@ -1200,7 +1162,6 @@ impl WorldState {
 
     /// Check if a player can carry more weight.
     ///
-    /// C++ Reference: `CUser::CheckWeight()` in `ItemHandler.cpp:7-27`
     pub fn check_weight(&self, sid: SessionId, item_id: u32, count: u16) -> bool {
         let item = match self.get_item(item_id) {
             Some(i) => i,
@@ -1221,7 +1182,6 @@ impl WorldState {
     }
     /// Give an item to a player's inventory.
     ///
-    /// C++ Reference: `CUser::GiveItem()` in `ItemHandler.cpp:353-408`
     /// Sends `WIZ_ITEM_COUNT_CHANGE` (0x3D) to the client on success.
     pub fn give_item(&self, sid: SessionId, item_id: u32, count: u16) -> bool {
         let item = match self.get_item(item_id) {
@@ -1236,7 +1196,6 @@ impl WorldState {
             }
         };
 
-        // C++ Reference: ItemHandler.cpp:341 — countable==2 items cannot be given
         if item.countable.unwrap_or(0) == 2 {
             return false;
         }
@@ -1258,7 +1217,6 @@ impl WorldState {
             let is_new = slot.item_id == 0;
             slot.item_id = item_id;
             slot.count = slot.count.saturating_add(count).min(ITEMCOUNT_MAX);
-            // C++ Reference: ItemHandler.cpp:385 — durability ALWAYS set to template value
             slot.durability = item.duration.unwrap_or(0);
             if is_new {
                 slot.serial_num = serial;
@@ -1277,7 +1235,6 @@ impl WorldState {
         });
 
         // Send WIZ_ITEM_COUNT_CHANGE outside the DashMap lock.
-        // C++ Reference: `CUser::SendStackChange()` in `ItemHandler.cpp:2424-2449`
         if ok {
             if let Some((slot_pos, new_count, durability)) = pkt_info {
                 let mut pkt = Packet::new(Opcode::WizItemCountChange as u8);
@@ -1302,7 +1259,6 @@ impl WorldState {
     }
     /// Give an item to a player's inventory with an expiration time.
     ///
-    /// C++ Reference: `CUser::GiveItem()` in `ItemHandler.cpp:353-408`
     /// When `expiry_days > 0`, sets `nExpirationTime = UNIXTIME + (86400 * expiry_days)`.
     pub fn give_item_with_expiry(
         &self,
@@ -1316,7 +1272,6 @@ impl WorldState {
             None => return false,
         };
 
-        // C++ Reference: ItemHandler.cpp:341 — countable==2 items cannot be given
         if item.countable.unwrap_or(0) == 2 {
             return false;
         }
@@ -1392,7 +1347,6 @@ impl WorldState {
     }
     /// Give an item directly into a player's warehouse (bank).
     ///
-    /// C++ Reference: `CUser::GiveWerehouseItem()` in `ItemHandler.cpp:413-458`
     /// Finds a free warehouse slot (stacks countable items), sets duration and
     /// optional expiration. Does NOT send a client packet — the client sees
     /// the item when the warehouse window is opened next.
@@ -1474,17 +1428,15 @@ impl WorldState {
     }
     /// Remove an item from a player's inventory.
     ///
-    /// C++ Reference: `CUser::RobItem()` in `ItemHandler.cpp:162-229`
     ///
     /// For `kind == 255` (consumable scroll) items, the usage counter is stored
-    /// in `durability` (C++ `sDuration`), NOT `count` (C++ `sCount`).
+    /// in `durability` (`sDuration`), NOT `count`
     /// The item slot is only cleared when durability reaches 0.
     pub fn rob_item(&self, sid: SessionId, item_id: u32, count: u16) -> bool {
         if count == 0 {
             return true;
         }
 
-        // C++ Reference: ItemHandler.cpp:200 — kind==255 items use sDuration as usage counter.
         let is_consumable_scroll =
             self.items.get(&item_id).and_then(|it| it.kind).unwrap_or(0) == 255;
 
@@ -1534,7 +1486,6 @@ impl WorldState {
         });
 
         // Send WIZ_ITEM_COUNT_CHANGE to the client so UI updates.
-        // C++ Reference: `CUser::RobItem()` calls `SendStackChange()` after removal.
         if ok {
             if let Some((slot_pos, new_count, durability)) = pkt_info {
                 let mut pkt = Packet::new(Opcode::WizItemCountChange as u8);
@@ -1558,7 +1509,6 @@ impl WorldState {
     }
     /// Remove ALL copies of an item from a player's bag slots.
     ///
-    /// C++ Reference: `CUser::RobItem()` with `GetItemCount()` — removes all stacks.
     /// Unlike `rob_item()` which targets a single slot, this clears every slot
     /// containing the specified item_id. Returns true if any items were removed.
     pub fn rob_all_of_item(&self, sid: SessionId, item_id: u32) -> bool {
@@ -1605,7 +1555,6 @@ impl WorldState {
     ///
     /// Sends WIZ_GOLD_CHANGE (0x4A) to the client: `[u8 CoinLoss=2] [u32 amount] [u32 new_total]`.
     ///
-    /// C++ Reference: `CUser::GoldLose()` in `User.cpp`
     pub fn gold_lose(&self, sid: SessionId, amount: u32) -> bool {
         let mut success = false;
         let mut new_gold = 0u32;
@@ -1631,7 +1580,6 @@ impl WorldState {
     /// Used when the caller sends its own response packet containing the updated
     /// gold amount (e.g. item repair, stat/skill reset, clan creation).
     ///
-    /// C++ Reference: `CUser::GoldLose(uint32 gold, bool bSendPacket)` — called
     /// with `bSendPacket = false` in NPCHandler.cpp:69, UserSkillStatPointSystem.cpp:95,148,
     /// KnightsDatabaseHandler.cpp:160.
     pub fn gold_lose_silent(&self, sid: SessionId, amount: u32) -> bool {
@@ -1649,7 +1597,6 @@ impl WorldState {
     ///
     /// Sends WIZ_GOLD_CHANGE (0x4A) to the client: `[u8 CoinGain=1] [u32 amount] [u32 new_total]`.
     ///
-    /// C++ Reference: `CUser::GoldGain()` in `User.cpp`
     pub fn gold_gain(&self, sid: SessionId, amount: u32) {
         let mut new_gold = 0u32;
         self.update_character_stats(sid, |ch| {
@@ -1669,14 +1616,12 @@ impl WorldState {
     }
     /// Gain gold with bonus multipliers applied (monster drops, quest rewards).
     ///
-    /// C++ Reference: `CUser::GoldGain(gold, bSendPacket, bApplyBonus=true)` in `UserGoldSystem.cpp:83-88`
     /// Formula: `gold * (noah_gain_amount + item_gold_bonus + clan_premium_bonus) / 100`
     pub fn gold_gain_with_bonus(&self, sid: SessionId, amount: u32) {
         let noah_gain = self
             .with_session(sid, |h| h.noah_gain_amount as u32)
             .unwrap_or(100);
         let item_bonus = self.get_equipped_stats(sid).item_gold_bonus as u32;
-        // C++ Reference: GameServerDlg.cpp:644 — ClanPreFazlagold = ini.GetInt("CLAN_PREMIUM","GOLDBONUS",2)
         // Only applies when clan premium is active (sClanPremStatus > 0).
         let clan_premium_bonus: u32 = {
             let has_clan_premium = self
@@ -1691,7 +1636,6 @@ impl WorldState {
         let mut bonus_gold = amount * (noah_gain + item_bonus + clan_premium_bonus) / 100;
 
         // Flame level money_rate bonus
-        // C++ Reference: UserGoldSystem.cpp:90-91
         let flame_level = self.with_session(sid, |h| h.flame_level).unwrap_or(0);
         if flame_level > 0 {
             if let Some(feat) = self.get_burning_feature(flame_level) {
@@ -1701,7 +1645,6 @@ impl WorldState {
             }
         }
 
-        // C++ Reference: UserGoldSystem.cpp:93-101 — perk percentCoinsMon bonus
         let perk_coin = self
             .with_session(sid, |h| self.compute_perk_bonus(&h.perk_levels, 6, false))
             .unwrap_or(0);
@@ -1713,7 +1656,6 @@ impl WorldState {
     }
     /// Add gold to a player silently (no WIZ_GOLD_CHANGE packet).
     ///
-    /// C++ Reference: `CUser::GoldGain(gold, bSendPacket=false)` in `UserGoldSystem.cpp:79`
     /// Used when the gold notification is handled by a different packet (e.g. LootPartyCoinDistribution).
     pub fn gold_gain_silent(&self, sid: SessionId, amount: u32) {
         self.update_character_stats(sid, |ch| {
@@ -1727,7 +1669,6 @@ impl WorldState {
     }
     /// Gain gold with bonus multipliers applied, without sending WIZ_GOLD_CHANGE.
     ///
-    /// C++ Reference: `CUser::GoldGain(gold, bSendPacket=false, bApplyBonus=true)` in `UserGoldSystem.cpp:79-88`
     /// Used for party gold distribution where LootPartyCoinDistribution is sent instead.
     pub fn gold_gain_with_bonus_silent(&self, sid: SessionId, amount: u32) {
         let noah_gain = self
@@ -1747,7 +1688,6 @@ impl WorldState {
         let mut bonus_gold = amount * (noah_gain + item_bonus + clan_premium_bonus) / 100;
 
         // Flame level money_rate bonus
-        // C++ Reference: UserGoldSystem.cpp:90-91
         let flame_level = self.with_session(sid, |h| h.flame_level).unwrap_or(0);
         if flame_level > 0 {
             if let Some(feat) = self.get_burning_feature(flame_level) {
@@ -1757,7 +1697,6 @@ impl WorldState {
             }
         }
 
-        // C++ Reference: UserGoldSystem.cpp:93-101 — perk percentCoinsMon bonus
         let perk_coin = self
             .with_session(sid, |h| self.compute_perk_bonus(&h.perk_levels, 6, false))
             .unwrap_or(0);
@@ -1925,7 +1864,6 @@ impl WorldState {
     }
     /// Add a deleted item entry for repurchase tracking.
     ///
-    /// C++ Reference: `ItemHandler.cpp:2536-2556` — adds `_DELETED_ITEM` to map.
     /// Returns false if the user has reached the 10,000 item limit.
     pub fn add_deleted_item(&self, id: SessionId, entry: DeletedItemEntry) -> bool {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
@@ -1946,7 +1884,6 @@ impl WorldState {
     }
     /// Clear the repurchase display index mapping.
     ///
-    /// C++ Reference: `CUser::ResetRepurchaseData()` — clears `m_DeleteItemList`.
     pub fn clear_delete_item_list(&self, id: SessionId) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             handle.delete_item_list.clear();
@@ -2005,7 +1942,6 @@ impl WorldState {
 
     /// Check if a player has at least `count` of an item in their bag slots.
     ///
-    /// C++ Reference: `CUser::CheckExistItem()` in `ItemHandler.cpp`
     pub(crate) fn check_exist_item(&self, sid: SessionId, item_id: u32, count: u16) -> bool {
         if count == 0 {
             return true;
@@ -2026,7 +1962,6 @@ impl WorldState {
     /// Returns how many times the exchange output items can fit in the player's
     /// remaining weight capacity: `(max_weight - item_weight) / sum_output_weights`.
     ///
-    /// C++ Reference: `CUser::GetMaxExchange()` in `QuestHandler.cpp`
     pub(crate) fn get_max_exchange_capacity(&self, sid: SessionId, exchange_id: i32) -> u16 {
         let exchange = match self.item_exchanges.get(&exchange_id) {
             Some(e) => e.clone(),
@@ -2076,7 +2011,6 @@ impl WorldState {
     ///
     /// Returns false if any member lacks the item (no items are removed in that case).
     ///
-    /// C++ Reference: `CUser::RobAllItemParty()` in `QuestHandler.cpp`
     pub(crate) fn rob_all_item_party(&self, sid: SessionId, item_id: u32, count: u16) -> bool {
         if count == 0 {
             return false;
@@ -5014,7 +4948,6 @@ mod tests {
 
     // ── Sprint 244: Priest hit formula tie-break + achievement bonuses ──
 
-    /// C++ Reference: UserAbilityHandler.cpp:170-189
     /// When STR == INT, priest (class_base 4/11/12) defaults to INT.
     #[test]
     fn test_priest_str_equals_int_uses_int() {
@@ -5053,7 +4986,6 @@ mod tests {
         assert_eq!(stats.total_hit, 327);
     }
 
-    /// C++ Reference: UserAbilityHandler.cpp:170-189
     /// When STR == INT, warrior (class_base 1/5/6) defaults to STR.
     #[test]
     fn test_warrior_str_equals_int_uses_str() {
@@ -5091,7 +5023,6 @@ mod tests {
         assert_eq!(stats.total_hit, 615);
     }
 
-    /// C++ Reference: UserAbilityHandler.cpp:188-189
     /// Mage (class_base 3/9/10) falls through to else branch → always uses STR.
     /// Bug fix: is_priest previously matched 4|9|10 (mage novice/master as priest).
     #[test]
@@ -5131,7 +5062,6 @@ mod tests {
         assert_eq!(stats.total_hit, 327);
     }
 
-    /// C++ Reference: UserAbilityHandler.cpp:188-189
     /// Mage with INT > STR still uses STR (else branch, not priest).
     #[test]
     fn test_mage_int_greater_uses_int() {
@@ -5171,7 +5101,6 @@ mod tests {
         assert_eq!(stats.total_hit, 405);
     }
 
-    /// C++ Reference: UserAbilityHandler.cpp:170-177
     /// Priest novice (class_base 11) correctly identified as priest.
     #[test]
     fn test_priest_novice_str_equals_int_uses_int() {
@@ -5210,7 +5139,6 @@ mod tests {
         assert_eq!(stats.total_hit, 327);
     }
 
-    /// C++ Reference: UserAbilityHandler.cpp:163-164, 191, 352
     /// Achievement attack bonus added to total_hit, defense bonus added to total_ac.
     #[test]
     fn test_achievement_attack_defense_bonus() {
@@ -5687,7 +5615,6 @@ mod tests {
     // ── Sprint 281: GiveItem durability always reset ────────────────────
 
     /// Test give_item always sets durability to template value, even on existing stacks.
-    /// C++ Reference: ItemHandler.cpp:385 — `pItem->sDuration = pTable.m_sDuration`
     #[test]
     fn test_give_item_durability_always_set() {
         // When stacking items, durability should be reset to template value
@@ -5742,7 +5669,6 @@ mod tests {
     #[test]
     fn test_bonus_ap_from_cospre_set_applied_to_total_hit() {
         // BonusAp from cospre set items should multiply total_hit.
-        // C++ Reference: UserAbilityHandler.cpp:161 — BonusAp = (m_byAPBonusAmount + 100) / 100.0f
         let world = setup_equip_world();
         world.coefficients.insert(101, make_test_coeff(101));
 
@@ -5836,7 +5762,6 @@ mod tests {
 
         world.set_user_ability(1);
         let boosted_hit = world.get_equipped_stats(1).total_hit;
-        // C++: total_hit = (uint16)(773.0 * 1.1) = (uint16)(850.3) = 850
         let expected = ((50.0 + 720.0 + 3.0) * 1.1) as u16;
         assert_eq!(boosted_hit, expected);
         assert!(boosted_hit > base_hit);
@@ -5845,7 +5770,6 @@ mod tests {
     #[test]
     fn test_base_ap_not_multiplied_by_bonus_ap() {
         // BaseAp (stat > 150 bonus) should be added AFTER BonusAp multiplication.
-        // C++ Reference: UserAbilityHandler.cpp:173 — (uint16)(formula * BonusAp) + BaseAp
         let world = WorldState::new();
         let (tx, _rx) = mpsc::unbounded_channel();
         world.register_session(1, tx);

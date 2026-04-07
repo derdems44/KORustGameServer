@@ -5,13 +5,11 @@ use super::*;
 impl WorldState {
     /// Get the coefficient row for a given class.
     ///
-    /// C++ Reference: `CGameServerDlg::m_CoefficientArray.GetData(GetClass())`
     pub fn get_coefficient(&self, class: u16) -> Option<CoefficientRow> {
         self.coefficients.get(&class).map(|c| c.clone())
     }
     /// Get the required XP for a given level and rebirth level.
     ///
-    /// C++ Reference: `CGameServerDlg::GetExpByLevel(nLevel, RebithLevel)`
     ///
     /// Returns 0 if the level is not found in the table.
     pub fn get_exp_by_level(&self, level: u8, rebirth_level: u8) -> i64 {
@@ -30,7 +28,6 @@ impl WorldState {
     }
     /// Look up a master magic row by magic_num.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MagicTableArray.GetData(nMagicNum)`
     pub fn get_magic(&self, magic_num: i32) -> Option<MagicRow> {
         self.magic_table.get(&magic_num).map(|r| r.clone())
     }
@@ -82,7 +79,6 @@ impl WorldState {
     }
     /// Look up an item definition by item num.
     ///
-    /// C++ Reference: `CGameServerDlg::GetItemPtr(nItemID)`
     pub fn get_item(&self, item_id: u32) -> Option<Item> {
         self.items.get(&item_id).map(|r| r.clone())
     }
@@ -93,7 +89,6 @@ impl WorldState {
     }
     /// Get wheel of fun settings (cached in memory).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemWheelArray`
     pub fn get_wheel_of_fun_settings(
         &self,
     ) -> Vec<ko_db::models::wheel_of_fun::WheelOfFunSettings> {
@@ -110,7 +105,6 @@ impl WorldState {
 
     /// Get the anti-AFK NPC ID list (sent to client on game entry).
     ///
-    /// C++ Reference: `CGameServerDlg::m_AntiAfkList`
     pub fn get_anti_afk_npc_ids(&self) -> Vec<u16> {
         self.anti_afk_npc_ids.read().clone()
     }
@@ -122,19 +116,16 @@ impl WorldState {
 
     /// Look up a knights cape definition by cape index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_KnightsCapeArray`
     pub fn get_knights_cape(&self, cape_index: i16) -> Option<KnightsCapeRow> {
         self.knights_capes.get(&cape_index).map(|r| r.clone())
     }
     /// Look up a castellan cape bonus by bonus type.
     ///
-    /// C++ Reference: `CGameServerDlg::m_CapeCastellanBonusArray`
     pub fn get_castellan_bonus(&self, bonus_type: i16) -> Option<KnightsCapeCastellanBonusRow> {
         self.castellan_bonuses.get(&bonus_type).map(|r| r.clone())
     }
     /// Get the CSW configuration options.
     ///
-    /// C++ Reference: `CGameServerDlg::m_KnightsCswOpt`
     pub fn get_csw_opt(&self) -> Option<KnightsCswOptRow> {
         self.csw_opt.read().clone()
     }
@@ -144,7 +135,6 @@ impl WorldState {
     /// Fallback: item table `selling_group` field (×1000 = NPC selling_group).
     /// This handles cases where the client .tbl has items our sell table doesn't.
     ///
-    /// C++ Reference: `NPCHandler.cpp:1020-1026`
     pub fn validate_sell_table_item(
         &self,
         selling_group: i32,
@@ -171,7 +161,6 @@ impl WorldState {
     }
     /// Look up a premium item type definition by premium_type.
     ///
-    /// C++ Reference: `CGameServerDlg::m_PremiumItemArray.GetData(type)`
     pub fn get_premium_item(&self, premium_type: u8) -> Option<PremiumItemRow> {
         self.premium_item_types
             .get(&premium_type)
@@ -179,8 +168,6 @@ impl WorldState {
     }
     /// Look up premium gift items for a given premium type.
     ///
-    /// C++ Reference: `m_ItemPremiumGiftArray.equal_range(bPremiumType)` in
-    /// `LetterHandler.cpp:396` — returns all gift entries for this premium type.
     pub fn get_premium_gift_items(&self, premium_type: u8) -> Vec<super::PremiumGiftItem> {
         self.premium_gift_items
             .get(&premium_type)
@@ -192,7 +179,6 @@ impl WorldState {
     /// Returns the requested property value, or 0 if no premium is active
     /// or the premium type is not found.
     ///
-    /// C++ Reference: `CUser::GetPremiumProperty(PremiumPropertyOpCodes type)`
     pub fn get_premium_property(&self, sid: SessionId, property: PremiumProperty) -> i32 {
         let premium_type = self.with_session(sid, |h| h.premium_in_use).unwrap_or(0);
         if premium_type == 0 {
@@ -202,7 +188,6 @@ impl WorldState {
     }
     /// Get a specific premium property for a session's clan premium.
     ///
-    /// C++ Reference: `CUser::GetClanPremiumProperty(PremiumPropertyOpCodes type)`
     pub fn get_clan_premium_property(&self, sid: SessionId, property: PremiumProperty) -> i32 {
         let clan_premium = self
             .with_session(sid, |h| h.clan_premium_in_use)
@@ -214,7 +199,6 @@ impl WorldState {
     }
     /// Get the ExpRestorePercent for a session's active premium (float).
     ///
-    /// C++ Reference: `CUser::GetPremiumPropertyExp(PremiumExpRestorePercent)`
     pub fn get_premium_exp_restore(&self, sid: SessionId) -> f64 {
         let premium_type = self.with_session(sid, |h| h.premium_in_use).unwrap_or(0);
         if premium_type == 0 {
@@ -228,7 +212,6 @@ impl WorldState {
     /// Get the XP gain bonus percent for a session's active premium,
     /// based on the player's current level.
     ///
-    /// C++ Reference: `CUser::GetPremiumProperty(PremiumExpPercent)` —
     /// iterates `m_PremiumItemExpArray` for matching type + level range.
     pub fn get_premium_exp_percent(&self, sid: SessionId, level: u8) -> u16 {
         let premium_type = self.with_session(sid, |h| h.premium_in_use).unwrap_or(0);
@@ -239,7 +222,6 @@ impl WorldState {
     }
     /// Get the XP gain bonus percent for clan premium by level.
     ///
-    /// C++ Reference: `CUser::GetClanPremiumProperty(PremiumExpPercent)`
     pub fn get_clan_premium_exp_percent(&self, sid: SessionId, level: u8) -> u16 {
         let clan_premium = self
             .with_session(sid, |h| h.clan_premium_in_use)
@@ -278,43 +260,36 @@ impl WorldState {
     }
     /// Look up an achievement main definition by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveMainArray.GetData(sIndex)`
     pub fn achieve_main(&self, s_index: i32) -> Option<AchieveMainRow> {
         self.achieve_main.get(&s_index).map(|r| r.clone())
     }
     /// Look up an achievement title by title index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveTitleArray.GetData(sSkillID)`
     pub fn achieve_title(&self, s_index: i32) -> Option<AchieveTitleRow> {
         self.achieve_title.get(&s_index).map(|r| r.clone())
     }
     /// Look up a war-type achievement by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveWarArray.GetData(sIndex)`
     pub fn achieve_war(&self, s_index: i32) -> Option<AchieveWarRow> {
         self.achieve_war.get(&s_index).map(|r| r.clone())
     }
     /// Look up a normal-type achievement by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveNormalArray.GetData(sIndex)`
     pub fn achieve_normal(&self, s_index: i32) -> Option<AchieveNormalRow> {
         self.achieve_normal.get(&s_index).map(|r| r.clone())
     }
     /// Look up a monster-kill achievement by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveMonsterArray.GetData(sIndex)`
     pub fn achieve_monster(&self, s_index: i32) -> Option<AchieveMonsterRow> {
         self.achieve_monster.get(&s_index).map(|r| r.clone())
     }
     /// Look up a composite (requirement-based) achievement by s_index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_AchieveComArray.GetData(sIndex)`
     pub fn achieve_com(&self, s_index: i32) -> Option<AchieveComRow> {
         self.achieve_com.get(&s_index).map(|r| r.clone())
     }
     /// Get filtered mining/fishing item list based on table type and tool type.
     ///
-    /// C++ Reference: `CUser::MiningItemList()` / `CUser::FishingItemList()`
     pub fn get_mining_fishing_items(
         &self,
         table_type: i32,
@@ -339,7 +314,6 @@ impl WorldState {
     }
     /// Get mining exchange entries filtered by ore type and NPC ID.
     ///
-    /// C++ Reference: `CUser::MiningExchange()` in MiningExchange.cpp:300-331
     pub fn get_mining_exchanges(&self, ore_type: i16, npc_id: i16) -> Vec<MiningExchangeRow> {
         self.mining_exchanges
             .iter()
@@ -349,13 +323,11 @@ impl WorldState {
     }
     /// Look up upgrade recipes for a given origin item number.
     ///
-    /// C++ Reference: `CGameServerDlg::m_sLoadUpgradeArray` lookup by `ItemNumber`
     pub fn get_upgrade_recipes(&self, origin_number: i32) -> Option<Vec<NewUpgradeRow>> {
         self.upgrade_recipes.get(&origin_number).map(|r| r.clone())
     }
     /// Iterate all upgrade settings to find a matching entry.
     ///
-    /// C++ Reference: `CGameServerDlg::m_sUpgradeSettingArray` linear scan
     pub fn find_upgrade_setting(
         &self,
         item_type: i16,
@@ -382,7 +354,6 @@ impl WorldState {
     }
     /// Get the item upgrade probability configuration.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemUpProbability`
     pub fn get_itemup_probability(&self) -> Option<ItemUpProbabilityRow> {
         self.itemup_probability.read().clone()
     }
@@ -390,31 +361,26 @@ impl WorldState {
 
     /// Look up item special effects (procs) for a given item ID.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemOpArray.GetData(nItemID)`
     pub fn get_item_ops(&self, item_id: i32) -> Option<Vec<ItemOpRow>> {
         self.item_ops.get(&item_id).map(|r| r.clone())
     }
     /// Look up set item bonuses by set index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_SetItemArray.GetData(SetIndex)`
     pub fn get_set_item(&self, set_index: i32) -> Option<SetItemRow> {
         self.set_items.get(&set_index).map(|r| r.clone())
     }
     /// Look up monster drop table by index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MonsterItemArray.GetData(sIndex)`
     pub fn get_monster_item(&self, s_index: i16) -> Option<MonsterItemRow> {
         self.monster_items.get(&s_index).map(|r| r.clone())
     }
     /// Look up NPC drop table by index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_NpcItemArray.GetData(sIndex)`
     pub fn get_npc_item(&self, s_index: i16) -> Option<NpcItemRow> {
         self.npc_items.get(&s_index).map(|r| r.clone())
     }
     /// Look up an item exchange/crafting recipe by index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemExchangeArray.GetData(nIndex)`
     pub fn get_item_exchange(&self, n_index: i32) -> Option<ItemExchangeRow> {
         self.item_exchanges.get(&n_index).map(|r| r.clone())
     }
@@ -423,7 +389,6 @@ impl WorldState {
     /// Returns entries where `random_flag` is 1, 2, or 3 **and**
     /// `origin_item_num1` equals the given piece item ID.
     ///
-    /// C++ Reference: `BifrostPieceSmashSystem.cpp:69-81` — iterates
     /// `m_ItemExchangeArray`, filters `bRandomFlag IN (1,2,3)` and
     /// `nOriginItemNum[0] == nExchangeItemID`.
     pub fn get_bifrost_exchanges(&self, piece_item_id: u32) -> Vec<ItemExchangeRow> {
@@ -439,7 +404,6 @@ impl WorldState {
     }
     /// Get all item exchange entries for generator exchange (random_flag 1,2,3,101).
     ///
-    /// C++ Reference: `HandleNewRightClickGeneratorExchange()` — `XGuard.cpp:2428-2446`
     pub fn get_generator_exchanges(&self, origin_item_id: u32) -> Vec<ItemExchangeRow> {
         let origin_id = origin_item_id as i32;
         self.item_exchanges
@@ -458,43 +422,36 @@ impl WorldState {
     }
     /// Look up an item upgrade recipe by index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemUpgradeArray.GetData(nIndex)`
     pub fn get_item_upgrade(&self, n_index: i32) -> Option<ItemUpgradeRow> {
         self.item_upgrades.get(&n_index).map(|r| r.clone())
     }
     /// Look up a weapon crafting template by level.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeWeaponItemTableArray.GetData(byLevel)`
     pub fn get_make_weapon(&self, by_level: i16) -> Option<MakeWeaponRow> {
         self.make_weapons.get(&by_level).map(|r| r.clone())
     }
     /// Look up a defensive crafting template by level.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeDefensiveItemTableArray.GetData(byLevel)`
     pub fn get_make_defensive(&self, by_level: i16) -> Option<MakeDefensiveRow> {
         self.make_defensives.get(&by_level).map(|r| r.clone())
     }
     /// Look up a crafting grade code by item index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeGradeItemTableArray.GetData(byItemIndex)`
     pub fn get_make_grade_code(&self, item_index: i16) -> Option<MakeItemGradeCodeRow> {
         self.make_grade_codes.get(&item_index).map(|r| r.clone())
     }
     /// Look up a crafting rarity code by level grade.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeLareItemTableArray.GetData(byItemLevel)`
     pub fn get_make_lare_code(&self, level_grade: i16) -> Option<MakeItemLareCodeRow> {
         self.make_lare_codes.get(&level_grade).map(|r| r.clone())
     }
     /// Look up a crafting item group by group number.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeItemGroupArray.GetData(iItemGroupNum)`
     pub fn get_make_item_group(&self, group_num: i32) -> Option<MakeItemGroupRow> {
         self.make_item_groups.get(&group_num).map(|r| r.clone())
     }
     /// Look up a random crafting group mapping by index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MakeItemGroupRandomArray.GetData(nIndex)`
     pub fn get_make_item_group_random(&self, n_index: i32) -> Option<MakeItemGroupRandomRow> {
         self.make_item_group_randoms
             .get(&n_index)
@@ -502,7 +459,6 @@ impl WorldState {
     }
     /// Check if any MakeItemGroupRandom entry exists for the given group number.
     ///
-    /// C++ Reference: `m_MakeItemGroupRandomArray` — iterated to check GroupNo match.
     pub fn has_make_item_group_random(&self, group_num: i32) -> bool {
         self.make_item_group_randoms
             .iter()
@@ -510,13 +466,11 @@ impl WorldState {
     }
     /// Look up a make_item entry by s_index.
     ///
-    /// C++ Reference: Used in `CNpc::ItemProdution()` for loot generation.
     pub fn get_make_item(&self, s_index: i16) -> Option<MakeItemRow> {
         self.make_items.get(&s_index).map(|r| r.clone())
     }
     /// Get the sheriff reports map.
     ///
-    /// C++ Reference: `CGameServerDlg::m_SheriffReportList`
     pub fn sheriff_reports(&self) -> Arc<SheriffReportMap> {
         self.sheriff_reports.clone()
     }
@@ -524,25 +478,21 @@ impl WorldState {
 
     /// Get a read lock on the Cinderella War tier settings.
     ///
-    /// C++ Reference: `CGameServerDlg::pCindWar.pSetting[5]`
     pub fn cindwar_settings(&self) -> parking_lot::RwLockReadGuard<'_, Vec<CindwarSettingRow>> {
         self.cindwar_settings.read()
     }
     /// Get a read lock on the Cinderella War equipment items.
     ///
-    /// C++ Reference: `CGameServerDlg::m_CindirellaItemsArray[5]`
     pub fn cindwar_items(&self) -> parking_lot::RwLockReadGuard<'_, Vec<CindwarItemRow>> {
         self.cindwar_items.read()
     }
     /// Get a read lock on the Cinderella War rank rewards.
     ///
-    /// C++ Reference: `CGameServerDlg::pCindWar.pReward[200]`
     pub fn cindwar_rewards(&self) -> parking_lot::RwLockReadGuard<'_, Vec<CindwarRewardRow>> {
         self.cindwar_rewards.read()
     }
     /// Get a read lock on the Cinderella War reward items.
     ///
-    /// C++ Reference: `_CINDWAR_REWARD::itemid[10]`
     pub fn cindwar_reward_items(
         &self,
     ) -> parking_lot::RwLockReadGuard<'_, Vec<CindwarRewardItemRow>> {
@@ -550,13 +500,11 @@ impl WorldState {
     }
     /// Get a read lock on the Cinderella War stat/skill presets.
     ///
-    /// C++ Reference: `CGameServerDlg::m_CindirellaStatArray`
     pub fn cindwar_stats(&self) -> parking_lot::RwLockReadGuard<'_, Vec<CindwarStatRow>> {
         self.cindwar_stats.read()
     }
     /// Access the shared soccer event state (per-zone rooms).
     ///
-    /// C++ Reference: `CGameServerDlg::m_TempleSoccerEventRoomList`
     pub fn soccer_state(&self) -> &crate::handler::soccer::SharedSoccerState {
         &self.soccer_state
     }
@@ -564,7 +512,6 @@ impl WorldState {
 
     /// Check if any war is currently open.
     ///
-    /// C++ Reference: `CGameServerDlg::isWarOpen()` — `m_byBattleOpen != NO_BATTLE`
     pub fn is_war_open(&self) -> bool {
         let state = self.battle_state.read();
         state.is_war_open()
@@ -586,14 +533,12 @@ impl WorldState {
 
     /// Get the current discount state: 0=off, 1=winning nation, 2=all.
     ///
-    /// C++ Reference: `CGameServerDlg::m_sDiscount`
     pub fn get_discount(&self) -> u8 {
         self.discount.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Check if the gold discount applies to a player of the given nation.
     ///
-    /// C++ Reference: `if ((m_sDiscount == 1 && m_byOldVictory == GetNation()) || m_sDiscount == 2)`
     pub fn is_discount_active(&self, player_nation: u8) -> bool {
         let disc = self.get_discount();
         if disc == 2 {
@@ -608,7 +553,6 @@ impl WorldState {
 
     /// Apply or revert NPC war buffs for all nation NPCs (type > 10, nation 1 or 2).
     ///
-    /// C++ Reference: `CNpcThread::ChangeAbilityAllNPCs(bType)` + `CNpc::ChangeAbility()`
     ///
     /// On BATTLEZONE_OPEN: HP×1.2, AC×1.2, Damage×0.5, Resist×2 — monsters become
     /// tankier but deal less damage during war.
@@ -672,7 +616,6 @@ impl WorldState {
 
     /// Get war-adjusted NPC damage for combat calculations.
     ///
-    /// C++ Reference: `CNpc::ChangeAbility(BATTLEZONE_OPEN)` — `m_sTotalHit = damage * 0.5`
     pub fn get_npc_war_damage(&self, tmpl: &crate::npc::NpcTemplate) -> i32 {
         let base = tmpl.damage as i32;
         if self.is_npc_war_target(tmpl) {
@@ -684,7 +627,6 @@ impl WorldState {
 
     /// Get war-adjusted NPC AC (defense) for combat calculations.
     ///
-    /// C++ Reference: `CNpc::ChangeAbility(BATTLEZONE_OPEN)` — `m_sTotalAc = defense * 1.2`
     pub fn get_npc_war_ac(&self, tmpl: &crate::npc::NpcTemplate) -> i32 {
         let base = tmpl.ac as i32;
         if self.is_npc_war_target(tmpl) {
@@ -696,7 +638,6 @@ impl WorldState {
 
     /// Get war-adjusted NPC max HP for combat calculations.
     ///
-    /// C++ Reference: `CNpc::ChangeAbility(BATTLEZONE_OPEN)` — `m_MaxHP = max_hp * 1.2`
     pub fn get_npc_war_max_hp(&self, tmpl: &crate::npc::NpcTemplate) -> i32 {
         let base = tmpl.max_hp as i32;
         if self.is_npc_war_target(tmpl) {
@@ -708,7 +649,6 @@ impl WorldState {
 
     /// Get war-adjusted NPC resistance for a given element.
     ///
-    /// C++ Reference: `CNpc::ChangeAbility(BATTLEZONE_OPEN)` — all resistances ×2
     pub fn get_npc_war_resist(&self, base_resist: i16, tmpl: &crate::npc::NpcTemplate) -> i16 {
         if self.is_npc_war_target(tmpl) {
             base_resist.saturating_mul(2)
@@ -719,21 +659,18 @@ impl WorldState {
 
     /// Check if a character name is a designated war commander.
     ///
-    /// C++ Reference: `m_CommanderArray` lookup in `CharacterSelectionHandler.cpp:1184-1193`
     pub fn is_war_commander(&self, name: &str) -> bool {
         self.war_commanders.read().contains(name)
     }
 
     /// Add a name to the war commander set.
     ///
-    /// C++ Reference: `BattleZoneSelectCommanders()` in `BattleSystem.cpp:386`
     pub fn add_war_commander(&self, name: String) {
         self.war_commanders.write().insert(name);
     }
 
     /// Clear all war commanders (called on war reset).
     ///
-    /// C++ Reference: `BattleZoneResetCommanders()` in `BattleSystem.cpp:417`
     pub fn clear_war_commanders(&self) {
         self.war_commanders.write().clear();
     }
@@ -788,7 +725,6 @@ impl WorldState {
     ///
     /// Returns `(karus_monument_point, elmorad_monument_point)` as i16 values.
     ///
-    /// C++ Reference: `g_pMain->m_sKarusMonumentPoint`, `g_pMain->m_sElmoMonumentPoint`
     pub fn get_battle_monument_points(&self) -> (i16, i16) {
         let state = self.battle_state.read();
         (
@@ -800,7 +736,6 @@ impl WorldState {
     ///
     /// Returns `(karus_dead, elmorad_dead)`.
     ///
-    /// C++ Reference: `g_pMain->m_sKarusDead`, `g_pMain->m_sElmoradDead`
     pub fn get_battle_dead_counts(&self) -> (i16, i16) {
         let state = self.battle_state.read();
         (state.karus_dead, state.elmorad_dead)
@@ -864,7 +799,6 @@ impl WorldState {
     }
     /// Update zone user counts for the current war zone.
     ///
-    /// C++ Reference: `CGameServerDlg::BattleZoneCurrentUsers()` (lines 145-173)
     pub fn update_battle_zone_user_counts(&self) {
         let battle_zone_id = {
             let state = self.battle_state.read();
@@ -897,7 +831,6 @@ impl WorldState {
     }
     /// Look up a rental item by rental index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_RentalItemArray.GetData(nRentalIndex)`
     pub fn get_rental_item(&self, rental_index: i32) -> Option<RentalItemRow> {
         self.rental_items.get(&rental_index).map(|r| r.clone())
     }
@@ -999,13 +932,11 @@ impl WorldState {
     /// Get all crafting recipes for a given NPC ID.
     ///
     /// Returns the list of `ItemSpecialSewingRow` entries that match the NPC.
-    /// C++ Reference: `CGameServerDlg::m_ItemSpecialExchangeArray` filtered by `sNpcNum`
     pub fn get_special_sewing_recipes(&self, npc_id: i32) -> Option<Vec<ItemSpecialSewingRow>> {
         self.special_sewing.get(&npc_id).map(|r| r.clone())
     }
     /// Get all item smash entries within a given index range (e.g., 2000000..3000000).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemExchangeCrashArray` filtered by nIndex range
     pub fn get_item_smash_in_range(&self, range_start: i32, range_end: i32) -> Vec<ItemSmashRow> {
         self.item_smash
             .iter()
@@ -1018,7 +949,6 @@ impl WorldState {
     }
     /// Look up an item smash entry by its index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ItemExchangeCrashArray.GetData(nIndex)`
     pub fn get_item_smash(&self, n_index: i32) -> Option<ItemSmashRow> {
         self.item_smash.get(&n_index).map(|r| r.clone())
     }
@@ -1026,31 +956,26 @@ impl WorldState {
 
     /// Look up a quest helper definition by nIndex.
     ///
-    /// C++ Reference: `CGameServerDlg::m_QuestHelperArray.GetData(nIndex)`
     pub fn get_quest_helper(&self, n_index: u32) -> Option<QuestHelperRow> {
         self.quest_helpers.get(&n_index).map(|r| r.clone())
     }
     /// Look up a quest monster definition by quest num (sEventDataIndex).
     ///
-    /// C++ Reference: `CGameServerDlg::m_QuestMonsterArray.GetData(sQuestNum)`
     pub fn get_quest_monster(&self, quest_num: u16) -> Option<QuestMonsterRow> {
         self.quest_monsters.get(&quest_num).map(|r| r.clone())
     }
     /// Get the list of quest helper indices for an NPC.
     ///
-    /// C++ Reference: `CGameServerDlg::m_QuestNpcList`
     pub fn get_quest_npc_helpers(&self, npc_id: u16) -> Option<Vec<u32>> {
         self.quest_npc_list.get(&npc_id).map(|r| r.clone())
     }
     /// Look up a quest menu option by ID.
     ///
-    /// C++ Reference: `CGameServerDlg::m_QuestMenuArray.GetData(iNum)`
     pub fn get_quest_menu(&self, i_num: i32) -> Option<QuestMenuRow> {
         self.quest_menus.get(&i_num).map(|r| r.clone())
     }
     /// Look up a quest talk text by ID.
     ///
-    /// C++ Reference: `CGameServerDlg::m_QuestTalkArray.GetData(iNum)`
     pub fn get_quest_talk(&self, i_num: i32) -> Option<QuestTalkRow> {
         self.quest_talks.get(&i_num).map(|r| r.clone())
     }
@@ -1076,7 +1001,6 @@ impl WorldState {
     }
     /// Update a player's loyalty (Nation Points).
     ///
-    /// C++ Reference: `CUser::m_iLoyalty`
     pub fn update_character_loyalty(&self, id: SessionId, loyalty: u32) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             if let Some(ref mut ch) = handle.character {
@@ -1086,7 +1010,6 @@ impl WorldState {
     }
     /// Update a player's monthly loyalty (monthly Nation Points).
     ///
-    /// C++ Reference: `CUser::m_iLoyaltyMonthly`
     pub fn update_character_loyalty_monthly(&self, id: SessionId, loyalty_monthly: u32) {
         if let Some(mut handle) = self.sessions.get_mut(&id) {
             if let Some(ref mut ch) = handle.character {
@@ -1096,7 +1019,6 @@ impl WorldState {
     }
     /// Add a player to the PK zone ranking.
     ///
-    /// C++ Reference: `CUser::PlayerKillingAddPlayerRank()` in `NewRankingSystem.cpp:510`
     pub fn pk_zone_add_player(&self, sid: SessionId, nation: u8, zone_id: u16) {
         if !(1..=2).contains(&nation) {
             return;
@@ -1139,7 +1061,6 @@ impl WorldState {
     }
     /// Increment a player's daily loyalty in the PK zone ranking.
     ///
-    /// C++ Reference: `UserLoyaltySystem.cpp:315-320` — accumulates daily loyalty
     /// then calls `UpdatePlayerKillingRank()`.
     pub fn pk_zone_increment_daily(&self, sid: SessionId, nation: u8, amount: u32) {
         if !(1..=2).contains(&nation) || amount == 0 {
@@ -1234,7 +1155,6 @@ impl WorldState {
     }
     /// Reset all PK zone rankings.
     ///
-    /// C++ Reference: `CGameServerDlg::ResetPlayerKillingRanking()`
     pub fn reset_pk_zone_rankings(&self) {
         self.ranking_update_in_progress
             .store(true, Ordering::Relaxed);
@@ -1253,7 +1173,6 @@ impl WorldState {
     }
     /// Add a player to the Zindan War (special event) ranking.
     ///
-    /// C++ Reference: `CUser::ZindanWarKillingAddPlayerRank()` in `NewRankingSystem.cpp:568`
     pub fn zindan_add_player(&self, sid: SessionId, nation: u8, zone_id: u16) {
         if !(1..=2).contains(&nation) {
             return;
@@ -1311,19 +1230,16 @@ impl WorldState {
 
     /// Look up pet stats info by pet level.
     ///
-    /// C++ Reference: `CGameServerDlg::m_PetInfoSystemArray.GetData(level)`
     pub fn get_pet_stats_info(&self, level: u8) -> Option<PetStatsInfoRow> {
         self.pet_stats_info.get(&level).map(|r| r.clone())
     }
     /// Look up a pet image change recipe by index.
     ///
-    /// C++ Reference: `CGameServerDlg::m_PetTransformSystemArray.GetData(index)`
     pub fn get_pet_image_change(&self, index: i32) -> Option<PetImageChangeRow> {
         self.pet_image_changes.get(&index).map(|r| r.clone())
     }
     /// Find all pet image change recipes matching a required item.
     ///
-    /// C++ Reference: `HatchingImageTransformExchange` — scan for matching nReqItem0
     pub fn find_pet_transforms_by_item(&self, item_id: i32) -> Vec<PetImageChangeRow> {
         self.pet_image_changes
             .iter()
@@ -1335,26 +1251,22 @@ impl WorldState {
 
     /// Get a clone of the server settings (or None if not loaded).
     ///
-    /// C++ Reference: `g_pMain->pServerSetting`
     pub fn get_server_settings(&self) -> Option<ServerSettingsRow> {
         self.server_settings.read().clone()
     }
     /// Get persistent login messages (send_type=1).
     ///
-    /// C++ Reference: `g_pMain->m_SendMessageArray` filtered by `SendType==1`
     pub fn get_login_messages(&self) -> Vec<ko_db::models::SendMessage> {
         self.send_messages.read().clone()
     }
     /// Get a clone of the damage settings (or None if not loaded).
     ///
-    /// C++ Reference: `g_pMain->pDamageSetting`
     pub fn get_damage_settings(&self) -> Option<DamageSettingsRow> {
         self.damage_settings.read().clone()
     }
     /// Get burning feature rates for a given flame level (1-3).
     ///
     /// Returns None if level is 0 or out of range.
-    /// C++ Reference: `g_pMain->pBurningFea[m_bFlamelevel - 1]`
     pub fn get_burning_feature(&self, flame_level: u16) -> Option<BurningFeatureRates> {
         if flame_level == 0 || flame_level > 3 {
             return None;
@@ -1365,7 +1277,6 @@ impl WorldState {
 
     /// Get the configured flash time duration (in minutes) from server settings.
     ///
-    /// C++ Reference: `g_pMain->pServerSetting.flashtime`
     pub fn get_flash_time_setting(&self) -> u32 {
         self.get_server_settings()
             .map(|s| s.flash_time as u32)
@@ -1380,7 +1291,6 @@ impl WorldState {
     }
     /// Get the start position for a zone.
     ///
-    /// C++ Reference: `g_pMain->m_StartPositionArray.GetData(GetZoneID())`
     pub fn get_start_position(&self, zone_id: u16) -> Option<ko_db::models::StartPositionRow> {
         self.start_positions.get(&zone_id).map(|r| r.clone())
     }
@@ -1388,7 +1298,6 @@ impl WorldState {
     /// Pick a random spawn point from the start_position_random table for a zone.
     ///
     /// Returns (x, z) with radius offset applied.
-    /// C++ Reference: `CUser::GetStartPositionRandom(sx, sz)`
     pub fn get_start_position_random(&self, zone_id: u16) -> Option<(f32, f32)> {
         use rand::Rng;
         let entry = self.start_positions_random.get(&zone_id)?;
@@ -1462,13 +1371,11 @@ impl WorldState {
     }
     /// Get all monster boss random stages (for startup spawn).
     ///
-    /// C++ Reference: `CGameServerDlg::m_MonsterBossStage`
     pub fn get_boss_random_stages(&self) -> Vec<MonsterBossRandomStageRow> {
         self.monster_boss_random_stages.read().clone()
     }
     /// Queue a delayed NPC respawn (respawn chain from `monster_respawn_loop`).
     ///
-    /// C++ Reference: `Npc.cpp:912-914` — SpawnEventNpc with deadtime*MINUTE delay.
     pub fn schedule_respawn(&self, entry: ScheduledRespawn) {
         self.scheduled_respawns.lock().push(entry);
     }
@@ -1503,7 +1410,6 @@ impl WorldState {
     }
     /// Get the remaining seconds for the active bifrost event (0 = inactive).
     ///
-    /// C++ Reference: `CGameServerDlg::m_sBifrostRemainingTime`
     pub fn get_bifrost_remaining_secs(&self) -> u32 {
         self.bifrost_remaining_secs
             .load(std::sync::atomic::Ordering::Relaxed)
@@ -1548,7 +1454,6 @@ impl WorldState {
 
     /// Close the bowl event (reset all fields).
     ///
-    /// C++ Reference: `CGameServerDlg::CloseBowlEvent()`
     pub fn close_bowl_event(&self) {
         self.set_bowl_event_active(false);
         self.set_bowl_event_time(0);
@@ -1572,7 +1477,6 @@ impl WorldState {
     }
     /// Look up a monster resource kill notice by NPC proto_id (sid).
     ///
-    /// C++ Reference: `CGameServerDlg::m_MonsterResourceArray.GetData(GetProtoID())`
     pub fn get_monster_resource(&self, sid: i16) -> Option<ko_db::models::MonsterResource> {
         self.monster_resources.get(&sid).map(|v| v.clone())
     }
@@ -1620,7 +1524,6 @@ impl WorldState {
 
     /// Get all right-click exchange item IDs grouped by exchange type.
     ///
-    /// C++ Reference: `HandleHShieldSoftwareRightExchangeLoadderHandler()` groups
     /// `s_HShieldSoftwareRightExchangeArray` by `sType` (1-7).
     pub fn get_right_exchange_by_type(&self) -> std::collections::HashMap<u8, Vec<u32>> {
         let mut result: std::collections::HashMap<u8, Vec<u32>> = std::collections::HashMap::new();
@@ -1640,13 +1543,11 @@ impl WorldState {
 
     /// Look up a daily quest definition by ID.
     ///
-    /// C++ Reference: `g_pMain->m_DailyQuestArray.GetData(index)`
     pub fn get_daily_quest(&self, id: i16) -> Option<DailyQuestRow> {
         self.daily_quests.get(&id).map(|v| v.clone())
     }
     /// Get all daily quest definitions as a vector.
     ///
-    /// C++ Reference: Iterating `m_DailyQuestArray` in `DailyQuestSendList()`.
     pub fn get_all_daily_quests(&self) -> Vec<DailyQuestRow> {
         self.daily_quests
             .iter()
@@ -1655,7 +1556,6 @@ impl WorldState {
     }
     /// Get the cached daily rank data (loaded at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::m_DailyRank` map iteration.
     pub fn get_daily_rank_cache(&self) -> Vec<ko_db::models::daily_rank::DailyRankRow> {
         self.daily_rank_cache.read().clone()
     }
@@ -1664,7 +1564,6 @@ impl WorldState {
 
     /// Get starting equipment for a class type (items with item_id > 0).
     ///
-    /// C++ Reference: `LOAD_NEW_CHAR_SET` stored procedure
     pub fn get_starting_equipment(&self, class_type: i16) -> Vec<CreateNewCharSetRow> {
         self.new_char_set
             .get(&class_type)
@@ -1673,7 +1572,6 @@ impl WorldState {
     }
     /// Get starting stats for a class + job_type combination (job_type 0 = base).
     ///
-    /// C++ Reference: `LOAD_NEW_CHAR_VALUE` stored procedure
     pub fn get_starting_stats(
         &self,
         class_type: i16,
@@ -1687,7 +1585,6 @@ impl WorldState {
 
     /// Get a reference to the event room manager.
     ///
-    /// C++ Reference: `CGameServerDlg::pTempleEvent`, `m_TempleEventBDWRoomList`, etc.
     pub fn event_room_manager(&self) -> &EventRoomManager {
         &self.event_room_manager
     }
@@ -1706,7 +1603,6 @@ impl WorldState {
 
     /// Update Juraid bridge state for a room. Called from event_system when bridges open.
     ///
-    /// C++ Reference: `_JURAID_ROOM_INFO::m_sKarusBridges`, `m_sElmoBridges`
     pub fn set_juraid_bridge_state(
         &self,
         room_id: u8,
@@ -1727,7 +1623,6 @@ impl WorldState {
 
     /// Check if all 3 bridges are open for a nation in a specific Juraid room.
     ///
-    /// C++ Reference: `CUser::CheckDevaAttack()` in `AttackHandler.cpp:3-30`
     pub fn are_all_juraid_bridges_open(&self, room_id: u8, nation: u8) -> bool {
         self.juraid_bridge_states
             .get(&room_id)
@@ -1758,7 +1653,6 @@ impl WorldState {
 
     /// Get Monster Stone respawn entries filtered by zone and family.
     ///
-    /// C++ Reference: `m_MonsterStoneListInformationArray` filtered by ZoneID and Family
     pub fn get_monster_stone_spawns(
         &self,
         zone_id: u8,
@@ -1775,19 +1669,16 @@ impl WorldState {
 
     /// Get a read lock on the FT stage definitions.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ForgettenTempleStages[]`
     pub fn ft_stages(&self) -> parking_lot::RwLockReadGuard<'_, Vec<FtStageRow>> {
         self.ft_stages.read()
     }
     /// Get a read lock on the FT summon definitions.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ForgettenTempleSummon[]`
     pub fn ft_summons(&self) -> parking_lot::RwLockReadGuard<'_, Vec<FtSummonRow>> {
         self.ft_summons.read()
     }
     /// Get a reference to the Forgotten Temple runtime state.
     ///
-    /// C++ Reference: `CGameServerDlg::pForgettenTemple`
     pub fn forgotten_temple_state(&self) -> &ForgettenTempleState {
         &self.forgotten_temple_state
     }
@@ -1795,19 +1686,16 @@ impl WorldState {
 
     /// Get a read lock on the DD stage definitions.
     ///
-    /// C++ Reference: `CGameServerDlg::m_DungeonDefenceStageListArray`
     pub fn dd_stages(&self) -> parking_lot::RwLockReadGuard<'_, Vec<DfStageRow>> {
         self.dd_stages.read()
     }
     /// Get a read lock on the DD monster spawn definitions.
     ///
-    /// C++ Reference: `CGameServerDlg::m_DungeonDefenceMonsterListArray`
     pub fn dd_monsters(&self) -> parking_lot::RwLockReadGuard<'_, Vec<DfMonsterRow>> {
         self.dd_monsters.read()
     }
     /// Get a reference to the DD runtime room pool (60 rooms).
     ///
-    /// C++ Reference: `CGameServerDlg::m_DungeonDefenceRoomList`
     pub fn dd_rooms(&self) -> &[crate::handler::dungeon_defence::DdRoomInfo] {
         &self.dd_rooms
     }
@@ -1815,19 +1703,16 @@ impl WorldState {
 
     /// Get a read lock on the Draki Tower stage definitions.
     ///
-    /// C++ Reference: `CGameServerDlg::m_DrakiTowerStageListArray`
     pub fn draki_tower_stages(&self) -> parking_lot::RwLockReadGuard<'_, Vec<DrakiTowerStageRow>> {
         self.draki_tower_stages.read()
     }
     /// Get a read lock on the Draki Tower monster list definitions.
     ///
-    /// C++ Reference: `CGameServerDlg::m_DrakiMonsterListArray`
     pub fn draki_monster_list(&self) -> parking_lot::RwLockReadGuard<'_, Vec<DrakiMonsterListRow>> {
         self.draki_monster_list.read()
     }
     /// Get a read lock on the Draki Tower runtime room pool.
     ///
-    /// C++ Reference: `CGameServerDlg::m_MonsterDrakiTowerList`
     pub fn draki_tower_rooms_read(
         &self,
     ) -> parking_lot::RwLockReadGuard<
@@ -1853,7 +1738,6 @@ impl WorldState {
     }
     /// Get a reference to the Under The Castle runtime state.
     ///
-    /// C++ Reference: `CGameServerDlg::pUnderTheCastle`
     pub fn under_the_castle_state(&self) -> &crate::handler::under_castle::UnderTheCastleState {
         &self.under_the_castle_state
     }
@@ -1861,13 +1745,11 @@ impl WorldState {
 
     /// Get a read lock on the chaos stone spawn point definitions.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ChaosStoneRespawnCoordinateArray`
     pub fn chaos_stone_spawns(&self) -> parking_lot::RwLockReadGuard<'_, Vec<ChaosStoneSpawnRow>> {
         self.chaos_stone_spawns.read()
     }
     /// Get a read lock on the chaos stone monster summon list.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ChaosStoneSummonListArray`
     pub fn chaos_stone_summon_list(
         &self,
     ) -> parking_lot::RwLockReadGuard<'_, Vec<ChaosStoneSummonListRow>> {
@@ -1875,7 +1757,6 @@ impl WorldState {
     }
     /// Get a read lock on the chaos stone stage/family definitions.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ChaosStoneStageArray`
     pub fn chaos_stone_stages(
         &self,
     ) -> parking_lot::RwLockReadGuard<'_, Vec<ChaosStoneSummonStageRow>> {
@@ -1883,7 +1764,6 @@ impl WorldState {
     }
     /// Get a read lock on the chaos stone event rewards.
     ///
-    /// C++ Reference: `EVENT_CHAOS_REWARDS` table
     pub fn chaos_stone_rewards(
         &self,
     ) -> parking_lot::RwLockReadGuard<'_, Vec<EventChaosRewardRow>> {
@@ -1900,7 +1780,6 @@ impl WorldState {
 
     /// Get event rewards for a given local_id (e.g. 9=BDW, 11=Juraid).
     ///
-    /// C++ Reference: `CGameServerDlg::m_EventRewardArray`
     pub fn get_event_rewards(&self, local_id: i16) -> Option<Vec<EventRewardRow>> {
         self.event_rewards.get(&local_id).map(|r| r.clone())
     }
@@ -1909,14 +1788,12 @@ impl WorldState {
 
     /// Get the war victory state.
     ///
-    /// C++ Reference: `g_pMain->m_bVictory`
     pub(crate) fn get_victory(&self) -> u8 {
         self.battle_state.read().victory
     }
 
     /// Get the PVP monument nation for a specific zone.
     ///
-    /// C++ Reference: `g_pMain->m_nPVPMonumentNation[zone]`
     pub(crate) fn get_pvp_monument_nation(&self, zone_id: u16) -> u8 {
         self.pvp_monument_nation
             .get(&zone_id)
@@ -1926,28 +1803,24 @@ impl WorldState {
 
     /// Set the PVP monument nation for a specific zone.
     ///
-    /// C++ Reference: `g_pMain->m_nPVPMonumentNation[GetZoneID()] = pUser->GetNation()`
     pub(crate) fn set_pvp_monument_nation(&self, zone_id: u16, nation: u8) {
         self.pvp_monument_nation.insert(zone_id, nation);
     }
 
     /// Get the middle statue nation ownership.
     ///
-    /// C++ Reference: `g_pMain->m_bMiddleStatueNation`
     pub(crate) fn get_middle_statue_nation(&self) -> u8 {
         self.battle_state.read().middle_statue_nation
     }
 
     /// Get the CSW (Castle Siege War) master knights clan ID.
     ///
-    /// C++ Reference: `g_pMain->pSiegeWar->m_sMasterKnights`
     pub(crate) fn get_csw_master_knights(&self) -> u16 {
         self.siege_war.blocking_read().master_knights
     }
 
     /// Get a player's rebirth level from session.
     ///
-    /// C++ Reference: `CUser::m_bRebirthLevel`
     pub(crate) fn get_rebirth_level(&self, sid: SessionId) -> u8 {
         self.with_session(sid, |h| {
             h.character.as_ref().map(|c| c.rebirth_level).unwrap_or(0)
@@ -1960,7 +1833,6 @@ impl WorldState {
     /// Check if the Forgotten Temple join phase is open and the player's
     /// level is within the allowed range.
     ///
-    /// C++ Reference: `CUser::GetMonsterChallengeTime()` in `EventSigningSystem.cpp:372`
     /// (Confusing name — actually checks FT, not Monster Challenge.)
     pub(crate) fn is_ft_join_open_for_level(&self, level: u8) -> bool {
         let ft = self.forgotten_temple_state();
@@ -1980,7 +1852,6 @@ impl WorldState {
 
     /// Get the number of users signed up for Forgotten Temple.
     ///
-    /// C++ Reference: `CUser::GetMonsterChallengeUserCount()` in `EventSigningSystem.cpp:379`
     /// Uses `pForgettenTemple.UserList.size()` — we approximate with all_user_count from temple event.
     pub(crate) fn get_ft_user_count(&self) -> u16 {
         self.event_room_manager
@@ -1989,7 +1860,6 @@ impl WorldState {
 
     /// Check if the Under The Castle event is currently active.
     ///
-    /// C++ Reference: `CUser::GetUnderTheCastleOpen()` in `EventSigningSystem.cpp:384`
     pub(crate) fn is_under_castle_active(&self) -> bool {
         self.under_the_castle_state()
             .is_active
@@ -1998,7 +1868,6 @@ impl WorldState {
 
     /// Get the number of users currently in the Under The Castle zone.
     ///
-    /// C++ Reference: `CUser::GetUnderTheCastleUserCount()` in `EventSigningSystem.cpp:389`
     /// C++ uses `pUnderTheCastle.UserList.size()` — we count sessions in the UTC zone.
     pub(crate) fn get_under_castle_user_count(&self) -> u16 {
         self.get_users_in_zone(ZONE_UNDER_CASTLE).len() as u16
@@ -2006,7 +1875,6 @@ impl WorldState {
 
     /// Check if the Juraid Mountain join phase is open.
     ///
-    /// C++ Reference: `CUser::GetJuraidMountainTime()` in `EventSigningSystem.cpp:395`
     pub(crate) fn is_juraid_join_open(&self) -> bool {
         self.event_room_manager.read_temple_event(|s| {
             // TEMPLE_EVENT_JURAD_MOUNTAIN = 100 (shared/packets.h)
@@ -2016,7 +1884,6 @@ impl WorldState {
 
     /// Check if the beef roast event is active with farming play and a winner.
     ///
-    /// C++ Reference: `CUser::BeefEventLogin()` in `BeefEventNew.cpp:243`
     /// Returns true if beef event is active, farming is on, and winner nation != 0.
     pub(crate) fn is_beef_event_farming(&self) -> bool {
         let state = self.beef_event.read();
@@ -2025,7 +1892,6 @@ impl WorldState {
 
     /// Mutate the beef event state through a closure.
     ///
-    /// C++ Reference: `CGameServerDlg::pBeefEvent` modifications
     pub(crate) fn update_beef_event<F>(&self, f: F)
     where
         F: FnOnce(&mut crate::world::BeefEventState),
@@ -2043,7 +1909,6 @@ impl WorldState {
 
     /// Get all session IDs of players currently in a given zone.
     ///
-    /// C++ Reference: Iterates `MAX_USER` in zone check loops.
     pub(crate) fn get_users_in_zone(&self, zone_id: u16) -> Vec<SessionId> {
         let mut sids = Vec::new();
         for entry in self.sessions.iter() {
@@ -2059,7 +1924,6 @@ impl WorldState {
     /// Check if a daily operation is available (cooldown expired) and if so,
     /// update the timestamp. Returns 1 if allowed, 0 if still on cooldown.
     ///
-    /// C++ Reference: `CUser::GetUserDailyOp()` in `UserDailyOpSystem.cpp:3-45`
     pub(crate) fn get_user_daily_op(&self, char_name: &str, op_type: u8) -> u8 {
         let op = match DailyOpCode::from_u8(op_type) {
             Some(op) => op,
@@ -2100,7 +1964,6 @@ impl WorldState {
 
     /// Get all zone kill rewards for a specific zone.
     ///
-    /// C++ Reference: `CGameServerDlg::m_ZoneKillReward` — iterated in `GiveKillReward()`
     pub fn get_zone_kill_rewards(&self, zone_id: u16) -> Vec<ZoneKillReward> {
         let rewards = self.zone_kill_rewards.read();
         rewards
@@ -2112,7 +1975,6 @@ impl WorldState {
 
     /// Get all zone online reward definitions (global list).
     ///
-    /// C++ Reference: `CGameServerDlg::m_ZoneOnlineRewardArray`
     pub fn get_zone_online_rewards(&self) -> Vec<ZoneOnlineReward> {
         self.zone_online_rewards.read().clone()
     }
@@ -2141,7 +2003,6 @@ impl WorldState {
 
     /// Get the experience percentage (0-100) for a player.
     ///
-    /// C++ Reference: `CUser::GetExpPercent()` in `User.cpp:4713`
     #[cfg(test)]
     pub(crate) fn get_exp_percent(&self, sid: SessionId) -> i32 {
         self.with_session(sid, |h| {

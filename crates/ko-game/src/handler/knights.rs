@@ -1,7 +1,4 @@
 //! WIZKNIGHTS_PROCESS (0x3C) handler — clan system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/KnightsManager.cpp`
-//!
 //! Handles clan sub-opcodes: create, join, withdraw, remove, destroy,
 //! admit, reject, punish, chief, vicechief, officer, member listing,
 //! donate NP, and clan notice update.
@@ -16,19 +13,15 @@ use crate::session::{ClientSession, SessionState};
 use crate::world::{KnightsAlliance, KnightsInfo, MAX_ID_SIZE};
 
 // ── Fame / Rank Constants ─────────────────────────────────────────────
-// C++ Reference: `KnightsDefine.h`
 
 use crate::clan_constants::{
     CHIEF, CLAN_COIN_REQUIREMENT, CLAN_LEVEL_REQUIREMENT, COMMAND_CAPTAIN, MAX_CLAN_USERS, OFFICER,
     TRAINEE, VICECHIEF,
 };
 /// Minimum NP required to donate (user must retain at least this much).
-///
-/// C++ Reference: `Knights.h:5` — `#define MIN_NP_TO_DONATE 1000`
 const MIN_NP_TO_DONATE: u32 = 1000;
 
 // ── Sub-Opcode Constants ──────────────────────────────────────────────
-// C++ Reference: `packets.h` — `enum class KnightsPacket`
 
 const KNIGHTS_CREATE: u8 = 1;
 const KNIGHTS_JOIN: u8 = 2;
@@ -79,8 +72,6 @@ const WIZKNIGHTS_PROCESS: u8 = 0x3C;
 const WIZ_NOTICE: u8 = 0x2E;
 
 /// Handle WIZKNIGHTS_PROCESS from the client.
-///
-/// C++ Reference: `CKnightsManager::PacketProcess` in `KnightsManager.cpp:8-129`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -117,7 +108,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         KNIGHTS_MARK_REGISTER => handle_mark_register(session, &mut reader).await,
         KNIGHTS_MARK_REQ => handle_mark_req(session, &mut reader).await,
         KNIGHTS_MARK_REGION_REQ => {
-            // C++ Reference: KnightsManager.cpp:1149-1174 — KnighsRequestSymbols()
             // NOTE: Even C++ has early `return;` at top (line 1153) — this is disabled server-side.
             debug!(
                 "[{}] KNIGHTS_MARK_REGION_REQ: no-op (disabled in C++ too)",
@@ -147,7 +137,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         KNIGHTS_LADDER_POINTS => handle_ladder_points(session).await,
         KNIGHTS_VS_LIST => {
             // Tournament clan VS list — send current tournament state to requesting player
-            // C++ Reference: KnightsManager.cpp:176-220 — KnightsVsLoginList
             let world = session.world().clone();
             super::tournament::send_state_to_player(&world, session.session_id());
             Ok(())
@@ -181,9 +170,6 @@ fn get_char_info(session: &ClientSession) -> Option<crate::world::CharacterInfo>
 // ── KNIGHTS_CREATE (1) ────────────────────────────────────────────────
 
 /// Create a new clan.
-///
-/// C++ Reference: `CKnightsManager::CreateKnights` + `ReqCreateKnights`
-/// C++ Reference: `KnightsManager.cpp:228-231` — busy state checks
 async fn handle_create(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -284,7 +270,6 @@ async fn handle_create(
     };
 
     let char_name = ch.name.clone();
-    // C++ Reference: KnightsManager.cpp:256 — AutoRoyalG1 server setting
     // `g_pMain->pServerSetting.AutoRoyalG1 ? ClanTypeRoyal1 : ClanTypeTraining`
     use crate::clan_constants::{CLAN_TYPE_ROYAL1, CLAN_TYPE_TRAINING};
     let auto_royal = world
@@ -376,7 +361,6 @@ async fn handle_create(
     session.world().insert_knights(info);
 
     // Build success response
-    // C++ Reference: ReqCreateKnights — broadcasts to region
     // result << uint8(1) << uint32(sid) << sClanID << strKnightsName
     //        << uint8(grade) << ranking << gold;
     let mut result = Packet::new(WIZKNIGHTS_PROCESS);
@@ -407,8 +391,6 @@ async fn handle_create(
 // ── KNIGHTS_JOIN (2) ──────────────────────────────────────────────────
 
 /// Invite a player to join the clan.
-///
-/// C++ Reference: `CKnightsManager::KnightsJoin` in `KnightsManager.cpp:277-344`
 async fn handle_join(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -514,8 +496,6 @@ async fn handle_join(
 // ── KNIGHTS_JOIN_REQ (17) ─────────────────────────────────────────────
 
 /// Accept or decline a clan join invitation.
-///
-/// C++ Reference: `CKnightsManager::KnightsJoinReq` in `KnightsManager.cpp:878-922`
 async fn handle_join_req(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -615,7 +595,7 @@ async fn handle_join_req(
     result.write_u8(clan.ranking);
     session.send_packet(&result).await?;
 
-    // SendClanPremium after join — C++ Reference: KnightsDatabaseHandler.cpp:246
+    // SendClanPremium after join
     {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -645,8 +625,6 @@ async fn handle_join_req(
 // ── KNIGHTS_WITHDRAW (3) ──────────────────────────────────────────────
 
 /// Leave the clan voluntarily.
-///
-/// C++ Reference: `CKnightsManager::KnightsWithdraw` + `ReqKnightsLeave`
 async fn handle_withdraw(session: &mut ClientSession) -> anyhow::Result<()> {
     let ch = match get_char_info(session) {
         Some(c) => c,
@@ -724,7 +702,6 @@ async fn handle_withdraw(session: &mut ClientSession) -> anyhow::Result<()> {
     });
 
     // SendClanPremium(exits=true) — reset clan premium on leave
-    // C++ Reference: Knights.cpp:391 — if (isInPremium()) pUser->SendClanPremium(this, true)
     session.world().update_session(sid, |h| {
         h.clan_premium_in_use = 0;
     });
@@ -743,8 +720,6 @@ async fn handle_withdraw(session: &mut ClientSession) -> anyhow::Result<()> {
 // ── KNIGHTS_REMOVE (4) ────────────────────────────────────────────────
 
 /// Kick a member from the clan.
-///
-/// C++ Reference: `CKnightsManager::KnightsRemove` in `KnightsManager.cpp:388-447`
 async fn handle_remove(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -768,7 +743,6 @@ async fn handle_remove(
     }
 
     // Must be clan leader to remove a member.
-    // C++ Reference: KnightsManager.cpp:414 — `!pUser->isClanLeader()` (CHIEF only).
     if ch.fame != CHIEF {
         session
             .send_packet(&knights_error(KNIGHTS_REMOVE, 6))
@@ -777,7 +751,6 @@ async fn handle_remove(
     }
 
     // Can't remove yourself
-    // C++ Reference: KnightsManager.cpp:418 — `bResult = 9`
     if target_name.to_uppercase() == ch.name.to_uppercase() {
         session
             .send_packet(&knights_error(KNIGHTS_REMOVE, 9))
@@ -786,7 +759,6 @@ async fn handle_remove(
     }
 
     // If target is online, validate nation and clan
-    // C++ Reference: KnightsManager.cpp:420-427 — nation(4) and clan(5) checks
     if let Some(target_sid) = session.world().find_session_by_name(&target_name) {
         if let Some(tc) = session.world().get_character_info(target_sid) {
             if ch.nation != tc.nation {
@@ -849,7 +821,6 @@ async fn handle_remove(
         });
 
         // SendClanPremium(exits=true) — reset clan premium on kick
-        // C++ Reference: Knights.cpp:391
         session.world().update_session(target_sid, |h| {
             h.clan_premium_in_use = 0;
         });
@@ -875,8 +846,6 @@ async fn handle_remove(
 // ── KNIGHTS_DESTROY (5) ───────────────────────────────────────────────
 
 /// Disband the clan (chief only).
-///
-/// C++ Reference: `CKnightsManager::KnightsDestroy` + `ReqKnightsDestroy`
 async fn handle_destroy(session: &mut ClientSession) -> anyhow::Result<()> {
     if session.world().is_player_dead(session.session_id()) {
         return Ok(());
@@ -970,8 +939,6 @@ async fn handle_destroy(session: &mut ClientSession) -> anyhow::Result<()> {
 // ── KNIGHTS_ADMIT (6) ─────────────────────────────────────────────────
 
 /// Promote a clan member's rank.
-///
-/// C++ Reference: `CKnightsManager::KnightsAdmit` in `KnightsManager.cpp:480-536`
 async fn handle_admit(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -1031,7 +998,6 @@ async fn handle_admit(
     }
 
     // Verify target is online and in the same clan/nation
-    // C++ Reference: KnightsManager.cpp:512-520 — validate target
     match session.world().find_session_by_name(&target_name) {
         Some(target_sid) => {
             if let Some(tc) = session.world().get_character_info(target_sid) {
@@ -1071,8 +1037,6 @@ async fn handle_admit(
 // ── KNIGHTS_REJECT (7) ────────────────────────────────────────────────
 
 /// Demote a clan member's rank.
-///
-/// C++ Reference: `CKnightsManager::KnightsReject` in `KnightsManager.cpp:544-606`
 async fn handle_reject(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -1138,8 +1102,6 @@ async fn handle_reject(
 // ── KNIGHTS_PUNISH (8) ────────────────────────────────────────────────
 
 /// Punish a clan member.
-///
-/// C++ Reference: `CKnightsManager::KnightsPunish` in `KnightsManager.cpp:608-670`
 async fn handle_punish(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -1159,7 +1121,6 @@ async fn handle_punish(
     };
 
     // Must be VICECHIEF or higher to punish.
-    // C++ Reference: KnightsManager.cpp:633 — `pUser->GetFame() < VICECHIEF`.
     // NOTE: In C++ with CHIEF=1, VICECHIEF=2 the comparison `fame < 2` unintentionally
     // blocks CHIEF(1). We treat this as a C++ bug and allow CHIEF as well, since the
     // clan leader should always be able to punish members.
@@ -1171,7 +1132,6 @@ async fn handle_punish(
     }
 
     // Cannot punish yourself
-    // C++ Reference: KnightsManager.cpp:631 — `STRCASECMP(strUserID, pUser->GetName())==0 → bResult=9`
     if target_name.to_uppercase() == ch.name.to_uppercase() {
         session
             .send_packet(&knights_error(KNIGHTS_PUNISH, 9))
@@ -1180,7 +1140,6 @@ async fn handle_punish(
     }
 
     // Validate target is online, same nation, same clan
-    // C++ Reference: KnightsManager.cpp:639-648
     let target_sid = session.world().find_session_by_name(&target_name);
     let b_result = match target_sid {
         Some(tsid) => {
@@ -1211,8 +1170,6 @@ async fn handle_punish(
 // ── KNIGHTS_CHIEF (9) ─────────────────────────────────────────────────
 
 /// Transfer clan leadership to another member.
-///
-/// C++ Reference: `CKnightsManager::KnightsChief` in `KnightsManager.cpp:672-734`
 async fn handle_chief(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -1330,8 +1287,6 @@ async fn handle_chief(
 // ── KNIGHTS_VICECHIEF (10) ────────────────────────────────────────────
 
 /// Appoint/remove a vice chief.
-///
-/// C++ Reference: `CKnightsManager::KnightsViceChief` in `KnightsManager.cpp:736-810`
 async fn handle_vicechief(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -1363,7 +1318,6 @@ async fn handle_vicechief(
     }
 
     // Validate target: must be online, same nation, same clan
-    // C++ Reference: KnightsManager.cpp:752-810
     if let Some(target_sid) = session.world().find_session_by_name(&target_name) {
         if let Some(tc) = session.world().get_character_info(target_sid) {
             if ch.nation != tc.nation {
@@ -1440,8 +1394,6 @@ async fn handle_vicechief(
 // ── KNIGHTS_OFFICER (11) ──────────────────────────────────────────────
 
 /// Appoint/remove an officer.
-///
-/// C++ Reference: `CKnightsManager::KnightsOfficer` in `KnightsManager.cpp:812-876`
 async fn handle_officer(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -1461,7 +1413,6 @@ async fn handle_officer(
     };
 
     // Must be clan leader to promote to officer.
-    // C++ Reference: KnightsManager.cpp:837 — `!pUser->isClanLeader()` (CHIEF only).
     if ch.fame != CHIEF {
         session
             .send_packet(&knights_error(KNIGHTS_OFFICER, 6))
@@ -1475,7 +1426,6 @@ async fn handle_officer(
     }
 
     // Validate target: must be online, same nation, same clan.
-    // C++ Reference: KnightsManager.cpp:843-852
     let target_sid = match session.world().find_session_by_name(&target_name) {
         Some(s) => s,
         None => {
@@ -1527,8 +1477,6 @@ async fn handle_officer(
 // ── KNIGHTS_ALLLIST_REQ (12) ──────────────────────────────────────────
 
 /// List all clans of the same nation (paged, 10 per page).
-///
-/// C++ Reference: `CKnightsManager::KnightsAllList` in `KnightsManager.cpp:1025-1060`
 async fn handle_alllist(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -1594,8 +1542,6 @@ async fn handle_alllist(
 // ── KNIGHTS_MEMBER_REQ (13) ───────────────────────────────────────────
 
 /// List all members of the player's clan.
-///
-/// C++ Reference: `CKnightsManager::KnightsAllMember` + `CKnights::GetKnightsAllMembers`
 async fn handle_member_req(session: &mut ClientSession) -> anyhow::Result<()> {
     let ch = match get_char_info(session) {
         Some(c) => c,
@@ -1722,8 +1668,6 @@ async fn handle_member_req(session: &mut ClientSession) -> anyhow::Result<()> {
 // ── KNIGHTS_CURRENT_REQ (14) ──────────────────────────────────────────
 
 /// List online clan members (paged).
-///
-/// C++ Reference: `CKnightsManager::KnightsCurrentMember` in `KnightsManager.cpp:969-1019`
 async fn handle_current_req(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -1788,8 +1732,6 @@ async fn handle_current_req(
 // ── KNIGHTS_POINT_REQ (59) ────────────────────────────────────────────
 
 /// Get donate NP info (user's loyalty + clan fund).
-///
-/// C++ Reference: `CKnightsManager::DonateNPReq` in `KnightsManager.cpp:1598-1613`
 async fn handle_point_req(session: &mut ClientSession) -> anyhow::Result<()> {
     let ch = match get_char_info(session) {
         Some(c) => c,
@@ -1819,9 +1761,6 @@ async fn handle_point_req(session: &mut ClientSession) -> anyhow::Result<()> {
 // ── KNIGHTS_DONATE_POINTS (61) ────────────────────────────────────────
 
 /// Donate NP to the clan fund.
-///
-/// C++ Reference: `CKnightsManager::DonateNP` + `ReqKnightsDonateNP` in `KnightsManager.cpp:1624-1641, 921-951`
-///
 /// Deducts NP from the user's loyalty and adds it to the clan fund.
 /// User must retain at least `MIN_NP_TO_DONATE` (1000) NP after donation.
 async fn handle_donate_np(
@@ -1882,7 +1821,6 @@ async fn handle_donate_np(
     });
 
     // Send WIZ_LOYALTY_CHANGE to update the client
-    // C++ Reference: `CUser::SendLoyaltyChange("Loyalty Donate Clan", 0, false, false, false)`
     // Packet: WIZ_LOYALTY_CHANGE(0x2A) + u8(1) + u32(loyalty) + u32(loyalty_monthly) + u32(0) + u32(0)
     let loyalty_monthly = world
         .with_session(sid, |h| {
@@ -1916,8 +1854,6 @@ async fn handle_donate_np(
 // ── KNIGHTS_POINT_METHOD (60) ────────────────────────────────────────
 
 /// Change the clan point method (how NP is distributed).
-///
-/// C++ Reference: `CKnightsManager::KnightsPointMethodModify` in `KnightsManager.cpp:1282-1308`
 async fn handle_point_method(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -1984,8 +1920,6 @@ async fn handle_point_method(
 // ── KNIGHTS_HANDOVER_VICECHIEF_LIST (62) ────────────────────────────
 
 /// List online vice chiefs for leadership handover.
-///
-/// C++ Reference: `CKnightsManager::KnightsHandoverList` in `KnightsManager.cpp:1209-1245`
 async fn handle_handover_list(session: &mut ClientSession) -> anyhow::Result<()> {
     let ch = match get_char_info(session) {
         Some(c) => c,
@@ -2052,8 +1986,6 @@ async fn handle_handover_list(session: &mut ClientSession) -> anyhow::Result<()>
 // ── KNIGHTS_HANDOVER_REQ (63) ───────────────────────────────────────
 
 /// Request leadership handover to a vice chief.
-///
-/// C++ Reference: `CKnightsManager::KnightsHandoverReq` in `KnightsManager.cpp:1249-1279`
 async fn handle_handover_req(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -2072,7 +2004,6 @@ async fn handle_handover_req(
     }
 
     // Validate clan exists in runtime state
-    // C++ Reference: KnightsManager.cpp:1254-1256 — GetClanPtr() null check
     if session.world().get_knights(ch.knights_id).is_none() {
         let mut fail = Packet::new(WIZKNIGHTS_PROCESS);
         fail.write_u8(KNIGHTS_HANDOVER_REQ);
@@ -2168,7 +2099,6 @@ async fn handle_handover_req(
 // ── KNIGHTS_HANDOVER (79) ───────────────────────────────────────────
 
 /// Handle the KNIGHTS_HANDOVER sub-opcode (DB response routing).
-///
 /// In the C++ code this is routed to the DB thread. Since we handle it
 /// inline, this delegates to the same logic as `handle_handover_req`.
 fn handle_handover(
@@ -2188,8 +2118,6 @@ fn handle_handover(
 // ── KNIGHTS_DONATION_LIST (64) ──────────────────────────────────────
 
 /// List NP donations per clan member.
-///
-/// C++ Reference: `CKnightsManager::DonationList` in `KnightsManager.cpp:1653-1686`
 async fn handle_donation_list(session: &mut ClientSession) -> anyhow::Result<()> {
     let ch = match get_char_info(session) {
         Some(c) => c,
@@ -2244,9 +2172,6 @@ async fn handle_donation_list(session: &mut ClientSession) -> anyhow::Result<()>
 // ── KNIGHTS_ALLY_CREATE (28) / KNIGHTS_ALLY_INSERT (30) ──────────────
 
 /// Send an alliance creation or join invitation to another clan leader.
-///
-/// C++ Reference: `CKnightsManager::KnightsAllianceCreate` + `KnightsAllianceInsert`
-///
 /// Both opcodes share the same flow: the user targets another clan leader
 /// and sends them an invitation to join or create an alliance.
 async fn handle_alliance_create(
@@ -2255,7 +2180,6 @@ async fn handle_alliance_create(
     incoming_opcode: u8,
 ) -> anyhow::Result<()> {
     // Determine response sub-opcode based on incoming opcode.
-    // C++: ALLY_CREATE sends KNIGHTS_ALLY_CREATE; ALLY_INSERT sends KNIGHTS_ALLY_REQ.
     let is_insert = incoming_opcode == KNIGHTS_ALLY_INSERT;
     let resp_opcode = if is_insert {
         KNIGHTS_ALLY_REQ
@@ -2350,7 +2274,6 @@ async fn handle_alliance_create(
     });
 
     // Send invitation to the target
-    // C++ Reference: `result.SByte(); result << uint8(1) << pMainClan->GetName() << pMainClan->GetID();`
     let mut result = Packet::new(WIZKNIGHTS_PROCESS);
     result.write_u8(resp_opcode);
     result.write_u8(1); // success/invitation flag
@@ -2364,8 +2287,6 @@ async fn handle_alliance_create(
 // ── KNIGHTS_ALLY_REQ (29) ────────────────────────────────────────────
 
 /// Accept or decline an alliance invitation.
-///
-/// C++ Reference: `CKnightsManager::KnightsAllianceRequest`
 async fn handle_alliance_req(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -2585,8 +2506,6 @@ async fn handle_alliance_req(
 // ── KNIGHTS_ALLY_REMOVE (31) ─────────────────────────────────────────
 
 /// Leave an alliance. If the main clan leaves, the entire alliance is dissolved.
-///
-/// C++ Reference: `CKnightsManager::KnightsAllianceRemove` + `ReqKnightsAllianceRemove`
 async fn handle_alliance_remove(session: &mut ClientSession) -> anyhow::Result<()> {
     let ch = match get_char_info(session) {
         Some(c) => c,
@@ -2749,8 +2668,6 @@ async fn handle_alliance_remove(session: &mut ClientSession) -> anyhow::Result<(
 // ── KNIGHTS_ALLY_PUNISH (32) ─────────────────────────────────────────
 
 /// Kick a clan from the alliance (alliance leader only).
-///
-/// C++ Reference: `CKnightsManager::KnightsAlliancePunish` + `ReqKnightsAlliancePunish`
 async fn handle_alliance_punish(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -2902,8 +2819,6 @@ async fn handle_alliance_punish(
 // ── KNIGHTS_ALLY_LIST (34) ───────────────────────────────────────────
 
 /// List all clans in the player's alliance.
-///
-/// C++ Reference: `CKnightsManager::KnightsAllianceList`
 async fn handle_alliance_list(session: &mut ClientSession) -> anyhow::Result<()> {
     let ch = match get_char_info(session) {
         Some(c) => c,
@@ -3006,9 +2921,6 @@ async fn handle_alliance_list(session: &mut ClientSession) -> anyhow::Result<()>
 // ── SendUpdate helper ────────────────────────────────────────────────
 
 /// Send a KNIGHTS_UPDATE packet for a clan to all its online members.
-///
-/// C++ Reference: `CKnights::SendUpdate()` in `KnightCape.cpp:250-283`
-///
 /// Alliance cape rules:
 /// - Main/sub alliance clans: show alliance leader's cape + their own RGB colors
 /// - Mercenary clans: show alliance leader's cape with no colors (u32(0))
@@ -3038,7 +2950,6 @@ fn send_knights_update(session: &ClientSession, clan_id: u16) {
             result.write_u16(cape_id);
 
             if is_mercenary {
-                // C++ Reference: mercenary clans get `uint32(0)` (no colors)
                 result.write_u32(0);
             } else if mc.castellan_cape {
                 // Main or sub alliance: use castellan cape colors
@@ -3090,14 +3001,11 @@ fn send_knights_update(session: &ClientSession, clan_id: u16) {
 // ── KNIGHTS_PROMATE_CLAN (82) ────────────────────────────────────────
 
 /// Clan promotion list — returns paginated list of all clans with details.
-///
 /// Sniffer verified (session 10, ids 84403-84405):
 ///   C2S: `[sub=82][page:u8][flag:u8]`
 ///   S2C 1: `[sub=82][01][total_pages:u16le]`
 ///   S2C 2: `[sub=82][02][clan_count:u8][00][...entries...]`
 ///   Entry: `[clan_id:u16le][name:DByte][grade:u8][nation:u8][leader:DByte][fame:u8][00][memo:DByte(139)]`
-///
-/// C++ Reference: `KnightsManager.cpp:122-123` — empty case in open source, but original server responds.
 const PROMOTE_CLANS_PER_PAGE: usize = 8;
 const PROMOTE_MEMO_LEN: usize = 139;
 
@@ -3173,8 +3081,6 @@ async fn handle_promote_clan_list(
 }
 
 /// Update the clan notice.
-///
-/// C++ Reference: `CKnightsManager::ClanNoticeUpdateProcess` in `KnightsManager.cpp:1691-1706`
 async fn handle_update_notice(
     session: &mut ClientSession,
     reader: &mut ko_protocol::PacketReader<'_>,
@@ -3225,9 +3131,6 @@ async fn handle_update_notice(
 const WIZKNIGHTS_LIST: u8 = 0x3E;
 
 /// Handle WIZKNIGHTS_LIST — send all clan IDs and names.
-///
-/// C++ Reference: `CUser::SendAllKnightsID` in `User.cpp:3703-3724`
-///
 /// This is called once on login. The C++ code sends it compressed, but
 /// we send it uncompressed for simplicity (client handles both).
 pub async fn handle_knights_list(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
@@ -3252,8 +3155,6 @@ pub async fn handle_knights_list(session: &mut ClientSession, _pkt: Packet) -> a
 // ── Clan Notice Helper ────────────────────────────────────────────────
 
 /// Build a WIZ_NOTICE packet containing the clan notice.
-///
-/// C++ Reference: `CKnights::ConstructClanNoticePacket` in `Knights.cpp:133-154`
 pub fn build_clan_notice_packet(notice: &str) -> Packet {
     let mut pkt = Packet::new(WIZ_NOTICE);
     // C++ uses DByte mode (u16 string prefix)
@@ -3265,7 +3166,6 @@ pub fn build_clan_notice_packet(notice: &str) -> Packet {
 }
 
 /// Send the clan notice to a player on login.
-///
 /// Called from gamestart handler when the player is in a clan with a non-empty notice.
 pub async fn send_clan_notice_on_login(
     session: &mut ClientSession,
@@ -3295,9 +3195,6 @@ pub async fn send_clan_notice_on_login(
 // ── KNIGHTS_UPDATEMEMO (88) ──────────────────────────────────────────
 
 /// Update user memo or alliance notice.
-///
-/// C++ Reference: `CKnightsManager::UserMemoUpdateProcess` in `KnightsManager.cpp:1710-1827`
-///
 /// type=2 → alliance notice update (alliance leader only)
 /// type=3 → user memo update
 /// type=6 → user title update (not fully implemented in C++)
@@ -3415,7 +3312,6 @@ async fn handle_update_memo(
         }
         6 => {
             // User title update
-            // C++ Reference: `KnightsManager.cpp:1789-1820`
             // C++ reads username + title via SByte, validates, then sets bResult=false (TO-DO).
             // We replicate C++ behavior: read the data, validate, send failure.
             let username = match reader.read_sbyte_string() {
@@ -3456,8 +3352,6 @@ async fn handle_update_memo(
 // ── Clan Offline Notification ───────────────────────────────────────
 
 /// Send clan offline notification when a player logs out.
-///
-/// C++ Reference: `CKnights::OnLogout` in `Knights.cpp:231-246`
 pub fn send_clan_offline_notification(
     world: &crate::world::WorldState,
     clan_id: u16,
@@ -3476,12 +3370,8 @@ pub fn send_clan_offline_notification(
 }
 
 /// Build and send top-5 clans per nation packet.
-///
 /// Used by both KNIGHTS_TOP10 and KNIGHTS_UNK1 — they differ only in
 /// the header u16 value (0 for TOP10, 1 for UNK1/flags).
-///
-/// C++ Reference: `KnightsManager.cpp:1331-1364` — `KnightsTop10`
-///
 /// Wire: `[u8 sub] [u16 header] + per nation(2): 5 entries: [i16 id] [str name] [i16 mark_ver] [i16 rank]`
 async fn send_top_clans(
     session: &mut ClientSession,
@@ -3515,23 +3405,16 @@ async fn send_top_clans(
 }
 
 /// Handle KNIGHTS_TOP10 — top 10 clans ranking (5 per nation).
-///
-/// C++ Reference: `KnightsManager.cpp:1331-1364`
 async fn handle_top10(session: &mut ClientSession) -> anyhow::Result<()> {
     send_top_clans(session, KNIGHTS_TOP10, 0).await
 }
 
 /// Handle KNIGHTS_UNK1 — flags list (top 5 clans per nation).
-///
-/// C++ Reference: `KnightsManager.cpp:134-172`
 async fn handle_flags_list(session: &mut ClientSession) -> anyhow::Result<()> {
     send_top_clans(session, KNIGHTS_UNK1, 1).await
 }
 
 /// Handle KNIGHTS_LADDER_POINTS — ladder points ranking.
-///
-/// C++ Reference: `KnightsManager.cpp:1851-1900`
-///
 /// Sends top-5 per nation same as TOP10 with sub-opcode 100.
 async fn handle_ladder_points(session: &mut ClientSession) -> anyhow::Result<()> {
     send_top_clans(session, KNIGHTS_LADDER_POINTS, 0).await
@@ -3541,7 +3424,6 @@ async fn handle_ladder_points(session: &mut ClientSession) -> anyhow::Result<()>
 //
 // Client asks for current clan emblem version before registering a new one.
 //
-// C++ Reference: `KnightsManager.cpp:1117-1140` — `KnightsRequestSymbolVersion()`
 //
 // Response: `[u8 25] [i16 failCode]` on error, or `[u8 25] [i16 1] [u16 markVersion]` on success
 //
@@ -3608,16 +3490,11 @@ async fn handle_mark_version_req(session: &mut ClientSession) -> anyhow::Result<
 //
 // Client sends clan emblem data for registration.
 //
-// C++ Reference: `KnightsManager.cpp:1064-1114` — `KnightsRegisterSymbol()`
 
 /// Maximum clan emblem size in bytes.
-///
-/// C++ Reference: `globals.h:353` — `#define MAXKNIGHTS_MARK 2400`
 const MAXKNIGHTS_MARK: u16 = 2400;
 
 /// Gold cost to register a clan emblem.
-///
-/// C++ Reference: `globals.h:354` — `#define CLAN_SYMBOL_COST 5000000`
 const CLAN_SYMBOL_COST: u32 = 5_000_000;
 
 async fn handle_mark_register(
@@ -3750,7 +3627,6 @@ async fn handle_mark_register(
 //
 // Request to download a clan's emblem image.
 //
-// C++ Reference: `KnightsManager.cpp:1177-1205` — `KnightsGetSymbol()`
 //
 // C++ silently returns if clan has no mark (version=0 or len=0).
 
@@ -3766,7 +3642,6 @@ async fn handle_mark_req(
         None => return Ok(()), // C++ silently returns
     };
 
-    // C++: if not promoted, version==0, or len==0 → silently return
     if knights.flag < 2 || knights.mark_version == 0 || knights.mark_data.is_empty() {
         return Ok(());
     }
@@ -3777,7 +3652,6 @@ async fn handle_mark_req(
     let mark_data = knights.mark_data.clone();
     drop(knights);
 
-    // C++ Reference: result << KNIGHTS_MARK_REQ << u16(1) << u16(nation) << sClanID
     //                       << u16(markVersion) << u16(markLen); result.append(m_Image, markLen);
     // C++ sends this via SendCompressed, but we send uncompressed for now.
     let mut pkt = Packet::new(WIZKNIGHTS_PROCESS);
@@ -4406,7 +4280,6 @@ mod tests {
 
     #[test]
     fn test_memo_title_update_packet_format() {
-        // C++ Reference: KnightsManager.cpp:1813-1814
         // Packet: [u8 KNIGHTS_UPDATEMEMO][u8 type=6][u8 bResult][SByte username][SByte title]
         let mut pkt = Packet::new(WIZKNIGHTS_PROCESS);
         pkt.write_u8(KNIGHTS_UPDATEMEMO);
@@ -4769,7 +4642,6 @@ mod tests {
 
     #[test]
     fn test_mark_sub_opcodes() {
-        // C++ Reference: packets.h:610-622
         assert_eq!(KNIGHTS_MARK_VERSION_REQ, 25);
         assert_eq!(KNIGHTS_MARK_REGISTER, 26);
         assert_eq!(KNIGHTS_MARK_REQ, 35);
@@ -4842,7 +4714,6 @@ mod tests {
     // ── Sprint 248: Permission constant tests ────────────────────────
 
     /// KNIGHTS_REMOVE: only CHIEF may remove members.
-    /// C++ Reference: KnightsManager.cpp:414 — `!pUser->isClanLeader()`
     #[test]
     fn test_remove_requires_chief_only() {
         assert_eq!(CHIEF, 1);
@@ -4853,7 +4724,6 @@ mod tests {
     }
 
     /// KNIGHTS_PUNISH: CHIEF and VICECHIEF may punish.
-    /// C++ Reference: KnightsManager.cpp:633 — `pUser->GetFame() < VICECHIEF`
     /// Note: C++ bug causes CHIEF(1) < VICECHIEF(2) → denied. We fix this.
     #[test]
     fn test_punish_allows_chief_and_vicechief() {
@@ -4869,7 +4739,6 @@ mod tests {
     }
 
     /// KNIGHTS_OFFICER promotion: only CHIEF may promote to officer.
-    /// C++ Reference: KnightsManager.cpp:837 — `!pUser->isClanLeader()`
     #[test]
     fn test_officer_promotion_requires_chief() {
         assert_eq!(CHIEF, 1);
@@ -4880,7 +4749,6 @@ mod tests {
 
     // ── Sprint 315: AutoRoyalG1 clan creation flag ───────────────────
 
-    /// C++ Reference: KnightsManager.cpp:256
     /// `g_pMain->pServerSetting.AutoRoyalG1 ? ClanTypeRoyal1 : ClanTypeTraining`
     #[test]
     fn test_auto_royal_g1_clan_flag() {
@@ -4907,7 +4775,6 @@ mod tests {
 
     // ── Sprint 322: Knights validation fixes ───────────────────────
 
-    /// C++ Reference: KnightsManager.cpp:639-648 — punish target validation.
     /// Error codes: 2=offline, 4=diff nation, 5=diff clan, 9=self-punish.
     #[test]
     fn test_punish_error_codes() {
@@ -4920,7 +4787,6 @@ mod tests {
         assert_ne!(diff_clan, self_punish);
     }
 
-    /// C++ Reference: KnightsManager.cpp:420-427 — remove target validation.
     #[test]
     fn test_remove_nation_check() {
         // Inviter nation 1, target nation 2 — should fail with error 4
@@ -4929,7 +4795,6 @@ mod tests {
         assert_ne!(inviter_nation, target_nation);
     }
 
-    /// C++ Reference: KnightsManager.cpp:512-520 — admit target must be online.
     #[test]
     fn test_admit_offline_target_error() {
         // Offline target should return error code 2
@@ -4937,7 +4802,6 @@ mod tests {
         assert_eq!(b_result, 2, "offline target should get error 2");
     }
 
-    /// C++ Reference: KnightsManager.cpp:752-810 — vicechief target validation.
     #[test]
     fn test_vicechief_target_validation() {
         // Same nation, same clan → success

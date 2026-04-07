@@ -1,8 +1,4 @@
 //! Letter (mail) system handler — routed from WIZ_SHOPPING_MALL (STORE_LETTER).
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/LetterHandler.cpp`
-//! C++ Reference: `KOOriginalGameServer/GameServer/DatabaseThread.cpp:1315-1317`
-//!
 //! Letter opcodes (from `packets.h:971-980`):
 //! - 1 = LETTER_UNREAD: Check unread letter count
 //! - 2 = LETTER_LIST: List new (unread) letters
@@ -11,7 +7,6 @@
 //! - 5 = LETTER_READ: Read a specific letter
 //! - 6 = LETTER_SEND: Send a new letter
 //! - 7 = LETTER_DELETE: Delete up to 5 letters at once
-//!
 //! All responses use: WIZ_SHOPPING_MALL(0x6A) + u8(STORE_LETTER=6) + u8(letter_opcode)
 
 use ko_db::repositories::letter::LetterRepository;
@@ -29,8 +24,6 @@ use super::{HAVE_MAX, ITEMCOUNT_MAX, SLOT_MAX};
 // Item flag constants imported from crate::world (ITEM_FLAG_RENTED, ITEM_FLAG_BOUND, ITEM_FLAG_DUPLICATE, ITEM_FLAG_SEALED).
 
 /// Shopping mall sub-opcode for letters.
-///
-/// C++ Reference: `packets.h:966` — `STORE_LETTER = 6`
 pub(crate) const STORE_LETTER: u8 = 6;
 
 /// Letter sub-opcodes from `packets.h:971-980`.
@@ -43,24 +36,17 @@ const LETTER_SEND: u8 = 6;
 const LETTER_DELETE: u8 = 7;
 
 /// Gold cost for sending a text-only letter (type 1).
-///
-/// C++ Reference: `LetterHandler.cpp:142` — `nCoinRequirement = 1000` (initial value for type 1)
 const LETTER_COST_TEXT: u32 = 1000;
 
 /// Gold cost for sending a letter with an item (type 2, item attached).
-///
-/// C++ Reference: `LetterHandler.cpp:184` — `nCoinRequirement = 10000` when `nItemID != 0`
 /// Note: type 2 without item costs 5000 (line 186), but type 2 is currently disabled.
 /// Kept for future item-attachment support. Used in test verification.
 const LETTER_COST_ITEM: u32 = 10000;
 
 /// Maximum letters to delete at once.
-///
-/// C++ Reference: `LetterHandler.cpp:26` — `if (bCount > 5)`
 const MAX_DELETE_COUNT: u8 = 5;
 
 /// Handle letter system packets (already past the STORE_LETTER sub-opcode).
-///
 /// Called from shopping_mall::handle when sub_opcode == 6.
 pub async fn handle(
     session: &mut ClientSession,
@@ -105,7 +91,6 @@ pub async fn handle(
 }
 
 /// Build the standard letter response header.
-///
 /// All letter responses start with: WIZ_SHOPPING_MALL + STORE_LETTER + letter_opcode
 fn letter_response(letter_opcode: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizShoppingMall as u8);
@@ -115,9 +100,6 @@ fn letter_response(letter_opcode: u8) -> Packet {
 }
 
 /// LETTER_UNREAD (1): Check unread letter count.
-///
-/// C++ Reference: `CUser::ReqLetterUnread` in `LetterHandler.cpp:95-102`
-///
 /// Response: WIZ_SHOPPING_MALL + STORE_LETTER + LETTER_UNREAD + u8(count)
 async fn handle_unread(session: &mut ClientSession, char_name: &str) -> anyhow::Result<()> {
     let repo = LetterRepository::new(session.pool());
@@ -138,10 +120,6 @@ async fn handle_unread(session: &mut ClientSession, char_name: &str) -> anyhow::
 }
 
 /// LETTER_LIST (2) / LETTER_HISTORY (3): List letters.
-///
-/// C++ Reference: `CUser::ReqLetterList` in `LetterHandler.cpp:104-114`
-/// C++ Reference: `CDBAgent::GetLetterList` in `DBAgent.cpp:1832-1890`
-///
 /// Response: WIZ_SHOPPING_MALL + STORE_LETTER + opcode + u8(1=success) + i8(count)
 ///           + for each: u32(letter_id) + u8(status) + sbyte_string(subject)
 ///                     + sbyte_string(sender) + u8(type) + [if type==2: u32(item_id) + u16(count) + u32(coins)]
@@ -193,9 +171,6 @@ async fn handle_list(
 }
 
 /// LETTER_READ (5): Read a specific letter.
-///
-/// C++ Reference: `CUser::ReqLetterRead` in `LetterHandler.cpp:116-134`
-///
 /// Client sends: u32(letter_id)
 /// Response: WIZ_SHOPPING_MALL + STORE_LETTER + LETTER_READ
 ///           + u8(success) + u32(letter_id) + sbyte_string(message)
@@ -232,9 +207,6 @@ async fn handle_read(
 }
 
 /// LETTER_SEND (6): Send a new letter.
-///
-/// C++ Reference: `CUser::ReqLetterSend` in `LetterHandler.cpp:136-265`
-///
 /// Client sends: sbyte_string(recipient) + sbyte_string(subject) + u8(type)
 ///               + [if type==2: u32(item_id) + u8(src_pos) + u32(coins)]
 ///               + sbyte_string(message)
@@ -244,7 +216,7 @@ async fn handle_send(
     char_name: &str,
     reader: &mut PacketReader<'_>,
 ) -> anyhow::Result<()> {
-    // State checks — C++ Reference: LetterHandler.cpp:147-156
+    // State checks
     let world = session.world().clone();
     let sid = session.session_id();
     if !world.is_session_ingame(sid)
@@ -296,7 +268,6 @@ async fn handle_send(
     }
 
     // ── Type 2 (with item): read item fields from packet ──────────────
-    // C++ Reference: LetterHandler.cpp:180-206
     let mut item_id: u32 = 0;
     let mut src_pos: u8 = 0;
     let mut coins: u32 = 0;
@@ -477,15 +448,10 @@ async fn handle_send(
 }
 
 /// LETTER_GET_ITEM (4): Retrieve attached item from a letter.
-///
-/// C++ Reference: `CUser::ReqLetterGetItem` in `LetterHandler.cpp:267-365`
-///
 /// Validates zone restrictions, busy states, inventory space, weight, and gold cap
 /// before granting the attached item and coins to the player's inventory.
-///
 /// Client sends: u32(letter_id)
 /// Response: WIZ_SHOPPING_MALL + STORE_LETTER + LETTER_GET_ITEM + i8(result)
-///
 /// Result codes: 1=success, -1=error, -2=no slot, -5=overweight
 async fn handle_get_item(
     session: &mut ClientSession,
@@ -695,9 +661,6 @@ async fn handle_get_item(
 }
 
 /// LETTER_DELETE (7): Delete up to 5 letters at once.
-///
-/// C++ Reference: `CUser::ReqLetterDelete` in `LetterHandler.cpp:367-379`
-///
 /// Client sends: u8(count) + for each: u32(letter_id)
 /// Response: WIZ_SHOPPING_MALL + STORE_LETTER + LETTER_DELETE + u8(count)
 ///           + for each: u32(letter_id)
@@ -749,13 +712,9 @@ async fn send_letter_result(session: &mut ClientSession, result: i8) -> anyhow::
 }
 
 /// Create a server-initiated system letter with an optional item attached.
-///
-/// C++ Reference: `CDBAgent::SendLetter()` — used by `ReqLetterGivePremiumItem` and
 /// `ReqLetterGiveBeginnerItem` to send letters from the system (no player session needed).
-///
 /// This is a fire-and-forget async function designed to be called from Lua bindings
 /// or other server-internal code that needs to send letters without a client session.
-///
 /// Parameters:
 /// - `pool`: Database connection pool
 /// - `sender`: Sender name (e.g., "System", "Premium Store")
@@ -806,7 +765,6 @@ pub async fn create_system_letter(
 }
 
 /// Build a LETTER_UNREAD notification packet.
-///
 /// Can be used to notify a player that they have unread letters without requiring
 /// a client session context.
 pub fn build_unread_notification() -> Packet {
@@ -873,7 +831,6 @@ mod tests {
 
     /// Validate LETTER_UNREAD response format.
     ///
-    /// C++ Reference: `CUser::ReqLetterUnread` in LetterHandler.cpp:95-102
     /// Response: WIZ_SHOPPING_MALL + STORE_LETTER + LETTER_UNREAD + u8(count)
     #[test]
     fn test_letter_unread_response_format() {
@@ -889,7 +846,6 @@ mod tests {
 
     /// Validate LETTER_SEND result format.
     ///
-    /// C++ Reference: LetterHandler.cpp:263 — `LETTER_SEND << uint8(bResult)`
     #[test]
     fn test_letter_send_result_format() {
         let mut pkt = letter_response(LETTER_SEND);
@@ -953,7 +909,6 @@ mod tests {
 
     /// Validate LETTER_LIST entry format with type 2 (item attached).
     ///
-    /// C++ Reference: DBAgent.cpp:1874-1883
     /// Entry: u32(id) + u8(status) + sbyte(subject) + sbyte(sender) + u8(type)
     ///        + [if type==2: u32(item_id) + u16(count) + u32(coins)]
     ///        + u32(date) + u16(days)
@@ -1066,7 +1021,6 @@ mod tests {
 
     /// Verify LETTER_GET_ITEM success response format: STORE_LETTER + LETTER_GET_ITEM + i8(1).
     ///
-    /// C++ Reference: LetterHandler.cpp:362 — `result << bResult` where bResult=1 on success.
     #[test]
     fn test_letter_get_item_success_response_format() {
         let mut pkt = letter_response(LETTER_GET_ITEM);
@@ -1111,7 +1065,6 @@ mod tests {
 
     /// Verify expiration time calculation matches C++ LetterHandler.cpp:342-344.
     ///
-    /// C++: `pItem->nExpirationTime = int32(UNIXTIME) + ((60 * 60 * 24) * nExpirationTime)`
     #[test]
     fn test_letter_get_item_expiry_calculation() {
         // 7 days = 7 * 86400 = 604800 seconds
@@ -1158,7 +1111,6 @@ mod tests {
 
     /// Verify gold cost constants for type 1 vs type 2 letters.
     ///
-    /// C++ Reference: LetterHandler.cpp:142 (type 1 = 1000), :184 (type 2 with item = 10000)
     #[test]
     fn test_letter_gold_cost_logic() {
         // Type 1 (text only)
@@ -1223,7 +1175,6 @@ mod tests {
 
     /// Verify LETTER_SEND error -32 format (untradeable item).
     ///
-    /// C++ Reference: LetterHandler.cpp:206 — `bResult = -32`
     #[test]
     fn test_letter_send_untradeable_error() {
         let mut pkt = letter_response(LETTER_SEND);
@@ -1238,7 +1189,6 @@ mod tests {
     // ── Sprint 265: State checks for LETTER_SEND ─────────────────────
 
     /// LETTER_SEND must block mining/fishing/merchanting/trading players.
-    /// C++ Reference: LetterHandler.cpp:147-156
     #[test]
     fn test_letter_send_state_checks_constants() {
         // Verify ZONE_KNIGHT_ROYALE is used for letter zone restriction

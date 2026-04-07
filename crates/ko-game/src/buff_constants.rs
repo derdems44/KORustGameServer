@@ -1,12 +1,8 @@
 //! Canonical BUFF_TYPE constants — Type4 buff identifiers.
-//!
-//! C++ Reference: `MagicProcess.h` — `enum BuffType` values used in
 //! `CMagicProcess::Type4Process()` and buff cleanup logic.
-//!
 //! These constants identify buff effects by their `bBuffType` field in the
 //! `MAGIC_TYPE4` table. Each buff type maps to a specific stat modifier,
 //! status effect, or transformation.
-//!
 //! Previously duplicated across magic_process.rs (~50), buff_tick.rs (38),
 //! attack.rs (3), home.rs (1), stealth.rs (1), flash.rs (1), bdw.rs (1).
 //! Consolidated here as the single source of truth.

@@ -1,13 +1,7 @@
 //! WIZ_SERVER_INDEX (0x6B) handler — server index response.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:1778-1783`
-//!
 //! ## Request (C->S)
-//!
 //! Empty — client sends just the opcode.
-//!
 //! ## Response (S->C)
-//!
 //! | Offset | Type  | Description |
 //! |--------|-------|-------------|
 //! | 0      | u16le | Flag (always 1) |
@@ -17,7 +11,7 @@ use ko_protocol::{Opcode, Packet};
 
 use crate::session::ClientSession;
 
-/// Default server number (from C++ `m_nServerNo` config).
+/// Default server number (from `m_nServerNo` config).
 const DEFAULT_SERVER_NO: u16 = 1;
 
 /// Handle WIZ_SERVER_INDEX from the client.

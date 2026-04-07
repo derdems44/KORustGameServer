@@ -1,21 +1,16 @@
 //! King system model — maps to the `king_system` PostgreSQL table.
-//!
-//! C++ Reference:
 //! - `KingSystem.h` — `CKingSystem` class fields
 //! - MSSQL `KING_SYSTEM` table (30 columns, 2 rows)
-//!
 //! One row per nation (1=Karus, 2=Elmorad), storing election schedule,
 //! impeachment state, active events, treasury, tax, and current king info.
 
 /// A single king system row from the database.
-///
-/// C++ equivalent: `CKingSystem` member fields loaded from `KING_SYSTEM` table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct KingSystemRow {
     /// Nation identifier: 1=Karus, 2=Elmorad.
     pub by_nation: i16,
 
-    /// Election type (C++ `ElectionType` enum).
+    /// Election type (`ElectionType` enum).
     /// 0=NO_TERM, 1=NOMINATION, 2=PRE_ELECTION, 3=ELECTION, 6=TERM_STARTED, 7=TERM_ENDED.
     pub by_type: i16,
 
@@ -91,8 +86,6 @@ pub struct KingSystemRow {
 }
 
 /// A row from the `king_election_list` table.
-///
-/// C++ equivalent: `_KING_ELECTION_LIST` in `KingSystem.h:5-9`.
 /// byType: 3=senator, 4=candidate for King.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct KingElectionListRow {
@@ -104,8 +97,6 @@ pub struct KingElectionListRow {
 }
 
 /// A row from the `king_nomination_list` table.
-///
-/// C++ equivalent: `_KING_NOMINATION_LIST` in `KingSystem.h:12-15`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct KingNominationListRow {
     pub by_nation: i16,
@@ -114,8 +105,6 @@ pub struct KingNominationListRow {
 }
 
 /// A row from the `king_candidacy_notice_board` table.
-///
-/// C++ equivalent: `KingCandidacyNoticeBoardMap` in `KingSystem.h:25`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct KingCandidacyNoticeBoardRow {
     pub by_nation: i16,

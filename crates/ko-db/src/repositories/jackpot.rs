@@ -1,6 +1,4 @@
 //! JackPot repository — `jackpot_settings` table access.
-//!
-//! C++ Reference: `CGameServerDlg::LoadJackPotSettingTable` in `LoadServerData.cpp:1052`.
 
 use sqlx::PgPool;
 
@@ -19,7 +17,6 @@ impl<'a> JackPotRepository<'a> {
 
     /// Load all jackpot settings (2 rows: type 0=EXP, type 1=Noah).
     ///
-    /// C++ Reference: `CJackPotSettingSet::Fetch` in `thykedb_class.h:76`.
     pub async fn load_all(&self) -> Result<Vec<JackPotSettingRow>, sqlx::Error> {
         sqlx::query_as::<_, JackPotSettingRow>(
             "SELECT i_type, rate, x_1000, x_500, x_100, x_50, x_10, x_2 \

@@ -1,17 +1,12 @@
 //! WIZ_ITEM_REPAIR (0x3B) handler — repair item durability at an NPC.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/NPCHandler.cpp:9-86`
-//!
 //! Packet format (from client):
 //! ```text
 //! [u8 pos_type] [u8 slot] [u32 npc_id] [u32 item_id]
 //! ```
-//!
 //! Response (WIZ_ITEM_REPAIR):
 //! ```text
 //! [u8 result] [u32 gold]
 //! ```
-//!
 //! pos_type: 1=equipment slot, 2=inventory bag
 
 use ko_protocol::{Opcode, Packet, PacketReader};
@@ -46,13 +41,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // NPC range check — C++ returns silently (no packet) when NPC is invalid or out of range.
-    // C++ Reference: NPCHandler.cpp:39-42 — `if (pNpc == nullptr || !isInRange(pNpc, MAX_NPC_RANGE)) return;`
     if !world.is_in_npc_range(sid, npc_id) {
         return Ok(());
     }
 
     // NPC type validation — only TINKER (22) and MERCHANT (21) can repair
-    // C++ Reference: NPCHandler.cpp:44 — `GetType() == NPC_TINKER || GetType() == NPC_MERCHANT`
     let npc = match world.get_npc_instance(npc_id) {
         Some(n) => n,
         None => return Ok(()), // NPC removed between range check and here — silent return
@@ -101,7 +94,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
     // Cannot repair items with sell_price indicating no repairs (SellTypeNoRepairs = 2)
     // Cannot repair scrolls (kind 255)
-    // C++ Reference: NPCHandler.cpp:47-49 — `pTable.m_iSellPrice == SellTypeNoRepairs || pTable.m_bKind == ITEM_KIND_UNIQUE`
     const SELL_TYPE_NO_REPAIRS: i32 = 2;
     if item_def.sell_price.unwrap_or(0) == SELL_TYPE_NO_REPAIRS {
         return send_fail(session, &world, sid).await;
@@ -129,7 +121,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         / max_durability as f64) as u32;
 
     // Apply premium repair discount
-    // C++ Reference: NPCHandler.cpp:63-67 — `MoneyID = MoneyID * RepairDiscountPercent / 100`
     let repair_disc = world.get_premium_property(sid, PremiumProperty::RepairDiscountPercent);
     if repair_disc > 0 {
         cost = cost * repair_disc as u32 / 100;
@@ -142,7 +133,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
     // Deduct gold — use silent variant since WIZ_ITEM_REPAIR response
     // already contains the updated gold amount (avoids duplicate WIZ_GOLD_CHANGE).
-    // C++ Reference: NPCHandler.cpp:69 — `GoldLose(MoneyID, false)`
     if !world.gold_lose_silent(sid, cost) {
         return send_fail(session, &world, sid).await;
     }
@@ -186,7 +176,6 @@ mod tests {
 
     #[test]
     fn test_npc_type_constants() {
-        // C++ Reference: globals.h — NPC_MERCHANT = 21, NPC_TINKER = 22
         use crate::npc_type_constants::{NPC_MERCHANT, NPC_TINKER};
         assert_eq!(NPC_MERCHANT, 21);
         assert_eq!(NPC_TINKER, 22);
@@ -202,7 +191,6 @@ mod tests {
     #[test]
     fn test_packet_format_npc_id_u32() {
         // Verify that npc_id is read as u32 (not u16) matching C++ uint32 sNpcID
-        // C++ Reference: NPCHandler.cpp:15,21 — `uint32 sNpcID; pkt >> sPos >> sSlot >> sNpcID >> ItemID`
         let mut pkt = Packet::new(Opcode::WizItemRepair as u8);
         pkt.write_u8(1); // pos_type
         pkt.write_u8(0); // slot
@@ -223,7 +211,6 @@ mod tests {
 
     #[test]
     fn test_repair_success_packet_format() {
-        // C++ Reference: NPCHandler.cpp:78 — `result << uint8(1) << GetCoins()`
         let mut pkt = Packet::new(Opcode::WizItemRepair as u8);
         pkt.write_u8(1); // success
         pkt.write_u32(50000); // gold
@@ -235,7 +222,6 @@ mod tests {
 
     #[test]
     fn test_repair_fail_packet_format() {
-        // C++ Reference: NPCHandler.cpp:84 — `result << uint8(0) << GetCoins()`
         let mut pkt = Packet::new(Opcode::WizItemRepair as u8);
         pkt.write_u8(0); // fail
         pkt.write_u32(100000); // gold
@@ -247,7 +233,6 @@ mod tests {
 
     #[test]
     fn test_repair_cost_formula() {
-        // C++ Reference: NPCHandler.cpp:61
         // MoneyID = (((buy_price-10)/10000.0) + pow(buy_price, 0.75)) * quantity / durability
         let buy_price: f64 = 10000.0;
         let max_durability: u16 = 100;
@@ -266,7 +251,6 @@ mod tests {
 
     #[test]
     fn test_sell_type_no_repairs_constant() {
-        // C++ Reference: GameDefine.h:1887 — `SellTypeNoRepairs = 2`
         // Items with sell_price == 2 cannot be repaired
         const SELL_TYPE_NO_REPAIRS: i32 = 2;
         assert_eq!(SELL_TYPE_NO_REPAIRS, 2);
@@ -282,7 +266,6 @@ mod tests {
 
     #[test]
     fn test_npc_range_fail_is_silent_return() {
-        // C++ Reference: NPCHandler.cpp:39-42
         // `if (pNpc == nullptr || !isInRange(pNpc, MAX_NPC_RANGE)) return;`
         // C++ returns WITHOUT sending any packet when NPC is invalid/out of range.
         // The Rust handler now uses `return Ok(())` instead of `send_fail()`.
@@ -295,7 +278,6 @@ mod tests {
 
     #[test]
     fn test_npc_type_tinker_or_merchant_only() {
-        // C++ Reference: NPCHandler.cpp:44
         // `if (pNpc->GetType() == NPC_TINKER || pNpc->GetType() == NPC_MERCHANT)`
         // Only these two NPC types can provide repair services.
         // If NPC type is neither, send_fail IS sent (unlike the range check).
@@ -380,7 +362,6 @@ mod tests {
 
     #[test]
     fn test_repair_uses_silent_gold_deduction() {
-        // C++ Reference: NPCHandler.cpp:69 — `GoldLose(MoneyID, false)`
         // The second parameter `false` means "do NOT send WIZ_GOLD_CHANGE packet".
         // The repair handler sends its own WIZ_ITEM_REPAIR response with the
         // updated gold, so sending WIZ_GOLD_CHANGE would be a duplicate.

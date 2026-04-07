@@ -1,18 +1,12 @@
 //! Pet auto-attack background tick system.
-//!
-//! C++ Reference: `ServerStartStopHandler.cpp:367` — `PetMonAttack()` is called
 //! once per second for every in-game player inside `Timer_UpdateSessions`.
-//!
 //! When a pet's family-attack mode is enabled, the pet automatically attacks
 //! the designated target NPC:
-//!
 //! 1. If the pet owner dies → stop attacking
 //! 2. If the target NPC is dead or missing → stop attacking
 //! 3. If the pet NPC is missing → stop attacking
 //! 4. If out of range (50 m) → move pet 2 units closer
 //! 5. If in range → calculate damage, apply, broadcast `WIZ_ATTACK`
-//!
-//! C++ Reference: `PetMainHandler.cpp:902-963` — `CUser::PetMonAttack()`
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -25,13 +19,9 @@ use crate::world::WorldState;
 use crate::zone::SessionId;
 
 /// Pet attack tick interval — 1 second.
-///
-/// C++ Reference: `ServerStartStopHandler.cpp:371` — `sleep(1 * SECOND)`
 const PET_ATTACK_TICK_SECS: u64 = 1;
 
 /// Squared range for pet attack: 50 m.
-///
-/// C++ Reference: `Define.h:286` — `#define RANGE_50M (50.0f * 50.0f)`
 use crate::world::RANGE_50M;
 
 use crate::attack_constants::{ATTACK_FAIL, ATTACK_SUCCESS, ATTACK_TARGET_DEAD, LONG_ATTACK};
@@ -39,7 +29,6 @@ use crate::attack_constants::{ATTACK_FAIL, ATTACK_SUCCESS, ATTACK_TARGET_DEAD, L
 use crate::attack_constants::MAX_DAMAGE;
 
 /// Start the pet auto-attack background task.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
 pub fn start_pet_attack_tick_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -60,18 +49,14 @@ async fn process_pet_attack_tick(world: &WorldState) {
 }
 
 /// Process a single pet's auto-attack for one tick.
-///
-/// C++ Reference: `CUser::PetMonAttack()` in `PetMainHandler.cpp:902-963`
 async fn process_single_pet_attack(world: &WorldState, pd: &crate::world::PetAttackData) {
     // 1. Owner dead → stop attack
-    // C++ Reference: PetMainHandler.cpp:907-908
     if pd.owner_dead {
         stop_pet_attack(world, pd.session_id);
         return;
     }
 
     // 2. Target NPC: must exist and be alive
-    // C++ Reference: PetMainHandler.cpp:914-919
     let target_npc = match world.get_npc_instance(pd.target_npc_id) {
         Some(n) => n,
         None => {
@@ -86,7 +71,6 @@ async fn process_single_pet_attack(world: &WorldState, pd: &crate::world::PetAtt
     }
 
     // 3. Pet NPC: must exist
-    // C++ Reference: PetMainHandler.cpp:922-924
     let pet_npc = match world.get_npc_instance(pd.pet_nid as NpcId) {
         Some(n) => n,
         None => {
@@ -96,14 +80,12 @@ async fn process_single_pet_attack(world: &WorldState, pd: &crate::world::PetAtt
     };
 
     // 4. Range check — squared distance between pet and target
-    // C++ Reference: PetMainHandler.cpp:927
     let dx = target_npc.x - pet_npc.x;
     let dz = target_npc.z - pet_npc.z;
     let dist_sq = dx * dx + dz * dz;
 
     if dist_sq > RANGE_50M {
         // Move pet 2 units closer to target
-        // C++ Reference: PetMainHandler.cpp:929-941
         let distance = dist_sq.sqrt();
         if distance == 0.0 {
             return;
@@ -121,7 +103,6 @@ async fn process_single_pet_attack(world: &WorldState, pd: &crate::world::PetAtt
         world.update_npc_position(pd.pet_nid as NpcId, new_x, new_z);
 
         // Broadcast pet move: WIZ_NPC_MOVE
-        // C++ Reference: Npc.cpp:7184-7195 — SendMoveResult
         let mut move_pkt = Packet::new(Opcode::WizNpcMove as u8);
         move_pkt.write_u8(1); // move type
         move_pkt.write_u32(pd.pet_nid as u32);
@@ -145,7 +126,6 @@ async fn process_single_pet_attack(world: &WorldState, pd: &crate::world::PetAtt
     }
 
     // 5. In range — calculate and apply damage
-    // C++ Reference: PetMainHandler.cpp:945-959
 
     // Get pet template for damage stats
     let pet_tmpl = match world.get_npc_template(pet_npc.proto_id, pet_npc.is_monster) {
@@ -157,7 +137,6 @@ async fn process_single_pet_attack(world: &WorldState, pd: &crate::world::PetAtt
     };
 
     // Damage formula: pets always get GREAT_SUCCESS in NPC-vs-NPC combat
-    // C++ Reference: Unit.cpp:1059-1107 — GetDamage(CNpc*)
     // GREAT_SUCCESS: damage = rand(0, 0.6 * Hit) + 0.7 * Hit
     let hit = pet_tmpl.damage as f32;
     let rand_range = (0.6 * hit) as i16;
@@ -176,7 +155,6 @@ async fn process_single_pet_attack(world: &WorldState, pd: &crate::world::PetAtt
     }
 
     // Apply damage to target NPC
-    // C++ Reference: PetMainHandler.cpp:950 — pNpc->HpChange(-(damage), pFamilyPet)
     let npc_hp = world.get_npc_hp(pd.target_npc_id).unwrap_or(0);
     let new_hp = (npc_hp - damage as i32).max(0);
     world.update_npc_hp(pd.target_npc_id, new_hp);
@@ -197,7 +175,6 @@ async fn process_single_pet_attack(world: &WorldState, pd: &crate::world::PetAtt
         }
 
         // Award pet EXP from the killed NPC.
-        // C++ Reference: Npc.cpp:8163-8172 — SendPetExpChange(nFinalExp, GetID())
         if let Some(ref tmpl) = target_tmpl {
             let npc_exp = tmpl.exp as i32;
             if npc_exp > 0 {
@@ -215,7 +192,6 @@ async fn process_single_pet_attack(world: &WorldState, pd: &crate::world::PetAtt
     };
 
     // Broadcast attack result
-    // C++ Reference: PetMainHandler.cpp:957-959
     broadcast_pet_attack(world, pd, b_result);
 
     // Send HP bar update to the pet owner
@@ -241,8 +217,6 @@ async fn process_single_pet_attack(world: &WorldState, pd: &crate::world::PetAtt
 }
 
 /// Stop the pet's family-attack mode.
-///
-/// C++ Reference: `globals.h:643` — `isFamilyAttackEnd()`
 fn stop_pet_attack(world: &WorldState, sid: SessionId) {
     world.update_session(sid, |h| {
         if let Some(ref mut pet) = h.pet_data {
@@ -253,8 +227,6 @@ fn stop_pet_attack(world: &WorldState, sid: SessionId) {
 }
 
 /// Broadcast `WIZ_ATTACK` from the pet NPC to the 3x3 region.
-///
-/// C++ Reference: `PetMainHandler.cpp:957-959`
 /// ```text
 /// Packet result(WIZ_ATTACK, uint8(LONG_ATTACK));
 /// result << bResult << uint32(pFamilyPet->GetID()) << uint32(pNpc->GetID());
@@ -282,9 +254,6 @@ fn broadcast_pet_attack(world: &WorldState, pd: &crate::world::PetAttackData, b_
 }
 
 /// Award experience to a pet after killing an NPC.
-///
-/// C++ Reference: `CUser::SendPetExpChange(int32 iExp, int tid)` — PetMainHandler.cpp:762-815
-///
 /// If accumulated EXP exceeds the level threshold (`pet_stats_info.pet_exp`),
 /// the pet levels up (max 60). On level-up, a broadcast packet is sent to the
 /// region and the pet spawn info is re-sent to the owner.
@@ -308,7 +277,6 @@ fn award_pet_exp(world: &WorldState, sid: SessionId, pet_nid: u16, gained_exp: i
 
     let mut leveled_up = false;
 
-    // C++ Reference: PetMainHandler.cpp:775-803
     if exp as i32 + gained_exp >= level_threshold && level < MAX_PET_LEVEL {
         level += 1;
         let overflow = gained_exp - (level_threshold - exp as i32);
@@ -370,7 +338,6 @@ fn award_pet_exp(world: &WorldState, sid: SessionId, pet_nid: u16, gained_exp: i
             world.send_to_session_owned(sid, spawn_pkt);
 
             // Send MP change packet — MP is restored to max on level-up.
-            // C++ Reference: Npc.cpp:756 — pUser->SendPetMSpChange(GetID(), amount)
             let mp_pkt =
                 crate::handler::pet::build_pet_mp_change_packet(max_mp, max_mp, pet_nid);
             world.send_to_session_owned(sid, mp_pkt);
@@ -393,7 +360,6 @@ fn award_pet_exp(world: &WorldState, sid: SessionId, pet_nid: u16, gained_exp: i
     }
 
     // Send EXP change packet to owner (always, whether leveled up or not)
-    // C++ Reference: PetMainHandler.cpp:805-814
     let threshold = if leveled_up {
         world
             .get_pet_stats_info(level)
@@ -414,8 +380,6 @@ fn award_pet_exp(world: &WorldState, sid: SessionId, pet_nid: u16, gained_exp: i
 }
 
 /// Compute pet EXP percentage (0-10000 scale, e.g. 8100 = 81.00%).
-///
-/// C++ Reference: PetMainHandler.cpp:805 —
 ///   `percent = uint16((float(nExp) * 100.0f) / float(PetExp) * 100.0f)`
 fn compute_exp_percent(current_exp: u32, level_exp: i32) -> u16 {
     if level_exp <= 0 {

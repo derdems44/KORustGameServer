@@ -1,13 +1,9 @@
 //! WIZ_PET (0x76) handler — pet system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/PetMainHandler.cpp`
-//!
 //! Sub-opcodes (from client):
 //! - 1 (ModeFunction):
 //!   - 5 (NormalMode): switch between attack(3)/defence(4)/looting(8)/chat(9)
 //!   - 16 (FoodMode): feed pet with food items
 //! - 2 (PetUseSkill): pet casts a skill (delegated to magic system)
-//!
 //! Server-initiated packets (sub-opcode 1):
 //! - 5/1/1 — spawn info
 //! - 5/2   — death notification
@@ -18,8 +14,7 @@
 //! - 13    — MP change
 //! - 0x0F  — satisfaction update
 //! - 0x10  — food response
-//!
-//! Pet modes (C++ `GameDefine.h:1153`):
+//! Pet modes (`GameDefine.h:1153`):
 //! - MODE_ATTACK = 3
 //! - MODE_DEFENCE = 4
 //! - MODE_LOOTING = 8
@@ -33,7 +28,7 @@ use tracing::debug;
 
 use crate::session::{ClientSession, SessionState};
 
-/// Pet mode constants — C++ `GameDefine.h:1153-1158`.
+/// Pet mode constants — `GameDefine.h:1153-1158`.
 pub(crate) const MODE_ATTACK: u8 = 3;
 const MODE_DEFENCE: u8 = 4;
 const MODE_LOOTING: u8 = 8;
@@ -46,8 +41,6 @@ const PET_MODE_FUNCTION: u8 = 1;
 const PET_USE_SKILL: u8 = 2;
 
 /// WIZ_MAGIC_PROCESS sub-opcode for effecting (visual play).
-///
-/// C++ Reference: `MAGIC_EFFECTING = 3` in `MagicProcess.h`
 const MAGIC_EFFECTING_SUBCODE: u8 = 3;
 
 /// Mode function sub-opcodes.
@@ -72,17 +65,13 @@ use super::SLOT_MAX;
 const MAX_SATISFACTION: i16 = 10000;
 
 /// Maximum pet level — used in exp/level-up logic.
-///
-/// C++ Reference: `if (m_PettingOn->bLevel >= 60) return;` in `SendPetExpChange`
 #[cfg(test)]
 const MAX_PET_LEVEL: u8 = 60;
 
-/// Pet inventory slot count (C++ `PET_INVENTORY_TOTAL = 4`).
+/// Pet inventory slot count
 const PET_INVENTORY_TOTAL: u8 = 4;
 
 /// Handle WIZ_PET from the client.
-///
-/// C++ Reference: `CUser::MainPetProcess(Packet& pkt)`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -114,9 +103,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle PetUseSkill (sub-opcode 2).
-///
-/// C++ Reference: `CUser::HandlePetUseSkill(Packet& pkt)`
-///
 /// The pet casts a skill on a target NPC. Builds and broadcasts a
 /// `WIZ_MAGIC_PROCESS` effecting packet from the pet's NPC perspective.
 /// If the pet is in defence mode, auto-switches to attack mode.
@@ -154,7 +140,6 @@ async fn handle_pet_use_skill(
 
     // Build and broadcast WIZ_MAGIC_PROCESS effecting packet from the pet's
     // perspective so the skill visual plays on all nearby clients.
-    // C++ Reference: emulates a skill packet via MagicPacketNpc(result, pPet)
     let mut magic_pkt = Packet::new(Opcode::WizMagicProcess as u8);
     magic_pkt.write_u8(MAGIC_EFFECTING_SUBCODE);
     magic_pkt.write_u32(skill_id);
@@ -179,7 +164,6 @@ async fn handle_pet_use_skill(
     }
 
     // If pet was in defence mode, auto-switch to attack mode
-    // C++ Reference: `if (m_PettingOn->sStateChange == MODE_DEFENCE) { ... SelectingModeFunction }`
     if pet_mode == MODE_DEFENCE {
         world.update_session(sid, |h| {
             if let Some(ref mut pet) = h.pet_data {
@@ -189,7 +173,6 @@ async fn handle_pet_use_skill(
     }
 
     // Decrease satisfaction by 10 per skill use
-    // C++ Reference: `PetSatisFactionUpdate(-10)` at the end of HandlePetUseSkill
     pet_satisfaction_update(session, -10).await;
 
     debug!(
@@ -203,8 +186,6 @@ async fn handle_pet_use_skill(
 }
 
 /// Handle ModeFunction (sub-opcode 1).
-///
-/// C++ Reference: `CUser::SelectingModeFunction(Packet& pkt)`
 async fn handle_mode_function(
     session: &mut ClientSession,
     r: &mut PacketReader<'_>,
@@ -242,8 +223,6 @@ async fn handle_mode_function(
 }
 
 /// Handle NormalMode (sub-code 5) — switch attack/defence/looting/chat mode.
-///
-/// C++ Reference: `CUser::SelectingModeFunction` case NormalMode
 async fn handle_normal_mode(
     session: &mut ClientSession,
     mode: u8,
@@ -264,7 +243,6 @@ async fn handle_normal_mode(
             });
 
             // Send mode change confirmation
-            // C++: result << uint8(1) << SupCode << Mode << uint16(1);
             let mut resp = Packet::new(Opcode::WizPet as u8);
             resp.write_u8(PET_MODE_FUNCTION);
             resp.write_u8(NORMAL_MODE);
@@ -282,7 +260,6 @@ async fn handle_normal_mode(
             };
 
             // Send chat response
-            // C++: result << uint8(1) << SupCode << Mode << uint16(1) << chat
             let mut resp = Packet::new(Opcode::WizPet as u8);
             resp.write_u8(PET_MODE_FUNCTION);
             resp.write_u8(NORMAL_MODE);
@@ -305,8 +282,6 @@ async fn handle_normal_mode(
 }
 
 /// Handle FoodMode (sub-code 16) — feed the pet.
-///
-/// C++ Reference: `CUser::PetFeeding(Packet& pkt, uint8 bType)`
 async fn handle_food_mode(
     session: &mut ClientSession,
     slot_index: u8,
@@ -381,7 +356,6 @@ async fn handle_food_mode(
     });
 
     // Send food response
-    // C++ Reference: result << uint8(1) << bType << pDstItem->nNum << pDstItem->sCount
     //                       << uint16(0) << uint32(0) << uint16(10000 - sOldSatisfaction);
     let mut resp = Packet::new(Opcode::WizPet as u8);
     resp.write_u8(PET_MODE_FUNCTION);
@@ -395,7 +369,6 @@ async fn handle_food_mode(
     resp.write_u16((MAX_SATISFACTION - new_satisfaction) as u16);
     session.send_packet(&resp).await?;
 
-    // C++ Reference: PetMainHandler.cpp:249-251
     // After feeding, C++ calls PetSatisFactionUpdate(), SetUserAbility(), SendItemWeight().
     // We already updated satisfaction above, so send the update packet directly.
     let pet_nid = world
@@ -411,7 +384,6 @@ async fn handle_food_mode(
         session.send_packet(&sat_pkt).await?;
     }
 
-    // C++ Reference: PetMainHandler.cpp:250-251 — SetUserAbility + SendItemWeight
     // Weight notification is integrated into set_user_ability().
     world.set_user_ability(sid);
 
@@ -425,8 +397,6 @@ async fn handle_food_mode(
 }
 
 /// Update pet satisfaction by a delta amount.
-///
-/// C++ Reference: `CUser::PetSatisFactionUpdate(int16 amount)`
 async fn pet_satisfaction_update(session: &mut ClientSession, amount: i16) {
     let sid = session.session_id();
     let world = session.world();
@@ -456,7 +426,6 @@ async fn pet_satisfaction_update(session: &mut ClientSession, amount: i16) {
         pet_on_death(session).await;
     } else if satisfaction > 0 {
         // Send satisfaction update
-        // C++ Reference: result << uint8(MODE_SATISFACTION_UPDATE)
         //                       << m_PettingOn->sSatisfaction
         //                       << uint32(m_PettingOn->sNid);
         let mut resp = Packet::new(Opcode::WizPet as u8);
@@ -474,8 +443,6 @@ async fn pet_satisfaction_update(session: &mut ClientSession, amount: i16) {
 }
 
 /// Handle pet death (satisfaction reached 0).
-///
-/// C++ Reference: `CUser::PetOnDeath()`
 async fn pet_on_death(session: &mut ClientSession) {
     let sid = session.session_id();
     let world = session.world();
@@ -490,7 +457,6 @@ async fn pet_on_death(session: &mut ClientSession) {
 
     if let Some(index) = pet_index {
         // Send death notification
-        // C++ Reference: result << uint8(1) << uint8(5) << uint8(2) << uint16(1)
         //                       << m_PettingOn->nIndex;
         let mut resp = Packet::new(Opcode::WizPet as u8);
         resp.write_u8(PET_MODE_FUNCTION);
@@ -512,7 +478,6 @@ async fn pet_on_death(session: &mut ClientSession) {
 // ── Server-initiated pet packets ─────────────────────────────────────────
 
 /// Pet stats snapshot for building spawn packets.
-///
 /// Extracted from PetState + pet_stats_info table data.
 #[derive(Debug, Clone)]
 pub struct PetSpawnInfo {
@@ -543,9 +508,6 @@ pub struct PetSpawnInfo {
 }
 
 /// Build and send the pet spawn info packet.
-///
-/// C++ Reference: `CUser::PetSpawnProcess(bool LevelUp)`
-///
 /// This sends the full pet status window to the owning player.
 /// Called when a pet is first summoned or after leveling up.
 pub fn build_pet_spawn_packet(info: &PetSpawnInfo) -> Packet {
@@ -583,7 +545,6 @@ pub fn build_pet_spawn_packet(info: &PetSpawnInfo) -> Packet {
     }
 
     // Pet inventory: PET_INVENTORY_TOTAL (4) empty slots
-    // C++: nNum(u32) + sDuration(u16) + sCount(u16) + bFlag(u8)
     //      + sRemainingRentalTime(u16) + u32(0) + nExpirationTime(u32)
     for _ in 0..PET_INVENTORY_TOTAL {
         resp.write_u32(0); // nNum
@@ -599,12 +560,8 @@ pub fn build_pet_spawn_packet(info: &PetSpawnInfo) -> Packet {
 }
 
 /// Build and send the pet HP change packet.
-///
-/// C++ Reference: `CUser::SendPetHpChange(int tid, int damage)`
-///
 /// Sent to the owner when the pet takes or heals damage.
 pub fn build_pet_hp_change_packet(max_hp: u16, current_hp: u16, source_id: u32) -> Packet {
-    // C++: WIZ_PET << u8(1) << u8(7) << u16(maxHP) << u16(curHP) << u32(tid)
     let mut resp = Packet::new(Opcode::WizPet as u8);
     resp.write_u8(PET_MODE_FUNCTION);
     resp.write_u8(PET_HP_CHANGE_CODE);
@@ -615,12 +572,8 @@ pub fn build_pet_hp_change_packet(max_hp: u16, current_hp: u16, source_id: u32) 
 }
 
 /// Build the pet damage display packet.
-///
-/// C++ Reference: `CUser::SendPetHP(int tid, int damage)`
-///
 /// Sent to the owner to show a damage number over the pet.
 pub fn build_pet_damage_display_packet(target_id: i32, damage: i16) -> Packet {
-    // C++: WIZ_PET << u8(1) << u8(8) << i32(tid)
     //   << u8(0) << u8(7) << u8(0) << u8(0) << u8(0) << u8(4) << u8(0) << u8(0) << u8(0)
     //   << i16(damage)
     let mut resp = Packet::new(Opcode::WizPet as u8);
@@ -641,9 +594,6 @@ pub fn build_pet_damage_display_packet(target_id: i32, damage: i16) -> Packet {
 }
 
 /// Build the pet EXP change packet.
-///
-/// C++ Reference: `CUser::SendPetExpChange(int32 iExp, int tid)`
-///
 /// Sent to the owner when the pet gains experience.
 pub fn build_pet_exp_change_packet(
     gained_exp: u64,
@@ -651,7 +601,6 @@ pub fn build_pet_exp_change_packet(
     level: u8,
     satisfaction: u16,
 ) -> Packet {
-    // C++: WIZ_PET << u8(1) << u8(10) << u64(iExp) << u16(percent)
     //            << u8(level) << u16(satisfaction)
     let mut resp = Packet::new(Opcode::WizPet as u8);
     resp.write_u8(PET_MODE_FUNCTION);
@@ -664,13 +613,9 @@ pub fn build_pet_exp_change_packet(
 }
 
 /// Build the pet level-up broadcast packet.
-///
-/// C++ Reference: `CUser::SendPetExpChange` level-up branch
-///
 /// This is sent to the region (all nearby players) to trigger the
 /// level-up visual effect on the pet NPC.
 pub fn build_pet_level_up_broadcast_packet(pet_npc_id: u32) -> Packet {
-    // C++: WIZ_PET << u8(1) << u8(11) << u32(pNpc->GetID())
     let mut resp = Packet::new(Opcode::WizPet as u8);
     resp.write_u8(PET_MODE_FUNCTION);
     resp.write_u8(PET_LEVEL_UP_CODE);
@@ -679,12 +624,8 @@ pub fn build_pet_level_up_broadcast_packet(pet_npc_id: u32) -> Packet {
 }
 
 /// Build the pet MP change packet.
-///
-/// C++ Reference: `CUser::SendPetMSpChange(int tid, int damage)`
-///
 /// Sent to the owner when the pet's MP changes (skill usage, regen, etc).
 pub fn build_pet_mp_change_packet(max_mp: u16, current_mp: u16, source_id: u16) -> Packet {
-    // C++: WIZ_PET << u8(1) << u8(13) << u16(maxMP) << u16(curMP) << u16(tid)
     let mut resp = Packet::new(Opcode::WizPet as u8);
     resp.write_u8(PET_MODE_FUNCTION);
     resp.write_u8(PET_MP_CHANGE_CODE);
@@ -695,9 +636,6 @@ pub fn build_pet_mp_change_packet(max_mp: u16, current_mp: u16, source_id: u16) 
 }
 
 /// Build the pet item tooltip info response.
-///
-/// C++ Reference: `CUser::ShowPetItemInfo(Packet& pkt, uint64 nSerialNum)`
-///
 /// Appended to an item info packet when inspecting a pet egg in inventory.
 pub fn build_pet_item_info(
     index: u32,
@@ -707,7 +645,6 @@ pub fn build_pet_item_info(
     exp_percent: u16,
     satisfaction: u16,
 ) -> Vec<u8> {
-    // C++: pkt << nIndex << strPetName << u8(PetAttack) << u8(bLevel)
     //         << u16(exp_percent) << satisfaction << u8(0)
     let mut data = Vec::new();
     data.extend_from_slice(&index.to_le_bytes());

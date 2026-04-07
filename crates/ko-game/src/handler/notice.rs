@@ -1,15 +1,10 @@
 //! WIZ_NOTICE (0x25) — server notice packet builders and config loading.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:3170-3306`
-//!
 //! Four notice types are sent during game start:
 //! - `SendNotice()` — type=2, notice board (title+message pairs, u16 string prefix)
 //! - `TopSendNotice()` — type=1, top-right notices (message only, u8 SByte prefix)
 //! - `SendCapeBonusNotice()` — type=2, cape bonus info (same format as board)
 //! - `SendClanPremiumNotice()` — type=2, clan premium info (same format as board)
-//!
 //! ## Packet Format
-//!
 //! ### Type 2 (notice board / cape bonus / clan premium)
 //! ```text
 //! WIZ_NOTICE (0x25)
@@ -19,7 +14,6 @@
 //!     string(title)   — u16 length-prefixed
 //!     string(message) — u16 length-prefixed
 //! ```
-//!
 //! ### Type 1 (TopSendNotice — top-right text)
 //! ```text
 //! WIZ_NOTICE (0x25)
@@ -28,9 +22,7 @@
 //!   [for each entry]:
 //!     sbyte_string(message) — u8 length-prefixed (SByte mode)
 //! ```
-//!
 //! ## Config Loading
-//!
 //! Notices are loaded from a TOML config file (`notices.toml`) at server startup.
 //! C++ loads from flat text files (`Notice.txt`, `Notice_up.txt`, `CapeBonus.txt`,
 //! `ClanPremiumNotice.txt`). Our Rust version uses structured TOML instead.
@@ -43,29 +35,18 @@ use crate::session::ClientSession;
 use crate::world::WorldState;
 
 /// Notice type for new-style notice board (title+message pairs).
-///
-/// C++ Reference: `User.cpp:3175` — `result << uint8(2);`
 pub const NOTICE_TYPE_BOARD: u8 = 2;
 
 /// Notice type for old-style top-right notices (message only, SByte).
-///
-/// C++ Reference: `User.cpp:3249` — `result << uint8(1);`
 pub const NOTICE_TYPE_TOP: u8 = 1;
 
 /// Maximum number of notice board entries (title+message pairs).
-///
-/// C++ Reference: `m_ppNotice[20][128]` — 10 lines paired = 5 entries.
 pub const MAX_NOTICE_BOARD_ENTRIES: usize = 5;
 
 /// Maximum number of top-right notice entries.
-///
-/// C++ Reference: `m_peNotice[20][128]` — up to 20 lines.
 pub const MAX_TOP_NOTICE_ENTRIES: usize = 20;
 
 /// Build a WIZ_NOTICE type=2 packet (notice board).
-///
-/// C++ Reference: `User.cpp:3170-3187` — `CUser::SendNotice()`
-///
 /// Each entry is a (title, message) pair written as u16-prefixed strings.
 /// When `entries` is empty, sends count=0 (empty notice board).
 pub fn build_notice_board_packet(entries: &[(&str, &str)]) -> Packet {
@@ -73,7 +54,6 @@ pub fn build_notice_board_packet(entries: &[(&str, &str)]) -> Packet {
     pkt.write_u8(NOTICE_TYPE_BOARD); // type=2
     pkt.write_u8(entries.len() as u8); // count
 
-    // C++ Reference: User.cpp:3269-3276 — AppendNoticeEntry writes title then message
     for &(title, message) in entries {
         pkt.write_string(title);
         pkt.write_string(message);
@@ -83,7 +63,6 @@ pub fn build_notice_board_packet(entries: &[(&str, &str)]) -> Packet {
 }
 
 /// Build a WIZ_NOTICE type=2 packet from owned String pairs.
-///
 /// Variant of [`build_notice_board_packet`] that accepts owned strings,
 /// used when reading from WorldState storage.
 pub fn build_notice_board_packet_owned(entries: &[(String, String)]) -> Packet {
@@ -95,9 +74,6 @@ pub fn build_notice_board_packet_owned(entries: &[(String, String)]) -> Packet {
 }
 
 /// Build a WIZ_NOTICE type=1 packet (top-right notices).
-///
-/// C++ Reference: `User.cpp:3244-3260` — `CUser::TopSendNotice()`
-///
 /// Each entry is a message string written with u8 (SByte) length prefix.
 /// When `entries` is empty, sends count=0 (no top notices).
 pub fn build_top_notice_packet(entries: &[&str]) -> Packet {
@@ -105,8 +81,6 @@ pub fn build_top_notice_packet(entries: &[&str]) -> Packet {
     pkt.write_u8(NOTICE_TYPE_TOP); // type=1
     pkt.write_u8(entries.len() as u8); // count
 
-    // C++ Reference: User.cpp:3251 — pkt.SByte() switches to u8 length prefix
-    // C++ Reference: User.cpp:3261-3268 — AppendNoticeEntryOld writes message as SByte string
     for &message in entries {
         pkt.write_sbyte_string(message);
     }
@@ -115,7 +89,6 @@ pub fn build_top_notice_packet(entries: &[&str]) -> Packet {
 }
 
 /// Build a WIZ_NOTICE type=1 packet from owned String entries.
-///
 /// Variant of [`build_top_notice_packet`] that accepts owned strings.
 pub fn build_top_notice_packet_owned(entries: &[String]) -> Packet {
     let refs: Vec<&str> = entries.iter().map(|s| s.as_str()).collect();
@@ -123,9 +96,6 @@ pub fn build_top_notice_packet_owned(entries: &[String]) -> Packet {
 }
 
 /// Send notice board (type=2) to client during game start.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:1045` — `SendNotice();`
-///
 /// Reads entries from `WorldState::get_notice_board()`. Sends count=0 if
 /// no entries are configured.
 pub async fn send_notice(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -142,9 +112,6 @@ pub async fn send_notice(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Send top-right notices (type=1) to client during game start.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:1046` — `TopSendNotice();`
-///
 /// Reads entries from `WorldState::get_top_notices()`. Sends count=0 if
 /// no entries are configured.
 pub async fn send_top_notice(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -161,13 +128,9 @@ pub async fn send_top_notice(session: &mut ClientSession) -> anyhow::Result<()> 
 }
 
 /// Build a cape bonus notice packet (type=2) from WorldState entries.
-///
-/// C++ Reference: `User.cpp:3189-3223` — `CUser::SendCapeBonusNotice()`
-///
 /// In C++, this is only sent to players in a clan with a castellan cape
 /// that has `BonusType > 0`. The packet format is identical to the notice
 /// board (type=2 with title+message pairs).
-///
 /// Callers (e.g. gamestart.rs) should check clan/cape conditions before
 /// calling this.
 pub fn build_cape_bonus_notice_packet(world: &WorldState) -> Packet {
@@ -176,13 +139,9 @@ pub fn build_cape_bonus_notice_packet(world: &WorldState) -> Packet {
 }
 
 /// Build a clan premium notice packet (type=2) from WorldState entries.
-///
-/// C++ Reference: `User.cpp:3226-3242` — `CUser::SendClanPremiumNotice()`
-///
 /// In C++, this is only sent to players whose clan `isInPremium()`.
 /// The packet format is identical to the notice board (type=2 with
 /// title+message pairs).
-///
 /// Callers (e.g. gamestart.rs) should check clan premium status before
 /// calling this.
 pub fn build_clan_premium_notice_packet(world: &WorldState) -> Packet {
@@ -193,13 +152,11 @@ pub fn build_clan_premium_notice_packet(world: &WorldState) -> Packet {
 // ── Config Loading ─────────────────────────────────────────────────────
 
 /// TOML config structure for server notices.
-///
 /// C++ loads from separate text files:
 /// - `Notice.txt` (20 lines, 128 chars each) — notice board, paired as title+message
 /// - `Notice_up.txt` (20 lines, 128 chars each) — top-right notices
 /// - `CapeBonus.txt` (20 lines, 256 chars each) — cape bonus, paired
 /// - `ClanPremiumNotice.txt` (20 lines, 128 chars each) — clan premium, paired
-///
 /// Our TOML format is more structured and readable.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct NoticeConfig {
@@ -225,10 +182,7 @@ pub struct NoticeEntry {
 }
 
 /// Load notice configuration from a TOML file and populate WorldState.
-///
-/// C++ Reference: `CGameServerDlg::LoadNoticeData()` + `LoadNoticeUpData()`
 ///                + `LoadCapeBonusNotice()` + `LoadClanPremiumNotice()`
-///
 /// If the file does not exist or cannot be parsed, logs a warning and
 /// leaves the WorldState with empty notice lists (matches C++ behavior
 /// when the text files are missing).

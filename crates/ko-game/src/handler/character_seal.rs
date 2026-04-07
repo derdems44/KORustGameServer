@@ -1,12 +1,7 @@
 //! Character Seal handler — WIZ_ITEM_UPGRADE (0x5B) sub-opcode 9.
-//!
-//! C++ Reference: `SealHandler.cpp` lines 206-820
-//!
 //! Allows a player to seal an alt character into a Cypher Ring item,
 //! preview the sealed character, and later restore it to an empty slot.
-//!
 //! ## Sub-Opcodes (CharacterSealOpcodes)
-//!
 //! | Sub-Op | Name         | Description                              |
 //! |--------|-------------|------------------------------------------|
 //! | 1      | ShowList    | List all account characters               |
@@ -29,10 +24,8 @@ use super::{HAVE_MAX, SLOT_MAX};
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-/// C++ `ITEM_CHARACTER_SEAL = 9` — WIZ_ITEM_UPGRADE sub-opcode.
 pub const ITEM_CHARACTER_SEAL: u8 = 9;
 
-/// C++ `ITEM_SEAL_SCROLL = 800111000` — scroll consumed to seal a character.
 const ITEM_SEAL_SCROLL: u32 = 800111000;
 
 use super::unique_item_info::ITEM_CYPHER_RING;
@@ -41,7 +34,6 @@ use super::INVENTORY_COSP;
 
 // ── Sub-Opcodes ────────────────────────────────────────────────────────────
 
-/// C++ `CharacterSealOpcodes` enum.
 const SEAL_SHOW_LIST: u8 = 1;
 const SEAL_USE_SCROLL: u8 = 2;
 const SEAL_USE_RING: u8 = 3;
@@ -72,8 +64,6 @@ async fn send_ring_error(session: &mut ClientSession, code: u16) -> anyhow::Resu
 }
 
 /// Handle `CharacterSealProcess` — dispatches to sub-handlers.
-///
-/// C++ Reference: `CUser::CharacterSealProcess(Packet& pkt)`
 pub async fn handle(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -112,9 +102,6 @@ pub async fn handle(
 // ── ShowList (sub=1) ───────────────────────────────────────────────────────
 
 /// Show all 4 character slots for the account.
-///
-/// C++ Reference: `CUser::ReqCharacterSealShowList()`
-///
 /// Response: `[ITEM_CHARACTER_SEAL][ShowList][u8 success]([string name][u8 race][u8 face][u16 class][u8 level]) x4`
 async fn handle_show_list(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -198,9 +185,6 @@ async fn handle_show_list(session: &mut ClientSession) -> anyhow::Result<()> {
 // ── UseScroll (sub=2) ──────────────────────────────────────────────────────
 
 /// Seal a character into a Cypher Ring.
-///
-/// C++ Reference: `CUser::CharacterSealUseScroll()` + `CUser::ReqCharacterSealUseScroll()`
-///
 /// Client: `[u32 unknown][u8 src_slot][u32 item_id][string char_name][string password]`
 async fn handle_use_scroll(
     session: &mut ClientSession,
@@ -367,9 +351,6 @@ async fn handle_use_scroll(
 // ── UseRing (sub=3) ────────────────────────────────────────────────────────
 
 /// Restore a sealed character from Cypher Ring.
-///
-/// C++ Reference: `CUser::CharacterSealUseRing()` + `CUser::ReqCharacterSealUseRing()`
-///
 /// Client: `[u32 unknown][u8 src_slot][u32 item_id][u8 target_char_slot]`
 async fn handle_use_ring(
     session: &mut ClientSession,
@@ -516,9 +497,6 @@ async fn handle_use_ring(
 // ── Preview (sub=4) ────────────────────────────────────────────────────────
 
 /// Preview sealed character stats and items.
-///
-/// C++ Reference: `CUser::CharacterSealPreview()`
-///
 /// Client: `[u32 unique_id]`
 async fn handle_preview(
     session: &mut ClientSession,
@@ -608,9 +586,6 @@ async fn handle_preview(
 // ── AchieveList (sub=6) ────────────────────────────────────────────────────
 
 /// Show achievements of sealed character.
-///
-/// C++ Reference: `CUser::CharacterSealAchieveList()`
-///
 /// For now, returns an empty achievement list (the sealed character's achievements
 /// are not currently persisted in the seal snapshot).
 async fn handle_achieve_list(

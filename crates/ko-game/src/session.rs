@@ -1,18 +1,12 @@
 //! Per-client TCP session with packet framing and encryption.
-//!
-//! C++ Reference: `KOOriginalGameServer/shared/KOSocket.cpp`
-//!
 //! Each TCP connection gets a `ClientSession` that manages:
 //! - Reading inbound packets (header detection, length, payload, footer)
 //! - Writing outbound packets (framing + encryption)
 //! - AES-128-CBC encryption (key sent in 0x2B, replaces JvCryption)
 //! - Login flow state machine
-//!
 //! ## Two-Phase Architecture
-//!
 //! **Pre-auth** (Connected → CharacterSelected): Session owns the full TcpStream
 //! and writes packets directly. This is the original behavior.
-//!
 //! **In-game** (after GameStart phase 2): The TcpStream is split. A writer task
 //! handles outbound packets via a channel. Broadcasting to other sessions is
 //! enabled through the shared WorldState.
@@ -37,8 +31,6 @@ use crate::world::WorldState;
 use crate::zone::SessionId;
 
 /// Loading timeout: 10 minutes of inactivity before game entry.
-///
-/// C++ Reference: `KOSocket.h:15` — `#define KOSOCKET_LOADING_TIMEOUT (10 * 60 * SECOND)`
 /// Sessions that have connected (or even logged in) but haven't completed the
 /// game entry flow within this period are disconnected.
 const LOADING_TIMEOUT_SECS: u64 = 10 * 60;
@@ -61,7 +53,6 @@ pub enum SessionState {
 }
 
 /// Per-client session wrapping a TCP stream and encryption state.
-///
 /// Handles the full lifecycle of a client connection:
 /// reading packets, dispatching to handlers, and sending responses.
 pub struct ClientSession {
@@ -138,16 +129,14 @@ impl ClientSession {
     /// Main session loop: read packets and dispatch to handlers.
     ///
     /// During the loading phase (before `InGame`), each `read_packet` call is
-    /// wrapped with a 10-minute timeout matching C++ `KOSOCKET_LOADING_TIMEOUT`.
+    /// wrapped with a 10-minute timeout matching `KOSOCKET_LOADING_TIMEOUT`.
     /// If the client does not send any packet within 10 minutes, the session is
     /// disconnected.
     ///
-    /// C++ Reference: `ServerStartStopHandler.cpp:340-374` — `Timer_UpdateSessions`
     pub async fn run(&mut self) -> anyhow::Result<()> {
         info!("[{}] Client connected (sid={})", self.addr, self.session_id);
 
         loop {
-            // C++ Reference: KOSocket.h:15 — KOSOCKET_LOADING_TIMEOUT = 10 * 60 * SECOND
             // During loading (before InGame), timeout after 10 minutes of no packets.
             let packet = if self.state != SessionState::InGame {
                 match tokio::time::timeout(
@@ -345,7 +334,6 @@ impl ClientSession {
 
     /// Cleanup on disconnect — save character data, clean up world state, mark offline.
     ///
-    /// C++ Reference: `DatabaseThread.cpp:1462-1548` — ReqUserLogOut
     ///
     /// This mirrors the logout handler's save logic so that abrupt disconnects
     /// (crashes, network drops) don't lose character data.
@@ -354,7 +342,6 @@ impl ClientSession {
             let sid = self.session_id;
 
             // ── 0. Offline merchant activation ─────────────────────────────
-            // C++ Reference: `OfflineMerchantSystem.cpp` — when a player
             // disconnects while merchant is open, the session stays in memory
             // and other players can still buy from the shop.
             //
@@ -402,7 +389,6 @@ impl ClientSession {
             }
 
             // ── 1. Save character stats + position ────────────────────────
-            // C++ Reference: DBAgent.cpp:1510-1543 — UpdateUser
             if !char_id.is_empty() {
                 if let Some(ch) = self.world.get_character_info(sid) {
                     let pool = self.pool.clone();
@@ -444,7 +430,6 @@ impl ClientSession {
             }
 
             // ── 1a. Save class/race (safety net for Lua PromoteUser*) ────────
-            // C++ Reference: NPCHandler.cpp:228 — ClassChange persists class
             if !char_id.is_empty() {
                 if let Some(ch) = self.world.get_character_info(sid) {
                     let pool = self.pool.clone();
@@ -462,7 +447,6 @@ impl ClientSession {
             }
 
             // ── 1a2. Save flash time/count/type ─────────────────────────────
-            // C++ Reference: DBAgent.cpp — UpdateUser saves flash_time, flash_count, flash_type
             if !char_id.is_empty() {
                 let flash_data = self
                     .world
@@ -486,7 +470,6 @@ impl ClientSession {
             }
 
             // ── 1a3. Save stat + skill points ──────────────────────────────
-            // C++ Reference: DBAgent.cpp — UpdateUser saves strong/sta/dex/intel/cha/points/skill0-9
             if !char_id.is_empty() {
                 if let Some(ch) = self.world.get_character_info(sid) {
                     let pool = self.pool.clone();
@@ -526,7 +509,6 @@ impl ClientSession {
             }
 
             // ── 1b. Bulk save inventory items ──────────────────────────────
-            // C++ Reference: DBAgent.cpp:1449-1458 — UpdateUser saves all 77 slots
             if !char_id.is_empty() {
                 let inventory = self.world.get_inventory(sid);
                 let non_empty: Vec<(usize, u32)> = inventory.iter().enumerate()
@@ -571,7 +553,6 @@ impl ClientSession {
             }
 
             // ── 1c. Bulk save warehouse items ─────────────────────────────
-            // C++ Reference: DBAgent.cpp:1553-1562 — UpdateWarehouseData saves all slots
             if !account_id.is_empty() {
                 let wh_data = self.world.with_session(sid, |h| {
                     (h.warehouse.clone(), h.inn_coins, h.warehouse_loaded)
@@ -618,11 +599,9 @@ impl ClientSession {
             }
 
             // ── 2. Save active buffs (saved magic) ───────────────────────
-            // C++ Reference: DatabaseThread.cpp:1536 — g_DBAgent.UpdateSavedMagic(this)
             self.save_saved_magic_async();
 
             // ── 3. Save premium state ─────────────────────────────────────
-            // C++ Reference: DBAgent.cpp — AccountPremiumData save path
             if !account_id.is_empty() {
                 let premium_slots: Vec<(i16, i16, i32)> = self
                     .world
@@ -650,10 +629,8 @@ impl ClientSession {
             }
 
             // ── 4. Save achievement data ──────────────────────────────────
-            // C++ Reference: DatabaseThread.cpp:1531 — g_DBAgent.UpdateAchieveData(this)
             if !char_id.is_empty() {
                 // Update play_time before saving.
-                // C++ Reference: AchieveHandler.cpp:53-63 — UpdateAchievePlayTime()
                 self.world.update_session(sid, |h| {
                     if h.achieve_login_time > 0 {
                         let now = std::time::SystemTime::now()
@@ -726,7 +703,6 @@ impl ClientSession {
             }
 
             // ── 5. Save user perks ────────────────────────────────────────
-            // C++ Reference: DatabaseThread.cpp:1538 — g_DBAgent.UpdateUserPerks(this)
             if !char_id.is_empty() {
                 let perk_data = self
                     .world
@@ -951,7 +927,6 @@ impl ClientSession {
             }
 
             // ── 6. Save quest progress ──────────────────────────────────────
-            // C++ Reference: DatabaseThread.cpp:1525 — g_DBAgent.UpdateQuestData(this)
             if !char_id.is_empty() {
                 let quest_data = self.world.with_session(sid, |h| h.quests.clone());
                 if let Some(quests) = quest_data {
@@ -984,7 +959,6 @@ impl ClientSession {
             }
 
             // ── 6b. Save daily quest progress ────────────────────────────────
-            // C++ Reference: QuestDatabase.cpp:131-156 — UpdateQuestData daily section
             if !char_id.is_empty() {
                 let dq_data = self.world.with_session(sid, |h| h.daily_quests.clone());
                 if let Some(dq_map) = dq_data {
@@ -1008,7 +982,6 @@ impl ClientSession {
             }
 
             // ── 7. Save genie data ────────────────────────────────────────
-            // C++ Reference: DatabaseThread.cpp:1529 — g_DBAgent.UpdateGenieData
             // Only save if genie data has been loaded from DB (prevents overwriting with 0).
             if !char_id.is_empty() {
                 let genie_data = self.world.with_session(sid, |h| {
@@ -1038,7 +1011,6 @@ impl ClientSession {
             }
 
             // ── 7b. Save daily operation cooldowns ─────────────────────────
-            // C++ Reference: UserDailyOpSystem.cpp — persisted via WIZ_DB_DAILY_OP
             if !char_id.is_empty() {
                 if let Some((_, data)) = self.world.daily_ops.remove(&char_id) {
                     let pool = self.pool.clone();
@@ -1058,7 +1030,6 @@ impl ClientSession {
             }
 
             // ── 7c. Save daily rank raw stats ──────────────────────────────
-            // C++ Reference: DBAgent.cpp:5529-5544 — UPDATE_USER_DAILY_RANK
             if !char_id.is_empty() {
                 let dr_data = self.world.with_session(sid, |h| {
                     (
@@ -1093,11 +1064,9 @@ impl ClientSession {
             }
 
             // ── 8. Party cleanup (before region removal) ──────────────────
-            // C++ Reference: DatabaseThread.cpp:1479-1486
             self.world.cleanup_party_on_disconnect(sid);
 
             // ── 9. Trade/exchange cleanup ──────────────────────────────────
-            // C++ Reference: User.cpp:3950 — ResetWindows()
             if self.world.is_trading(sid) {
                 let partner_sid = self.world.get_exchange_user(sid);
                 self.world.reset_trade(sid);
@@ -1110,13 +1079,11 @@ impl ClientSession {
             }
 
             // ── 10. Merchant cleanup ──────────────────────────────────────
-            // C++ Reference: User.cpp:3959-3965
             if self.world.is_merchanting(sid) {
                 self.world.close_merchant(sid);
             }
 
             // ── 10a. Pet save + cleanup ────────────────────────────────────
-            // C++ Reference: DBAgent.cpp — SavePetData() before PetOnDeath()
             // Save pet state to DB before clearing, then clear.
             {
                 let pet_snapshot = self.world.with_session(sid, |h| {
@@ -1153,11 +1120,9 @@ impl ClientSession {
             });
 
             // ── 10b. BDW cleanup ────────────────────────────────────────
-            // C++ Reference: DatabaseThread.cpp:1507 — BDWUserLogOut()
             crate::handler::logout::bdw_user_logout(&self.world, sid);
 
             // ── 10c. Monster Stone cleanup ──────────────────────────────
-            // C++ Reference: DatabaseThread.cpp:1473-1477
             {
                 let ms_active = self
                     .world
@@ -1189,7 +1154,6 @@ impl ClientSession {
             }
 
             // ── 10e. Challenge/duel cancel ──────────────────────────────
-            // C++ Reference: User.cpp:3953-3957
             {
                 let (requesting, requested, challenge_user) = self.world.get_challenge_state(sid);
                 if requesting > 0 || requested > 0 {
@@ -1213,7 +1177,6 @@ impl ClientSession {
             }
 
             // ── 10f. Remove rival ───────────────────────────────────────
-            // C++ Reference: ZoneChangeWarpHandler.cpp:301-302
             {
                 let has_rival = self
                     .world
@@ -1229,16 +1192,13 @@ impl ClientSession {
             self.world.remove_from_merchant_lookers(sid);
 
             // ── 10h. Stop mining / fishing ──────────────────────────────
-            // C++ Reference: User.cpp:3971-3975
             crate::handler::mining::stop_mining_internal(&self.world, sid);
             crate::handler::mining::stop_fishing_internal(&self.world, sid);
 
             // ── 11. Party BBS cleanup ─────────────────────────────────────
-            // C++ Reference: DatabaseThread.cpp:1510
             crate::handler::party_bbs::cleanup_on_disconnect(&self.world, sid);
 
             // ── 11a. Soccer event cleanup ─────────────────────────────────
-            // C++ Reference: User.cpp:3863-3864 — `isEventSoccerUserRemoved()` on logout
             if let Some(ch) = self.world.get_character_info(sid) {
                 if let Some(pos) = self.world.get_position(sid) {
                     let soccer_state = self.world.soccer_state().clone();
@@ -1269,7 +1229,6 @@ impl ClientSession {
             }
 
             // ── 11b. BottomUserLogOut — broadcast zone-wide logout notification
-            // C++ Reference: BottomUserList.cpp:206-214
             if let Some(ch) = self.world.get_character_info(sid) {
                 if let Some(pos) = self.world.get_position(sid) {
                     let region_del_pkt =
@@ -1280,7 +1239,6 @@ impl ClientSession {
             }
 
             // ── 11c. GM list removal
-            // C++ Reference: User.cpp:4983-5012 — GmListProcess(true)
             if let Some(ch) = self.world.get_character_info(sid) {
                 if ch.authority == 0 {
                     self.world.gm_list_remove(&ch.name);
@@ -1288,7 +1246,6 @@ impl ClientSession {
             }
 
             // ── 11d. Knights/Clan cleanup — clan buff + offline notification
-            // C++ Reference: DatabaseThread.cpp:1487-1498
             if let Some(ch) = self.world.get_character_info(sid) {
                 if ch.knights_id > 0 {
                     self.world
@@ -1325,18 +1282,15 @@ impl ClientSession {
             }
 
             // ── 13. ALL ranking cleanup ──────────────────────────────────
-            // C++ Reference: NewRankingSystem.cpp:708-746
             self.world.pk_zone_remove_player(sid);
             self.world.zindan_remove_player(sid);
             self.world.bdw_remove_player(sid);
             self.world.chaos_remove_player(sid);
 
             // ── 13b. Cinderella War cleanup ─────────────────────────────
-            // C++ Reference: CindirellaWar.cpp:576-682 — CindirellaLogOut on disconnect
             crate::handler::cinderella::cinderella_logout(&self.world, sid, true);
 
             // ── 13c. Wanted event cleanup ────────────────────────────────
-            // C++ Reference: DatabaseThread.cpp:1512-1513 — NewWantedEventLoqOut()
             {
                 let is_wanted = self
                     .world
@@ -1348,7 +1302,6 @@ impl ClientSession {
             }
 
             // ── 13d. Temple event sign-up cleanup ────────────────────────
-            // C++ Reference: DatabaseThread.cpp:1515-1518 — TempleDisbandEvent()
             // Remove player from event sign-up queue if still in signing phase.
             {
                 let (active_event, is_active) = self
@@ -1380,7 +1333,6 @@ impl ClientSession {
             }
 
             // ── 14. Mark account offline ──────────────────────────────────
-            // C++ Reference: DatabaseThread.cpp:1541
             if !account_id.is_empty() {
                 let pool = self.pool.clone();
                 let acct = account_id;
@@ -1471,7 +1423,6 @@ impl ClientSession {
 
     /// Save active saved magic entries to DB (fire-and-forget).
     ///
-    /// C++ Reference: `DatabaseThread.cpp:1536` — `g_DBAgent.UpdateSavedMagic(this)`
     /// Called on disconnect and zone change to persist scroll buffs.
     pub(crate) fn save_saved_magic_async(&self) {
         let char_id = match self.character_id.as_deref() {

@@ -1,12 +1,8 @@
 //! WIZ_ITEM_DROP (0x23) handler — drop an item from inventory to the ground.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/XGuard.cpp:1658-1778`
-//!
 //! Packet format (from client):
 //! ```text
 //! [u8 src_pos] [u32 item_id] [u16 count]
 //! ```
-//!
 //! The server creates a ground bundle at the player's position and
 //! broadcasts its appearance to nearby players.
 
@@ -47,13 +43,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Cannot drop items in Chaos Dungeon
-    // C++ Reference: ItemHandler.cpp:692 — GetZoneID() == ZONE_CHAOS_DUNGEON
     if pos.zone_id == ZONE_CHAOS_DUNGEON {
         return Ok(());
     }
 
     // Validate state: must be alive and not busy
-    // C++ Reference: BundleSystem.cpp:15-16
     if world.is_player_dead(sid)
         || world.is_trading(sid)
         || world.is_merchanting(sid)
@@ -66,7 +60,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let actual_slot = SLOT_MAX + src_pos as usize;
 
     // Validate item flags — cannot drop bound, sealed, rented, or duplicate items
-    // C++ Reference: XGuard.cpp:1658-1778 — DropItem flag checks
     if let Some(inv_slot) = world.get_inventory_slot(sid, actual_slot) {
         if inv_slot.flag == ITEM_FLAG_RENTED
             || inv_slot.flag == ITEM_FLAG_BOUND
@@ -123,7 +116,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
     // Broadcast bundle appearance to nearby players
     // v2600: same format as NPC loot drop — [u32 dropper_id] [u32 bundle_id] [u8 count]
-    // C++ Reference: Npc.cpp:7924 — `uint32(GetID()) << pBundle->nBundleID << uint8(1)`
     let mut bundle_pkt = Packet::new(Opcode::WizItemDrop as u8);
     bundle_pkt.write_u32(sid as u32); // dropper = player session ID
     bundle_pkt.write_u32(bundle_id);

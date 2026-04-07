@@ -1,17 +1,12 @@
 //! WIZ_WAREHOUSE (0x45) handler — personal warehouse (inn) storage.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/WareHouse.cpp`
-//!
 //! Sub-opcodes:
 //! - 1 = WAREHOUSE_OPEN: Send all stored items to client (192 slots)
 //! - 2 = WAREHOUSE_INPUT: Move item from inventory -> warehouse
 //! - 3 = WAREHOUSE_OUTPUT: Move item from warehouse -> inventory
 //! - 4 = WAREHOUSE_MOVE: Rearrange items within warehouse
 //! - 5 = WAREHOUSE_INVENMOVE: Rearrange items within inventory (from warehouse UI)
-//!
 //! Warehouse is per-account (not per-character).
 //! Items are loaded lazily on first WAREHOUSE_OPEN.
-//!
 //! Response format: `[u8 opcode] [u8 result]`
 //! - result 0 = NoAccess, 1 = Success, 2 = RequiredMoney, 3 = InvalidPassword
 
@@ -28,7 +23,7 @@ use crate::world::{
     ZONE_RONARK_LAND_BASE,
 };
 
-/// Warehouse sub-opcodes (C++ `packets.h:728-732`).
+/// Warehouse sub-opcodes
 const WAREHOUSE_OPEN: u8 = 0x01;
 const WAREHOUSE_INPUT: u8 = 0x02;
 const WAREHOUSE_OUTPUT: u8 = 0x03;
@@ -53,8 +48,6 @@ fn build_warehouse_result(opcode: u8, result: u8) -> Packet {
 }
 
 /// Check if a zone is a PK zone.
-///
-/// C++ Reference: `CUser::isInPKZone()` in `BotHandler.h:390-395`
 fn is_pk_zone(zone_id: u16) -> bool {
     zone_id == ZONE_ARDREAM || zone_id == ZONE_RONARK_LAND || zone_id == ZONE_RONARK_LAND_BASE
 }
@@ -68,7 +61,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let sid = session.session_id();
 
     // Must be alive and not in a busy state
-    // C++ Reference: WareHouse.cpp:38-44
     if world.is_player_dead(sid)
         || world.is_trading(sid)
         || world.is_store_open(sid)
@@ -91,7 +83,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let opcode = reader.read_u8().unwrap_or(0);
 
     // Genie state check — must happen AFTER reading opcode so error packet includes it.
-    // C++ Reference: WareHouse.cpp:49-55 — sends WarehouseError::NoAccess with opcode
     if world.with_session(sid, |h| h.genie_active).unwrap_or(false) {
         return session
             .send_packet(&build_warehouse_result(opcode, 0))
@@ -110,7 +101,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let npc_id = reader.read_u32().unwrap_or(0);
 
     // NPC validation — dead check, type check, and distance check
-    // C++ Reference: WareHouse.cpp:101-105 — `goto fail_return` on NPC invalid
     // C++ fail_return sends: [u8 opcode][u8 NotAccess(0)]
     use crate::npc_type_constants::NPC_WAREHOUSE;
     const RESULT_NOT_ACCESS: u8 = 0;
@@ -169,9 +159,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle WAREHOUSE_OPEN (sub-opcode 1).
-///
-/// C++ Reference: `WareHouse.cpp:57-97` — sends all 192 warehouse item slots.
-///
 /// PK zone: costs 10,000 gold to open.
 /// Response: `[u8 WAREHOUSE_OPEN] [u8 1=success] [u32 inn_coins]`
 ///   followed by 192 items: `[u32 item_id] [u16 durability] [u16 count] [u8 flag] [u32 unique_id] [u32 expire_time]`
@@ -259,8 +246,6 @@ async fn handle_warehouse_open(
 }
 
 /// Handle WAREHOUSE_INPUT (sub-opcode 2) — inventory -> warehouse.
-///
-/// C++ Reference: `WareHouse.cpp:116-202`
 async fn handle_warehouse_input(
     session: &mut ClientSession,
     item_id: u32,
@@ -368,7 +353,6 @@ async fn handle_warehouse_input(
         }
 
         // Capture original destination state for serial number logic.
-        // C++ Reference: WareHouse.cpp:176 — checks `!pDstItem->nNum` (original item_id)
         // which is evaluated BEFORE `pDstItem->nNum = pSrcItem->nNum` at line 187.
         let dst_was_empty = wh[wh_slot_idx].item_id == 0;
 
@@ -390,7 +374,6 @@ async fn handle_warehouse_input(
         }
 
         // Handle serial number
-        // C++ Reference: WareHouse.cpp:171-181
         // C++ checks `!pDstItem->nNum` (original item_id == 0) to determine if
         // destination was empty. Serial assignment only happens for empty destinations.
         let serial = if src.serial_num != 0 {
@@ -439,8 +422,6 @@ async fn handle_warehouse_input(
 }
 
 /// Handle WAREHOUSE_OUTPUT (sub-opcode 3) — warehouse -> inventory.
-///
-/// C++ Reference: `WareHouse.cpp:203-280`
 async fn handle_warehouse_output(
     session: &mut ClientSession,
     item_id: u32,
@@ -554,7 +535,6 @@ async fn handle_warehouse_output(
         }
 
         // Handle serial number
-        // C++ Reference: WareHouse.cpp:249-259
         // C++ checks `!pDstItem->nNum` (original item_id == 0) — use the cloned `dst`
         // which still has the original state captured before modifications.
         let dst_was_empty = dst.item_id == 0;
@@ -604,8 +584,6 @@ async fn handle_warehouse_output(
 }
 
 /// Handle WAREHOUSE_MOVE (sub-opcode 4) — rearrange within warehouse.
-///
-/// C++ Reference: `WareHouse.cpp:281-299`
 async fn handle_warehouse_move(
     session: &mut ClientSession,
     item_id: u32,
@@ -655,8 +633,6 @@ async fn handle_warehouse_move(
 }
 
 /// Handle WAREHOUSE_INVENMOVE (sub-opcode 5) — rearrange within inventory (from warehouse UI).
-///
-/// C++ Reference: `WareHouse.cpp:301-323`
 async fn handle_warehouse_invenmove(
     session: &mut ClientSession,
     item_id: u32,
@@ -862,7 +838,6 @@ mod tests {
 
     // ── Sprint 313: Serial number uses original item_id check ────────
 
-    /// C++ Reference: WareHouse.cpp:176 — `!pDstItem->nNum` checks original item_id
     /// before it's set at line 187. Serial assignment only for originally-empty slots.
     #[test]
     fn test_serial_check_uses_original_item_id() {
@@ -906,7 +881,6 @@ mod tests {
 
     // ── Sprint 318: Genie check moved after opcode read ─────────────
 
-    /// C++ Reference: WareHouse.cpp:49-55 — Genie check happens AFTER reading
     /// the sub-opcode, and sends an error packet with the correct opcode byte.
     #[test]
     fn test_genie_warehouse_open_error_packet() {

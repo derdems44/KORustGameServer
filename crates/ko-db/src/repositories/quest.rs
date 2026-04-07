@@ -1,6 +1,4 @@
 //! Quest repository — database access for quest helper and quest monster tables.
-//!
-//! C++ Reference:
 //! - `GameServerDlg.cpp` — `m_QuestHelperArray`, `m_QuestMonsterArray`
 //! - `QuestDatabase.cpp` — `LoadQuestData()`, `UpdateQuestData()`
 
@@ -20,7 +18,6 @@ impl<'a> QuestRepository<'a> {
 
     /// Load all quest helper definitions.
     ///
-    /// C++ Reference: `CQuestHelperSet` — loads from `QUEST_HELPER` table.
     pub async fn load_quest_helpers(&self) -> Result<Vec<QuestHelperRow>, sqlx::Error> {
         sqlx::query_as::<_, QuestHelperRow>("SELECT * FROM quest_helper ORDER BY n_index")
             .fetch_all(self.pool)
@@ -29,7 +26,6 @@ impl<'a> QuestRepository<'a> {
 
     /// Load all quest monster definitions.
     ///
-    /// C++ Reference: `CQuestMonsterSet` — loads from `QUEST_MONSTER` table.
     pub async fn load_quest_monsters(&self) -> Result<Vec<QuestMonsterRow>, sqlx::Error> {
         sqlx::query_as::<_, QuestMonsterRow>("SELECT * FROM quest_monster ORDER BY s_quest_num")
             .fetch_all(self.pool)
@@ -38,7 +34,6 @@ impl<'a> QuestRepository<'a> {
 
     /// Load all quest progress for a character.
     ///
-    /// C++ Reference: `CDBAgent::LoadQuestData()` — deserializes binary quest blob.
     pub async fn load_user_quests(
         &self,
         char_name: &str,
@@ -118,7 +113,6 @@ impl<'a> QuestRepository<'a> {
 
     /// Delete a quest entry for a character (quest abandoned/removed).
     ///
-    /// C++ Reference: `CUser::DeleteEvent()` + `QuestV2RemoveEvent()`
     pub async fn delete_user_quest(
         &self,
         char_name: &str,

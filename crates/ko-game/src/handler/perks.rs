@@ -1,7 +1,4 @@
 //! Perk system handler — WIZ_EXT_HOOK(0xE9) sub-opcode PERKS(0xE3).
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/PerksHandler.cpp`
-//!
 //! Sub-opcodes (perksSub enum):
 //! - 0 (info):       Server sends full perk list + player allocations on login
 //! - 1 (perkPlus):   Allocate one point to a perk
@@ -16,8 +13,6 @@ use tracing::debug;
 use crate::session::{ClientSession, SessionState};
 
 /// Ext sub-opcode for the Perks system.
-///
-/// C++ Reference: `ExtSub::PERKS` = CINDIRELLA(0xE0) + 3 = 0xE3
 const EXT_SUB_PERKS_LOCAL: u8 = 0xE3;
 
 /// Perk sub-opcode: send full perk info to client.
@@ -42,12 +37,9 @@ const PERK_ERR_SUCCESS: u8 = 3;
 const DEFAULT_PERK_COINS: u32 = 100_000;
 
 /// Handle WIZ_EXT_HOOK packets routed to the PERKS sub-handler.
-///
 /// This function expects the first byte (ext sub-opcode = 0xE3) to have
 /// already been consumed by the ext hook dispatch. The remaining data starts
 /// with the perksSub sub-opcode.
-///
-/// C++ Reference: `CUser::HandlePerks(Packet& pkt)` in PerksHandler.cpp:31-46
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -78,8 +70,7 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Send the full perk info packet to a player (called on game entry).
-///
-/// Packet format (C++ `CUser::Send_myPerks`):
+/// Packet format (`CUser::Send_myPerks`):
 /// ```text
 /// WIZ_EXT_HOOK(0xE9) +
 ///   uint8(PERKS=0xE3) +
@@ -154,10 +145,7 @@ pub async fn send_my_perks(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle perkPlus: allocate one perk point.
-///
 /// Client sends: uint32(perk_index)
-///
-/// C++ Reference: `CUser::PerkPlus(Packet& pkt)` in PerksHandler.cpp:57-83
 async fn handle_perk_plus(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -224,8 +212,6 @@ async fn handle_perk_plus(
 }
 
 /// Handle perkReset: reset all perk points (costs gold).
-///
-/// C++ Reference: `CUser::PerkReset(Packet& pkt)` in PerksHandler.cpp:85-110
 async fn handle_perk_reset(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -235,7 +221,6 @@ async fn handle_perk_reset(session: &mut ClientSession) -> anyhow::Result<()> {
 
     let total_allocated: i16 = perk_levels.iter().sum();
     if total_allocated == 0 {
-        // C++: SendBoxMessage(0, "", "There are no Perk points to reset.", 0, messagecolour::red);
         debug!(
             "[{}] PerkReset: no points allocated, nothing to reset",
             session.addr()
@@ -250,13 +235,11 @@ async fn handle_perk_reset(session: &mut ClientSession) -> anyhow::Result<()> {
         .unwrap_or(DEFAULT_PERK_COINS);
 
     // Check and deduct gold
-    // C++ Reference: `GoldLose(coins, true)` — checks if player has enough gold
     let has_gold = world
         .get_character_info(sid)
         .is_some_and(|ch| ch.gold >= perk_coins);
 
     if !has_gold {
-        // C++: SendBoxMessage(0, "", "You do not have enough money to reset the perk points.", ...)
         debug!(
             "[{}] PerkReset: not enough gold (need {})",
             session.addr(),
@@ -308,10 +291,7 @@ async fn handle_perk_reset(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle perkTargetInfo: view another player's perk allocations.
-///
 /// Client sends: uint16(target_session_id)
-///
-/// C++ Reference: `CUser::PerkTargetInfo(Packet& pkt)` in PerksHandler.cpp:141-157
 async fn handle_perk_target_info(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -325,7 +305,6 @@ async fn handle_perk_target_info(
 
     // Check if target is online
     let Some((perk_levels, _rem_perk)) = world.get_perk_levels(target_id) else {
-        // C++: SendBoxMessage(0, "", "No player found or no such player.", 0, messagecolour::red);
         debug!(
             "[{}] PerkTargetInfo: target {} not found",
             session.addr(),
@@ -353,8 +332,6 @@ async fn handle_perk_target_info(
 }
 
 /// Send a perk error response.
-///
-/// C++ Reference: `CUser::SendPerkError(perksError error)` in PerksHandler.cpp:48-55
 async fn send_perk_error(session: &mut ClientSession, error: u8) -> anyhow::Result<()> {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
     pkt.write_u8(EXT_SUB_PERKS_LOCAL);
@@ -365,8 +342,6 @@ async fn send_perk_error(session: &mut ClientSession, error: u8) -> anyhow::Resu
 }
 
 /// Save the player's perk data to the database.
-///
-/// C++ Reference: `CDBAgent::UpdateUserPerks(CUser* pUser)` in DBAgent.cpp:5726-5745
 async fn save_user_perks(session: &mut ClientSession) {
     let char_id = match session.character_id() {
         Some(id) => id.to_string(),
@@ -395,10 +370,7 @@ async fn save_user_perks(session: &mut ClientSession) {
 }
 
 /// Load a player's perk data from the database into the session.
-///
 /// Called during game entry (phase 2) after character is registered.
-///
-/// C++ Reference: `CDBAgent::LoadPerksData(strUserID, pUser)` in DBAgent.cpp:5698-5724
 pub async fn load_user_perks(session: &mut ClientSession) {
     let char_id = match session.character_id() {
         Some(id) => id.to_string(),

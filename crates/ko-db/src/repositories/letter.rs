@@ -1,6 +1,4 @@
 //! Letter (mail) repository — letter table access.
-//!
-//! C++ Reference: `CDBAgent` letter methods in `DBAgent.cpp:1813-1983`.
 
 use sqlx::PgPool;
 
@@ -19,7 +17,6 @@ impl<'a> LetterRepository<'a> {
 
     /// Count unread letters for a character.
     ///
-    /// C++ Reference: `CDBAgent::GetUnreadLetterCount` — MAIL_BOX_CHECK_COUNT proc.
     pub async fn count_unread(&self, recipient: &str) -> Result<i64, sqlx::Error> {
         let row: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM letter WHERE recipient_name = $1 AND b_status = 0 AND b_deleted = 0",
@@ -33,7 +30,6 @@ impl<'a> LetterRepository<'a> {
 
     /// Load letter list for a character.
     ///
-    /// C++ Reference: `CDBAgent::GetLetterList` — MAIL_BOX_REQUEST_LIST proc.
     ///
     /// - `new_only=true`: unread letters (b_status=false)
     /// - `new_only=false`: read letters (b_status=true, history)
@@ -54,7 +50,6 @@ impl<'a> LetterRepository<'a> {
 
     /// Read a letter's message body and mark it as read.
     ///
-    /// C++ Reference: `CDBAgent::ReadLetter` — MAIL_BOX_READ proc.
     pub async fn read_letter(
         &self,
         recipient: &str,
@@ -87,7 +82,6 @@ impl<'a> LetterRepository<'a> {
 
     /// Send a letter.
     ///
-    /// C++ Reference: `CDBAgent::SendLetter` — MAIL_BOX_SEND proc.
     /// Returns true on success.
     #[allow(clippy::too_many_arguments)]
     pub async fn send_letter(
@@ -141,7 +135,6 @@ impl<'a> LetterRepository<'a> {
 
     /// Get item data from a letter (for LETTER_GET_ITEM).
     ///
-    /// C++ Reference: `CDBAgent::GetItemFromLetter` — MAIL_BOX_GET_ITEM proc.
     pub async fn get_item_from_letter(
         &self,
         recipient: &str,
@@ -158,7 +151,6 @@ impl<'a> LetterRepository<'a> {
 
     /// Mark item as taken from a letter.
     ///
-    /// C++ Reference: `CDBAgent::SetItemFromLetter`
     pub async fn mark_item_taken(
         &self,
         recipient: &str,
@@ -177,7 +169,6 @@ impl<'a> LetterRepository<'a> {
 
     /// Delete a letter (soft delete).
     ///
-    /// C++ Reference: `CDBAgent::DeleteLetter` — sets bDeleted = 1.
     pub async fn delete_letter(&self, recipient: &str, letter_id: i32) -> Result<(), sqlx::Error> {
         sqlx::query(
             "UPDATE letter SET b_deleted = 1 WHERE letter_id = $1 AND recipient_name = $2",

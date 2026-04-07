@@ -1,6 +1,4 @@
 //! NPC repository — loads NPC/Monster templates and spawn data from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `GameServer/LoadServerData.cpp` — LoadNpcTableData(), LoadNpcPosTable()
 
 use crate::models::{
@@ -21,7 +19,6 @@ impl<'a> NpcRepository<'a> {
 
     /// Load all NPC/Monster templates (bulk load at startup).
     ///
-    /// C++ Reference: `LoadNpcTableData(true)` — loads K_NPC + K_MONSTER
     pub async fn load_all_templates(&self) -> Result<Vec<NpcTemplateRow>, sqlx::Error> {
         sqlx::query_as::<_, NpcTemplateRow>(
             "SELECT s_sid, is_monster, str_name, s_pid, s_size, \
@@ -42,7 +39,6 @@ impl<'a> NpcRepository<'a> {
 
     /// Load all NPC spawn positions (bulk load at startup).
     ///
-    /// C++ Reference: `LoadNpcPosTable()` — loads K_NPCPOS
     pub async fn load_all_spawns(&self) -> Result<Vec<NpcSpawnRow>, sqlx::Error> {
         sqlx::query_as::<_, NpcSpawnRow>(
             "SELECT id, zone_id, npc_id, is_monster, act_type, regen_type, \
@@ -57,7 +53,6 @@ impl<'a> NpcRepository<'a> {
 
     /// Load all monster summon list entries (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMonsterSummonListTable()`
     pub async fn load_monster_summon_list(&self) -> Result<Vec<MonsterSummonRow>, sqlx::Error> {
         sqlx::query_as::<_, MonsterSummonRow>(
             "SELECT s_sid, str_name, s_level, s_probability, b_type \
@@ -69,7 +64,6 @@ impl<'a> NpcRepository<'a> {
 
     /// Load all monster respawn loop entries (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMonsterRespawnListTable()`
     pub async fn load_monster_respawn_loop(
         &self,
     ) -> Result<Vec<MonsterRespawnLoopRow>, sqlx::Error> {
@@ -83,7 +77,6 @@ impl<'a> NpcRepository<'a> {
 
     /// Load all boss random spawn entries (bulk load at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMonsterBossRandomSpawnTable()`
     pub async fn load_boss_random_spawn(
         &self,
     ) -> Result<Vec<MonsterBossRandomSpawnRow>, sqlx::Error> {

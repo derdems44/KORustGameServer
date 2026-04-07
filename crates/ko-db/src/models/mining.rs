@@ -1,11 +1,7 @@
 //! Mining & Fishing item drop table model.
-//!
-//! C++ Reference: `_MINING_FISHING_ITEM` struct, loaded from `MINING_FISHING_ITEM` table.
 
 /// A row from the `mining_fishing_item` table — defines possible rewards
 /// for mining and fishing activities.
-///
-/// C++ Reference: `_MINING_FISHING_ITEM` in `MiningFishingTableSet.h`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MiningFishingItemRow {
     /// Primary key index.

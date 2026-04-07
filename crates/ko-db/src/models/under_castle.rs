@@ -1,9 +1,6 @@
 //! Model for the `monster_under_the_castle` table.
-//!
-//! C++ Reference: `m_MonsterUnderTheCastleArray` in `GameServerDlg.h`
 
 /// A row from the `monster_under_the_castle` table.
-///
 /// Each row defines a monster or NPC spawn for the Under The Castle event.
 /// `b_type == 0` = monster, `b_type == 1` = NPC (merchants, observers).
 #[derive(Debug, Clone, sqlx::FromRow)]

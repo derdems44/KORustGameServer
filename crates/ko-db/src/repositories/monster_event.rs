@@ -1,10 +1,4 @@
 //! Monster event data repository.
-//!
-//! C++ Reference: `CGameServerDlg::LoadMonsterStoneRespawnList()`,
-//!                `CGameServerDlg::LoadMonsterBossRandomStages()`,
-//!                `CGameServerDlg::LoadJuraidMountainRespawnList()`,
-//!                `CGameServerDlg::LoadMonsterChallenge()`,
-//!                `CGameServerDlg::LoadMonsterChallengeSummonList()`
 
 use crate::models::monster_event::{
     MonsterBossRandomStageRow, MonsterChallengeRow, MonsterChallengeSummonRow,
@@ -25,7 +19,6 @@ impl<'a> MonsterEventRepository<'a> {
 
     /// Load all monster stone respawn entries.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMonsterStoneRespawnList()`
     pub async fn load_stone_respawn(&self) -> Result<Vec<MonsterStoneRespawnRow>, sqlx::Error> {
         sqlx::query_as::<_, MonsterStoneRespawnRow>(
             "SELECT s_index, s_sid, b_type, str_name, s_pid, zone_id, is_boss, \
@@ -38,7 +31,6 @@ impl<'a> MonsterEventRepository<'a> {
 
     /// Load all boss random stage definitions.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMonsterBossRandomStages()`
     pub async fn load_boss_random_stages(
         &self,
     ) -> Result<Vec<MonsterBossRandomStageRow>, sqlx::Error> {
@@ -52,7 +44,6 @@ impl<'a> MonsterEventRepository<'a> {
 
     /// Load all Juraid Mountain respawn entries.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadJuraidMountainRespawnList()`
     pub async fn load_juraid_respawn(&self) -> Result<Vec<MonsterJuraidRespawnRow>, sqlx::Error> {
         sqlx::query_as::<_, MonsterJuraidRespawnRow>(
             "SELECT s_index, s_sid, b_type, str_name, s_pid, zone_id, family, \
@@ -65,7 +56,6 @@ impl<'a> MonsterEventRepository<'a> {
 
     /// Load all monster challenge config entries.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMonsterChallenge()`
     pub async fn load_challenge_config(&self) -> Result<Vec<MonsterChallengeRow>, sqlx::Error> {
         sqlx::query_as::<_, MonsterChallengeRow>(
             "SELECT s_index, b_start_time1, b_start_time2, b_start_time3, \
@@ -78,7 +68,6 @@ impl<'a> MonsterEventRepository<'a> {
 
     /// Load all monster challenge summon list entries.
     ///
-    /// C++ Reference: `CGameServerDlg::LoadMonsterChallengeSummonList()`
     pub async fn load_challenge_summon_list(
         &self,
     ) -> Result<Vec<MonsterChallengeSummonRow>, sqlx::Error> {

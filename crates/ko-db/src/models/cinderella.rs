@@ -1,13 +1,10 @@
 //! Cinderella War (Fun Class) event model structs.
-//!
 //! Maps to PostgreSQL tables: `cindwar_setting`, `cindwar_items`,
 //! `cindwar_reward`, `cindwar_reward_item`, `cindwar_stat`.
 
 use sqlx::FromRow;
 
 /// A tier configuration for the Cinderella War event.
-///
-/// C++ Reference: `_CINDWAR_SETTING` in `GameDefine.h`
 #[derive(Debug, Clone, FromRow)]
 pub struct CindwarSettingRow {
     pub setting_id: i16,
@@ -23,8 +20,6 @@ pub struct CindwarSettingRow {
 }
 
 /// An equipment entry for a Cinderella War tier+class combo.
-///
-/// C++ Reference: `_CINDWAR_ITEMS` in `GameDefine.h`
 #[derive(Debug, Clone, FromRow)]
 pub struct CindwarItemRow {
     pub tier: i16,
@@ -39,8 +34,6 @@ pub struct CindwarItemRow {
 }
 
 /// Rank-based reward for Cinderella War event.
-///
-/// C++ Reference: `_CINDWAR_REWARD` in `GameDefine.h`
 #[derive(Debug, Clone, FromRow)]
 pub struct CindwarRewardRow {
     pub rank_id: i16,
@@ -51,7 +44,6 @@ pub struct CindwarRewardRow {
 }
 
 /// A reward item associated with a rank.
-///
 /// Normalized from the C++ flat `itemid[10]`/`itemcount[10]` arrays.
 #[derive(Debug, Clone, FromRow)]
 pub struct CindwarRewardItemRow {
@@ -64,8 +56,6 @@ pub struct CindwarRewardItemRow {
 }
 
 /// Per-class stat/skill preset for a Cinderella War tier.
-///
-/// C++ Reference: `_CINDWAR_STATSET` in `GameDefine.h`
 #[derive(Debug, Clone, FromRow)]
 pub struct CindwarStatRow {
     pub id: i32,

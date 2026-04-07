@@ -1,18 +1,12 @@
 //! LS_NEWS (0xF6) handler — returns server news/notice.
-//!
 //! ## C++ Reference
-//!
-//! `LoginSession::HandleNews()` — C++ `LS_NEWS = 0xF6`
+//! `LoginSession::HandleNews()` — `LS_NEWS = 0xF6`
 //! Echo pattern: server responds with the SAME opcode (0xF6).
-//!
 //! ## Request (Client → Server)
 //! Empty (just opcode 0xF6).
-//!
 //! ## Response (Server → Client) — opcode 0xF6
-//!
 //! C++ HandleNews: `result << "Login Notice" << content`
 //! PCAP v2600: `[F6] [string "INotice"] [string notice_text]`
-//!
 //! If no news: `result << "Login Notice" << "<empty>"`
 
 use ko_protocol::{LoginOpcode, Packet};
@@ -20,7 +14,6 @@ use ko_protocol::{LoginOpcode, Packet};
 use crate::login_session::LoginSession;
 
 /// Handle LS_NEWS (0xF6) — echo pattern, same opcode back with notice.
-///
 /// C++ verified: `Packet result(pkt.GetOpcode()); result << "Login Notice" << content;`
 /// PCAP verified: response is 0xF6 with "INotice" + notice text.
 pub async fn handle(session: &mut LoginSession, _pkt: Packet) -> anyhow::Result<()> {

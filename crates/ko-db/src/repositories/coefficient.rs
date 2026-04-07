@@ -1,6 +1,4 @@
 //! Coefficient repository — loads class coefficient data from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `GameServer/LoadServerData.cpp` — `LoadCoefficientTable()`
 //! - `shared/database/CoefficientSet.h` — `CCoefficientSet`
 
@@ -21,7 +19,6 @@ impl<'a> CoefficientRepository<'a> {
     /// Load all class coefficient rows (bulk load at startup).
     ///
     /// Returns one row per class (30 rows total: 101-115 Karus, 201-215 El Morad).
-    /// C++ Reference: `CGameServerDlg::LoadCoefficientTable()`
     pub async fn load_all_coefficients(&self) -> Result<Vec<CoefficientRow>, sqlx::Error> {
         sqlx::query_as::<_, CoefficientRow>(
             "SELECT s_class, short_sword, jamadar, sword, axe, club, spear, pole, \

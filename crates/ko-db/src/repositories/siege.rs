@@ -1,6 +1,4 @@
 //! Siege warfare repository -- loads and updates siege data from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `CKnightsSiegeWarfare` in `KnightsSiegeWarFare.h` -- data loading
 //! - `CDBAgent::UpdateSiegeTax()` in `DBAgent.cpp:2655` -- tariff updates
 //! - `CDBAgent::UpdateSiege()` in `DBAgent.cpp:2645` -- siege state updates
@@ -21,7 +19,6 @@ impl<'a> SiegeRepository<'a> {
 
     /// Load siege warfare data (one row per castle).
     ///
-    /// C++ Reference: `CKnightsSiegeWarfare::Fetch()` + `LoadServerData.cpp`
     pub async fn load_all(&self) -> Result<Vec<KnightsSiegeWarfareRow>, sqlx::Error> {
         sqlx::query_as::<_, KnightsSiegeWarfareRow>(
             "SELECT s_castle_index, s_master_knights, by_siege_type, \
@@ -47,7 +44,6 @@ impl<'a> SiegeRepository<'a> {
 
     /// Update tariff for a specific zone (Moradon or Delos).
     ///
-    /// C++ Reference: `CDBAgent::UpdateSiegeTax()` in `DBAgent.cpp:2655`
     pub async fn update_tariff(&self, zone: u8, tariff: i16) -> Result<(), sqlx::Error> {
         if zone == 30 {
             // ZONE_DELOS
@@ -67,7 +63,6 @@ impl<'a> SiegeRepository<'a> {
 
     /// Update tax/charge amounts (after funds collection or revenue reset).
     ///
-    /// C++ Reference: `CDBAgent::UpdateSiegeWarfareDB()` in `DBAgent.h:250`
     pub async fn update_taxes(
         &self,
         moradon_tax: i32,
@@ -88,7 +83,6 @@ impl<'a> SiegeRepository<'a> {
 
     /// Update siege warfare state (master clan, war schedule).
     ///
-    /// C++ Reference: `CDBAgent::UpdateSiege()` in `DBAgent.cpp:2645`
     pub async fn update_siege(
         &self,
         castle_index: i16,
@@ -117,7 +111,6 @@ impl<'a> SiegeRepository<'a> {
 
     /// Update challenge clan list (up to 10 slots).
     ///
-    /// C++ Reference: `_KNIGHTS_SIEGE_WARFARE::sChallengeList[10]`
     pub async fn update_challenge_list(
         &self,
         castle_index: i16,
@@ -150,7 +143,6 @@ impl<'a> SiegeRepository<'a> {
 
     /// Update request clan list (up to 10 slots).
     ///
-    /// C++ Reference: `_KNIGHTS_SIEGE_WARFARE::sRequestList[10]`
     pub async fn update_request_list(
         &self,
         castle_index: i16,
@@ -183,7 +175,6 @@ impl<'a> SiegeRepository<'a> {
 
     /// Update war request schedule fields.
     ///
-    /// C++ Reference: `_KNIGHTS_SIEGE_WARFARE::byWarRequestDay/Time/Minute`
     pub async fn update_war_request_schedule(
         &self,
         castle_index: i16,

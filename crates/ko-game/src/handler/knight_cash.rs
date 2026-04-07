@@ -1,45 +1,32 @@
 //! Knight Cash (KC) balance system.
-//!
-//! C++ Reference:
-//! - `KOOriginalGameServer/GameServer/KnightCashSystem.cpp` — `GiveBalance()`
-//! - `KOOriginalGameServer/GameServer/DBAgent.cpp:5280-5335` — Load/Update methods
-//! - `KOOriginalGameServer/GameServer/DatabaseThread.cpp:485-530` — `UpdateAccountKnightCash`
-//!
+//! -  — `GiveBalance()`
+//! -  — Load/Update methods
+//! -  — `UpdateAccountKnightCash`
 //! ## Overview
-//!
 //! The KC system manages two in-memory balance counters per session:
 //! - `knight_cash` — Knight Cash (KC) premium currency (DB: `tb_user.cash_point`)
 //! - `tl_balance`  — TL real-money balance (DB: `tb_user.bonus_cash_point`)
-//!
 //! The client is notified of balance changes via `WIZ_EXT_HOOK (0xE9)` (0xE9) with
 //! sub-opcode `KCUPDATE = 0xB9`:
-//!
 //! ```text
 //! WIZ_EXT_HOOK (0xE9) << u8(0xB9) << u32(knight_cash) << u32(tl_balance)
 //! ```
-//!
 //! This opcode is guarded behind `#if(__VERSION < 2369)` in C++, so it applies
 //! to the legacy client version this server targets.
-//!
 //! ## PPCard / Prepaid Card (WIZ_EDIT_BOX sub-opcode 4)
-//!
 //! PPCard redemption uses `WIZ_EDIT_BOX` (0x59) opcode and is handled
 //! separately in `edit_box.rs`.  On success `GiveBalance()` in C++ calls
 //! `UpdateAccountKnightCash` which:
 //! 1. Adds cash/TL amounts to in-memory counters.
 //! 2. Persists to DB via `UPDATE_BALANCE` stored procedure.
 //! 3. Sends `KCUPDATE` packet to client.
-//!
 //! ## WIZ_EXT_HOOK (0xE9) + KCUPDATE (0xB9) — client query / gift purchase
-//!
 //! The client can send `WIZ_EXT_HOOK (0xE9)` with sub-opcode `0xB9` to query its
 //! current balance (e.g. after a web-shop purchase, gift send, etc.).
-//!
 //! Wire layout (client → server):
 //! ```text
 //! WIZ_EXT_HOOK (0xE9) << u8(0xB9)
 //! ```
-//!
 //! Server response (same opcode):
 //! ```text
 //! WIZ_EXT_HOOK (0xE9) << u8(0xB9) << u32(knight_cash) << u32(tl_balance)
@@ -58,7 +45,6 @@ pub(crate) use super::ext_hook::{EXT_SUB_CASHCHANGE, EXT_SUB_KCUPDATE};
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a WIZ_CHAT PUBLIC_CHAT fallback for KC balance notification.
-///
 /// v2525 vanilla client drops both WIZ_EXT_HOOK (0xE9) and WIZ_ADD_MSG (0xDB)
 /// — both are outside the GameMain dispatch range (0x06-0xD7). This chat
 /// packet (WIZ_CHAT 0x12, type 7 PUBLIC_CHAT) is the only reliable way to
@@ -69,14 +55,11 @@ pub fn build_kc_chat_packet(knight_cash: u32, tl_balance: u32) -> Packet {
 }
 
 /// Build the `KCUPDATE` packet sent to the client.
-///
-/// C++ Reference: `DatabaseThread.cpp:515-517`
 /// ```cpp
 /// Packet newpkt(WIZ_EXT_HOOK (0xE9), uint8(ExtSub::KCUPDATE));
 /// newpkt << m_nKnightCash << m_nTLBalance;
 /// Send(&newpkt);
 /// ```
-///
 /// Wire: `WIZ_EXT_HOOK (0xE9)(0xE9) << u8(0xB9) << u32(knight_cash) << u32(tl_balance)`
 pub fn build_kcupdate_packet(knight_cash: u32, tl_balance: u32) -> Packet {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
@@ -87,12 +70,9 @@ pub fn build_kcupdate_packet(knight_cash: u32, tl_balance: u32) -> Packet {
 }
 
 /// Build the `CASHCHANGE` packet — same wire format as `KCUPDATE`, different sub-opcode.
-///
-/// C++ Reference: `DatabaseThread.cpp:648`
 /// ```cpp
 /// result << uint8(ExtSub::CASHCHANGE) << uint32(m_nKnightCash) << uint32(m_nTLBalance);
 /// ```
-///
 /// Wire: `WIZ_EXT_HOOK (0xE9)(0xE9) << u8(0xA9) << u32(knight_cash) << u32(tl_balance)`
 pub fn build_cashchange_packet(knight_cash: u32, tl_balance: u32) -> Packet {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
@@ -107,10 +87,7 @@ pub fn build_cashchange_packet(knight_cash: u32, tl_balance: u32) -> Packet {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Load KC and TL balances from DB and store in session state.
-///
-/// C++ Reference: `CDBAgent::LoadKnightCash()` — `DBAgent.cpp:5280-5299`
 /// Called during `SelectCharID` (character selection → game entry).
-///
 /// On success, updates `session.world.knight_cash` and `tl_balance`.
 /// On DB error, balances remain at 0 (safe — client won't see incorrect value).
 pub async fn load_kc_balances(session: &mut ClientSession) {
@@ -152,11 +129,8 @@ pub async fn load_kc_balances(session: &mut ClientSession) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle `WIZ_EXT_HOOK (0xE9)` sub-opcode `KCUPDATE (0xB9)` from client.
-///
-/// C++ Reference: `XGuard.cpp:2013-2143` — `CUser::ExtHook_HandlePacket()`
 /// The client sends this after opening the cash shop or after a web purchase
 /// to request the current KC/TL balance.
-///
 /// Response: `WIZ_EXT_HOOK (0xE9) << u8(0xB9) << u32(kc) << u32(tl)`
 pub async fn handle_kcupdate_query(session: &mut ClientSession) -> anyhow::Result<()> {
     let sid = session.session_id();
@@ -180,10 +154,7 @@ pub async fn handle_kcupdate_query(session: &mut ClientSession) -> anyhow::Resul
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Add KC and/or TL to a player's balance and persist to DB.
-///
-/// C++ Reference: `CUser::GiveBalance()` — `KnightCashSystem.cpp:4-11`
 /// and `DatabaseThread.cpp:485-527` (`UpdateAccountKnightCash` handler).
-///
 /// - Updates in-memory balance on the session.
 /// - Persists to DB via `update_kc_balances()`.
 /// - Sends `KCUPDATE` packet to the client.
@@ -269,10 +240,7 @@ pub async fn give_balance(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Deduct KC from a player's balance after a successful purchase.
-///
-/// C++ Reference: `DatabaseThread.cpp:636` — `m_nKnightCash -= itemprice`
 /// followed by `UpdateKnightCash` DB call and `CASHCHANGE` packet send.
-///
 /// Returns `true` if sufficient balance and deduction succeeded.
 /// Returns `false` if insufficient KC balance (purchase should be rejected).
 pub async fn deduct_kc(session: &mut ClientSession, amount: i32) -> anyhow::Result<bool> {
@@ -318,7 +286,6 @@ pub async fn deduct_kc(session: &mut ClientSession, amount: i32) -> anyhow::Resu
     });
 
     // Send CASHCHANGE packet to client
-    // C++ Reference: DatabaseThread.cpp:648
     let pkt = build_cashchange_packet(new_kc, new_tl);
     session.send_packet(&pkt).await?;
     // WIZ_CHAT fallback for vanilla v2525 client (drops ext_hook 0xE9)
@@ -354,9 +321,6 @@ pub async fn deduct_kc(session: &mut ClientSession, amount: i32) -> anyhow::Resu
 }
 
 /// Deduct TL from a player's balance after a successful TL-priced purchase.
-///
-/// C++ Reference: `DatabaseThread.cpp:641` — `m_nTLBalance -= itemprice`
-///
 /// Returns `true` if sufficient balance and deduction succeeded.
 /// Returns `false` if insufficient TL balance.
 pub async fn deduct_tl(session: &mut ClientSession, amount: i32) -> anyhow::Result<bool> {
@@ -422,10 +386,7 @@ pub async fn deduct_tl(session: &mut ClientSession, amount: i32) -> anyhow::Resu
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Deduct KC from a player using WorldState (no `ClientSession` required).
-///
-/// C++ Reference: `CUser::CashLose()` — `UserGoldSystem.cpp`
 /// - Checks balance, subtracts, sends `CASHCHANGE` packet, queues DB save.
-///
 /// Returns `false` if the player has insufficient KC.
 pub fn cash_lose(
     world: &crate::world::WorldState,
@@ -471,8 +432,6 @@ pub fn cash_lose(
 }
 
 /// Add KC to a player using WorldState (no `ClientSession` required).
-///
-/// C++ Reference: `CUser::CashGain()` — `UserGoldSystem.cpp`
 /// - Adds KC, sends `CASHCHANGE` packet, queues DB save.
 pub fn cash_gain(
     world: &crate::world::WorldState,
@@ -518,9 +477,7 @@ pub fn cash_gain(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Send a `KCUPDATE` packet for a given session without changing balances.
-///
 /// Used by GM `/showkc` style commands to display current KC balance.
-/// C++ Reference: `GMCommandsHandler.cpp:2306` — `KCUPDATE` packet build.
 pub fn send_kcupdate(world: &crate::world::WorldState, sid: crate::zone::SessionId) {
     let kc = world.get_knight_cash(sid);
     let tl = world.get_tl_balance(sid);
@@ -554,7 +511,6 @@ mod tests {
 
     #[test]
     fn test_kcupdate_packet_format() {
-        // C++ Reference: DatabaseThread.cpp:515-517
         // Packet newpkt(WIZ_EXT_HOOK (0xE9), uint8(ExtSub::KCUPDATE));
         // newpkt << m_nKnightCash << m_nTLBalance;
         let pkt = build_kcupdate_packet(1000, 250);
@@ -569,7 +525,6 @@ mod tests {
 
     #[test]
     fn test_cashchange_packet_format() {
-        // C++ Reference: DatabaseThread.cpp:648
         // result << uint8(ExtSub::CASHCHANGE) << uint32(m_nKnightCash) << uint32(m_nTLBalance);
         let pkt = build_cashchange_packet(500, 100);
         assert_eq!(pkt.opcode, Opcode::EXT_HOOK_S2C);
@@ -617,13 +572,11 @@ mod tests {
 
     #[test]
     fn test_ext_sub_kcupdate_constant() {
-        // C++ Reference: shared/packets.h:216 — KCUPDATE = 0xB9
         assert_eq!(EXT_SUB_KCUPDATE, 0xB9);
     }
 
     #[test]
     fn test_ext_sub_cashchange_constant() {
-        // C++ Reference: shared/packets.h:201 — CASHCHANGE = 0xA9
         assert_eq!(EXT_SUB_CASHCHANGE, 0xA9);
     }
 
@@ -717,7 +670,6 @@ mod tests {
 
     #[test]
     fn test_give_balance_math_both() {
-        // C++ Reference: GiveBalance(cashcount, tlcount)
         let kc: i64 = 300;
         let tl: i64 = 25;
         let delta_kc: i32 = 500;

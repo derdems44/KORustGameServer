@@ -1,10 +1,7 @@
 //! Timed notice model — maps to the `timed_notice` PostgreSQL table.
-//!
-//! C++ Reference: `TIMED_NOTICE` MSSQL table — periodic server announcements
 //! broadcast to all players or a specific zone at configurable intervals.
 
 /// A timed notice row from the database.
-///
 /// Each row defines a periodic server announcement with a chat type,
 /// message text, target zone (0 = all zones), and interval in minutes.
 #[derive(Debug, Clone, sqlx::FromRow)]

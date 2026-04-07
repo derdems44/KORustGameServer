@@ -1,13 +1,8 @@
 //! WIZ_PARTY_BBS (0x4F) handler -- party bulletin board system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/PartyHandler.cpp` lines 829-1273
-//!
 //! An in-memory bulletin board where individual users can register as
 //! "seeking a party" and party leaders can post "wanted" notices looking
 //! for specific classes.
-//!
 //! ## Sub-opcodes
-//!
 //! | Code | Name              | Direction | Description                          |
 //! |------|-------------------|-----------|--------------------------------------|
 //! | 1    | REGISTER          | C->S      | Register user in seeking party list   |
@@ -17,9 +12,7 @@
 //! | 5    | CHANGE            | C->S      | Party leader updates wanted notice    |
 //! | 6    | PARTY_DELETE      | C->S      | Party leader removes wanted notice    |
 //! | 11   | LIST              | C->S      | Query available posts with filters    |
-//!
 //! ## Constants
-//!
 //! - `MAX_BBS_PAGE` = 22 entries per page
 //! - `MAX_BBS_MESSAGE` = 40 max message length
 
@@ -33,37 +26,23 @@ use crate::zone::SessionId;
 
 // ── Sub-opcode constants ────────────────────────────────────────────────────
 
-/// C++ Reference: PartyHandler.cpp -- sub-opcode for individual register.
 const PARTY_BBS_REGISTER: u8 = 1;
-/// C++ Reference: PartyHandler.cpp -- sub-opcode for individual delete.
 const PARTY_BBS_DELETE: u8 = 2;
-/// C++ Reference: PartyHandler.cpp -- sub-opcode for party leader wanted.
 const PARTY_BBS_WANTED: u8 = 4;
-/// C++ Reference: PartyHandler.cpp -- sub-opcode for party leader change.
 const PARTY_BBS_PARTY_CHANGE: u8 = 5;
-/// C++ Reference: PartyHandler.cpp -- sub-opcode for party leader delete.
 const PARTY_BBS_PARTY_DELETE: u8 = 6;
-/// C++ Reference: PartyHandler.cpp -- sub-opcode for list query.
 const PARTY_BBS_LIST: u8 = 11;
 
 /// Type byte for seeking party packets.
-///
-/// C++ Reference: `PARTY_TYPE_SEEKING` in `PartyHandler.cpp:901`
 const PARTY_TYPE_SEEKING: u8 = 0;
 
 /// Maximum message length for seeking notes.
-///
-/// C++ Reference: `Define.h:39` -- `#define MAX_BBS_MESSAGE 40`
 const MAX_BBS_MESSAGE: usize = 40;
 
 /// Maximum users for overflow page check.
-///
-/// C++ Reference: `PartyHandler.cpp:1080` -- `MAX_USER`
 const MAX_USER: u16 = 3000;
 
 /// Handle WIZ_PARTY_BBS (0x4F) from the client.
-///
-/// C++ Reference: `CUser::PartyBBS` in `PartyHandler.cpp:829-864`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -111,9 +90,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle PARTY_BBS_REGISTER (1) -- individual user registers as seeking party.
-///
-/// C++ Reference: `CUser::PartyBBSRegister` in `PartyHandler.cpp:959-1038`
-///
 /// Packet: `[SByte] [message:string]`
 async fn handle_register(
     session: &mut ClientSession,
@@ -170,9 +146,6 @@ async fn handle_register(
 }
 
 /// Handle PARTY_BBS_DELETE (2) -- individual user removes themselves from list.
-///
-/// C++ Reference: `CUser::PartyBBSDelete` in `PartyHandler.cpp:1040-1061`
-///
 /// Packet: (no payload)
 async fn handle_delete(
     session: &mut ClientSession,
@@ -193,9 +166,6 @@ async fn handle_delete(
 }
 
 /// Handle PARTY_BBS_WANTED (4) -- party leader posts wanted notice.
-///
-/// C++ Reference: `CUser::PartyBBSWanted` in `PartyHandler.cpp:1144-1231`
-///
 /// Packet: `[DByte] [wanted_class:u16] [page_index:u16] [message:string]`
 async fn handle_wanted(
     session: &mut ClientSession,
@@ -260,9 +230,6 @@ async fn handle_wanted(
 }
 
 /// Handle PARTY_BBS_PARTY_CHANGE (5) -- party leader updates wanted notice.
-///
-/// C++ Reference: `CUser::PartyBBSPartyChange` in `PartyHandler.cpp:891-957`
-///
 /// Packet: `[DByte] [wanted_class:u16] [page_index:u16] [message:string]`
 fn handle_change(
     session: &mut ClientSession,
@@ -324,9 +291,6 @@ fn handle_change(
 }
 
 /// Handle PARTY_BBS_PARTY_DELETE (6) -- party leader removes wanted notice.
-///
-/// C++ Reference: `CUser::PartyBBSPartyDelete` in `PartyHandler.cpp:866-889`
-///
 /// Packet: (no payload)
 async fn handle_party_delete(
     session: &mut ClientSession,
@@ -363,9 +327,6 @@ async fn handle_party_delete(
 }
 
 /// Handle PARTY_BBS_LIST (11) -- query the seeking party list.
-///
-/// C++ Reference: `CUser::SendPartyBBSNeeded` in `PartyHandler.cpp:1071-1143`
-///
 /// Packet: `[page:u16] [type_filter:u8] [location_filter:u8] [level_filter:u8]`
 fn handle_list(
     session: &mut ClientSession,
@@ -399,9 +360,6 @@ fn handle_list(
 }
 
 /// Build and send the party BBS list response packet.
-///
-/// C++ Reference: `CUser::SendPartyBBSNeeded` in `PartyHandler.cpp:1071-1143`
-///
 /// Response format:
 /// ```text
 /// [WIZ_PARTY_BBS] [type=0] [sub=11] [status=1] [page:u16] [count:u16]
@@ -494,7 +452,6 @@ fn send_party_bbs_list(
     }
 
     // Fill remaining empty slots with zero padding (10 bytes each)
-    // C++ Reference: PartyHandler.cpp:1134-1135
     for _ in bbs_count as usize..MAX_BBS_PAGE {
         result.write_u16(0);
         result.write_u16(0);
@@ -507,7 +464,6 @@ fn send_party_bbs_list(
     }
 
     // Calculate total pages
-    // C++ Reference: PartyHandler.cpp:1138-1139
     let mut total_pages = total_filtered / MAX_BBS_PAGE;
     if !total_filtered.is_multiple_of(MAX_BBS_PAGE) {
         total_pages += 1;
@@ -517,7 +473,6 @@ fn send_party_bbs_list(
     result.write_u16(total_pages as u16);
 
     // Patch the count at the placeholder offset
-    // C++ Reference: PartyHandler.cpp:1141 -- result.put(5, BBS_Counter)
     result.put_u16_at(count_offset, bbs_count);
 
     world.send_to_session_owned(sid, result);
@@ -559,9 +514,6 @@ fn count_filtered_entries(
 }
 
 /// Check if a level matches the given level filter bracket.
-///
-/// C++ Reference: `PartyHandler.cpp:1104-1112`
-///
 /// Level brackets:
 /// - 0: all levels
 /// - 1: 1-10
@@ -590,9 +542,6 @@ fn matches_level_filter(filter: u8, level: i16) -> bool {
 }
 
 /// Broadcast a WIZ_STATE_CHANGE to the 3x3 region grid around a player.
-///
-/// C++ Reference: `CUser::StateChangeServerDirect` in `User.cpp:2934-3007`
-///
 /// Used to announce party-seeking status changes:
 /// - `(2, 1)` = not looking
 /// - `(2, 2)` = seeking a party (individual)
@@ -635,10 +584,7 @@ fn truncate_message(msg: &str) -> String {
 }
 
 /// Remove a player from the seeking party list on logout.
-///
 /// Called from the disconnect cleanup path.
-///
-/// C++ Reference: `CUser::PartyBBSUserLoqOut` in `PartyHandler.cpp:1233-1256`
 pub fn cleanup_on_disconnect(world: &WorldState, sid: SessionId) {
     world.remove_seeking_party(sid);
 }

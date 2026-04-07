@@ -1,7 +1,4 @@
 //! Per-client Login Server session with packet framing and encryption.
-//!
-//! C++ Reference: `KOOriginalGameServer/LoginServer/LoginSession.cpp`
-//!
 //! Simpler than the Game Server `ClientSession` — handles only the
 //! launcher authentication flow (version, crypto, login, server list, news).
 

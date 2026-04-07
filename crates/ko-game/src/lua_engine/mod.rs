@@ -1,13 +1,8 @@
 //! Lua quest scripting engine for Knight Online.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/LuaEngine.cpp`
-//!
 //! The quest system executes Lua 5.1 scripts stored in `./Quests/` to drive
 //! NPC dialog, item rewards, zone changes, and other quest logic. Each script
 //! is loaded once and cached as compiled bytecode for fast re-execution.
-//!
 //! ## Architecture
-//!
 //! - A fresh `mlua::Lua` VM is created **per execution** for thread safety.
 //! - Binding functions are registered as Lua globals; they look up the player
 //!   via the `UID` global and delegate to `WorldState` methods.
@@ -27,21 +22,15 @@ use crate::world::WorldState;
 use crate::zone::SessionId;
 
 /// Lua quest script directory (relative to the server binary working directory).
-///
-/// C++ Reference: `LuaEngine.h:5` — `#define LUA_SCRIPT_DIRECTORY "./Quests/"`
 const LUA_SCRIPT_DIRECTORY: &str = "./Quests/";
 
 /// Lua quest scripting engine.
-///
 /// Manages script bytecode caching and per-execution VM creation.
-///
-/// C++ Reference: `CLuaEngine` in `LuaEngine.h`
 pub struct LuaEngine {
     /// Directory containing `.lua` quest scripts.
     script_dir: PathBuf,
     /// Bytecode cache: filename -> compiled bytecode (Vec<u8>).
     ///
-    /// C++ Reference: `CLuaEngine::m_scriptMap` (ScriptBytecodeMap)
     script_cache: DashMap<String, Vec<u8>>,
 }
 
@@ -93,9 +82,6 @@ impl LuaEngine {
 
     /// Execute a Lua quest script.
     ///
-    /// C++ Reference: `CLuaEngine::ExecuteScript(CUser*, CNpc*, int32 nEventID,
-    ///                 int8 bSelectedReward, const char* filename)`
-    ///
     /// # Arguments
     ///
     /// * `world` - Shared world state for binding function lookups.
@@ -140,7 +126,6 @@ impl LuaEngine {
         }
 
         // Set globals matching C++ behavior
-        // C++ Reference: LuaEngine.cpp:397-399
         if let Err(e) = Self::set_globals(&lua, session_id, event_id, selected_reward) {
             warn!("Failed to set Lua globals for script '{}': {}", filename, e);
             return false;
@@ -177,7 +162,6 @@ impl LuaEngine {
 
     /// Set the Lua globals `UID`, `STEP`, `EVENT` before script execution.
     ///
-    /// C++ Reference: `LuaEngine.cpp:397-399`
     fn set_globals(
         lua: &Lua,
         session_id: SessionId,
@@ -193,7 +177,6 @@ impl LuaEngine {
 
     /// Get compiled bytecode from cache, or compile and cache the script.
     ///
-    /// C++ Reference: `CLuaEngine::ExecuteScript` cache lookup + `CompileScript`
     fn get_or_compile(&self, filename: &str, full_path: &std::path::Path) -> Option<Vec<u8>> {
         // Check cache first
         if let Some(cached) = self.script_cache.get(filename) {

@@ -1,9 +1,6 @@
 //! Item production (crafting loot generation) system.
-//!
 //! Port of `CNpc::ItemProdution()`, `CNpc::GetItemGrade()`,
-//! `CNpc::GetWeaponItemCodeNumber()`, and `CNpc::GetItemCodeNumber()`
-//! from `KOOriginalGameServer/GameServer/Npc.cpp`.
-//!
+//! from .
 //! These functions generate random item IDs for NPC loot drops based on
 //! the MAKE_ITEM, MAKE_ITEM_GRADECODE, MAKE_ITEM_LARECODE, MAKE_WEAPON,
 //! and MAKE_DEFENSIVE tables.
@@ -11,20 +8,17 @@
 use crate::world::WorldState;
 use rand::Rng;
 
-/// Maximum upgrade weapon classes (C++ `MAX_UPGRADE_WEAPON = 12`).
+/// Maximum upgrade weapon classes
 const MAX_UPGRADE_WEAPON: usize = 12;
 
-/// C++ `COMPARE(x, min, max)` => `x >= min && x < max`.
 #[inline]
 fn compare(x: i32, min: i32, max: i32) -> bool {
     x >= min && x < max
 }
 
 /// Port of `CNpc::GetItemGrade()`.
-///
 /// Rolls a random grade (1..9) using weighted probabilities from the
 /// `make_item_gradecode` table.
-///
 /// Returns 0 if the grade code is not found or no grade matched.
 pub fn get_item_grade(world: &WorldState, item_grade: i16) -> i32 {
     let grade_data = match world.get_make_grade_code(item_grade) {
@@ -71,10 +65,8 @@ pub fn get_item_grade(world: &WorldState, item_grade: i16) -> i32 {
 }
 
 /// Port of `CNpc::GetWeaponItemCodeNumber()`.
-///
 /// Rolls a random weapon/defensive class (1..12) using weighted probabilities
 /// from the `make_weapon` or `make_defensive` table.
-///
 /// Returns 0 if the table entry is not found or no class matched.
 pub fn get_weapon_item_code_number(world: &WorldState, npc_level: i32, is_weapon: bool) -> i32 {
     let by_level = (npc_level / 10) as i16;
@@ -144,11 +136,9 @@ fn roll_weapon_class(classes: &[i16; MAX_UPGRADE_WEAPON]) -> i32 {
 }
 
 /// Port of `CNpc::GetItemCodeNumber()`.
-///
 /// Rolls a random item code number based on rarity (rare/magic/general)
 /// using the `make_item_larecode` table, then generates a sub-code
 /// depending on the item_type (1=weapon, 2=defensive, 3=accessory).
-///
 /// Returns -1 on error (no lare code data found).
 pub fn get_item_code_number(world: &WorldState, level: i32, item_type: i32) -> i32 {
     let lare_data = match world.get_make_lare_code(level as i16) {
@@ -215,15 +205,12 @@ pub fn get_item_code_number(world: &WorldState, level: i32, item_type: i32) -> i
 }
 
 /// Port of `CNpc::ItemProdution()`.
-///
 /// Generates a random item ID for NPC loot drops.
 /// Uses the MAKE_ITEM_GRADECODE, MAKE_WEAPON, MAKE_DEFENSIVE,
 /// and MAKE_ITEM_LARECODE tables.
-///
 /// `item_number` is the grade code index from the monster's drop table.
 /// `npc_level` is the NPC's level.
 /// `max_damaged_nation` is the nation of the player who dealt the most damage (1=Karus, 2=Elmorad).
-///
 /// Returns 0 if generation fails.
 pub fn item_production(
     world: &WorldState,

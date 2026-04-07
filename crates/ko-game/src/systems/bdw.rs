@@ -1,26 +1,17 @@
 //! Border Defence War (BDW) system — event-specific logic.
-//!
-//! C++ Reference: `JuraidBdwFragSystem.cpp`, `EventMainSystem.cpp` (BDW sections)
-//!
 //! BDW is a PvP room-based event where Karus and El Morad teams fight in zone 84.
 //! Each room holds up to 8 players per nation (16 total).
-//!
 //! ## Scoring
-//!
 //! - Kill an enemy player: `+1 * nation_user_count` to scoreboard, +1 bdw_points to killer
 //! - Deliver altar flag: `+10 * nation_user_count` to scoreboard, +10 bdw_points to all same-nation
 //! - Score >= dynamic threshold → that nation wins early
-//!
-//! ## Altar System (C++ Reference: `JuraidBdwFragSystem.cpp`)
-//!
+//! ## Altar System ()
 //! 1. Altar NPC (ALTAR_OF_MANES = 9840) spawns in BDW zone 84
 //! 2. When killed, the killer picks up the flag (`has_altar_obtained = true`)
 //! 3. Carrier walks to their nation's base area (coordinate check)
 //! 4. On delivery: scoreboard += 10 * nation_count, +10 bdw_points to all same-nation
 //! 5. Altar respawns after 60 seconds
-//!
-//! ## Win Condition (C++ Reference: `JuraidBdwFragSystem.cpp:398-402`)
-//!
+//! ## Win Condition ()
 //! Dynamic threshold based on total players in room:
 //! - total >= 16 → 600, >= 10 → 400, >= 5 → 300, else → 130
 
@@ -36,42 +27,28 @@ pub use crate::world::types::ZONE_BDW;
 pub const DEFAULT_BDW_ROOMS: u8 = 10;
 
 /// Per-kill score multiplier (base points per kill, multiplied by nation_count).
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:387-389` — `score += 1 * nation_count`
 pub const KILL_POINTS: i32 = 1;
 
 /// Per-altar-delivery score multiplier (base points, multiplied by nation_count).
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:253-256` — `score += 10 * nation_count`
 pub const ALTAR_DELIVERY_POINTS: i32 = 10;
 
 /// Per-user BDW points awarded to ALL same-nation users on altar delivery.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:308,331` — `m_BorderDefenceWarUserPoint += 10`
 pub const ALTAR_DELIVERY_USER_POINTS: u32 = 10;
 
 /// NPC proto ID for the BDW altar.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:4` — `#define ALTAR_OF_MANES 9840`
 pub const ALTAR_OF_MANES: u16 = 9840;
 
 pub use crate::npc_type_constants::NPC_BORDER_MONUMENT;
 
 /// Altar respawn delay in seconds after delivery or carrier logout.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:76,158` — `UNIXTIME + 60`
 pub const ALTAR_RESPAWN_DELAY_SECS: u64 = 60;
 
 /// Buff skill applied to the altar flag carrier.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:361` — `nSkillID = 492063`
 pub const BUFF_FRAGMENT_OF_MANES_SKILL: u32 = 492063;
 
 pub use crate::buff_constants::BUFF_TYPE_FRAGMENT_OF_MANES;
 
 /// Speed modifier applied by the Fragment of Manes buff.
-///
-/// C++ Reference: `MagicType4Row::bSpeed` for skill 492063.
 /// `m_bSpeedAmount = pType->bSpeed` — 50 means 50% movement speed.
 /// Default (no buff) is 100. The exact DB value may differ; 50 is a safe
 /// reference default matching common KO server setups.
@@ -80,16 +57,12 @@ pub const FRAGMENT_SPEED_VALUE: i32 = 50;
 // ── Delivery Zone Coordinates ────────────────────────────────────────────
 
 /// Karus base delivery zone bounds.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:60`
 pub const KARUS_BASE_X_MIN: f32 = 28.0;
 pub const KARUS_BASE_X_MAX: f32 = 35.0;
 pub const KARUS_BASE_Z_MIN: f32 = 128.0;
 pub const KARUS_BASE_Z_MAX: f32 = 135.0;
 
 /// El Morad base delivery zone bounds.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:62`
 pub const ELMORAD_BASE_X_MIN: f32 = 220.0;
 pub const ELMORAD_BASE_X_MAX: f32 = 227.0;
 pub const ELMORAD_BASE_Z_MIN: f32 = 127.0;
@@ -98,31 +71,23 @@ pub const ELMORAD_BASE_Z_MAX: f32 = 135.0;
 // ── BDW Room Extended State ─────────────────────────────────────────────────
 
 /// Extended BDW room state beyond the generic `EventRoom`.
-///
 /// Tracks altar respawn timing and monument counts for BDW-specific mechanics.
-///
-/// C++ Reference: `_BDW_ROOM_INFO` in `GameDefine.h:3654-3710`
 #[derive(Debug, Clone)]
 pub struct BdwRoomState {
     /// NPC ID of the altar in this room (0 = not yet spawned).
     ///
-    /// C++ Reference: `pAltar`
     pub altar_npc_id: u32,
     /// Whether altar respawn is pending (waiting for timer expiry).
     ///
-    /// C++ Reference: `m_tAltarSpawn`
     pub altar_respawn_pending: bool,
     /// Unix timestamp when altar should respawn (0 = not set).
     ///
-    /// C++ Reference: `m_tAltarSpawnTimed`
     pub altar_respawn_time: u64,
     /// Number of altar deliveries by Karus.
     ///
-    /// C++ Reference: `m_iKarusMonuCount`
     pub karus_monument_count: u32,
     /// Number of altar deliveries by El Morad.
     ///
-    /// C++ Reference: `m_iElmoMonuCount`
     pub elmorad_monument_count: u32,
 }
 
@@ -140,7 +105,6 @@ impl BdwRoomState {
 
     /// Reset the BDW room state.
     ///
-    /// C++ Reference: `_BDW_ROOM_INFO::Initialize(bool reset)` — preserves pAltar on reset.
     pub fn reset(&mut self) {
         let altar = self.altar_npc_id;
         *self = Self::new();
@@ -157,7 +121,6 @@ impl Default for BdwRoomState {
 // ── BDW Manager ─────────────────────────────────────────────────────────────
 
 /// BDW event manager — coordinates BDW-specific logic.
-///
 /// Stored alongside `EventRoomManager` in WorldState.
 /// Provides BDW-specific operations that build on the generic room system.
 #[derive(Debug)]
@@ -219,12 +182,8 @@ impl Default for BdwManager {
 // ── Room Assignment ─────────────────────────────────────────────────────────
 
 /// Assign signed-up users to BDW rooms.
-///
 /// Distributes priests evenly first, then fills remaining slots with other classes.
 /// This ensures each room has healer coverage.
-///
-/// C++ Reference: `TempleEventManageRoom()` BDW section in `EventMainSystem.cpp:33-156`
-///
 /// Returns the number of users assigned to rooms.
 pub fn assign_users_to_rooms(erm: &EventRoomManager, _bdw: &mut BdwManager) -> usize {
     let users = erm.signed_up_users.read().clone();
@@ -308,10 +267,8 @@ pub fn assign_users_to_rooms(erm: &EventRoomManager, _bdw: &mut BdwManager) -> u
 // ── Scoring ─────────────────────────────────────────────────────────────────
 
 /// Record a kill in a BDW room (simple version for unit tests).
-///
 /// The actual kill scoring with nation_count multiplier is in `dead.rs:track_bdw_player_kill`.
 /// This helper adds basic KILL_POINTS for tests that don't need the full scoring pipeline.
-///
 /// Returns the updated (karus_score, elmorad_score).
 pub fn record_kill(room: &mut EventRoom, killer_nation: u8) -> (i32, i32) {
     match killer_nation {
@@ -325,8 +282,6 @@ pub fn record_kill(room: &mut EventRoom, killer_nation: u8) -> (i32, i32) {
 // ── Win Condition ───────────────────────────────────────────────────────────
 
 /// Compute the win threshold based on total players in the room.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:398-402`
 /// ```text
 /// if (t_count >= 16) TotalPoint = 600;
 /// else if (t_count >= 10) TotalPoint = 400;
@@ -346,10 +301,7 @@ pub fn compute_win_threshold(total_players: usize) -> i32 {
 }
 
 /// Check win condition and set winner_nation if threshold exceeded.
-///
 /// Returns `Some(winner_nation)` if a winner was found, `None` otherwise.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:396-409`
 pub fn check_win_condition(room: &mut EventRoom) -> Option<u8> {
     if room.winner_nation != 0 {
         return None; // already decided
@@ -375,10 +327,7 @@ pub fn check_win_condition(room: &mut EventRoom) -> Option<u8> {
 }
 
 /// Determine the winner of a BDW room by final score comparison.
-///
 /// Higher score wins. On tie, returns 0 (draw).
-///
-/// C++ Reference: `TempleEventSendWinnerScreen()` BDW section
 pub fn determine_winner(room: &EventRoom) -> u8 {
     if room.karus_score > room.elmorad_score {
         1 // Karus
@@ -390,7 +339,6 @@ pub fn determine_winner(room: &EventRoom) -> u8 {
 }
 
 /// Determine winners for all BDW rooms and set their winner_nation field.
-///
 /// Returns a list of (room_id, winner_nation) pairs.
 pub fn determine_all_winners(erm: &EventRoomManager) -> Vec<(u8, u8)> {
     let room_ids = erm.list_rooms(TempleEventType::BorderDefenceWar);
@@ -414,8 +362,6 @@ pub fn determine_all_winners(erm: &EventRoomManager) -> Vec<(u8, u8)> {
 // ── Altar Delivery ──────────────────────────────────────────────────────────
 
 /// Check if a player is in their nation's altar delivery zone.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:60-63`
 /// - Karus base: X=[28-35], Z=[128-135]
 /// - El Morad base: X=[220-227], Z=[127-135]
 pub fn is_in_delivery_zone(nation: u8, x: f32, z: f32) -> bool {
@@ -433,12 +379,7 @@ pub fn is_in_delivery_zone(nation: u8, x: f32, z: f32) -> bool {
 }
 
 /// Process an altar delivery: update scoreboard, monument count, and per-user points.
-///
 /// Called when a flag carrier enters their nation's base zone.
-///
-/// C++ Reference: `CUser::BDWAltarScreenAndPlayerPointChange()` in
-/// `JuraidBdwFragSystem.cpp:239-340`
-///
 /// Returns `(new_karus_score, new_elmorad_score, winner_nation_if_finished)`.
 pub fn altar_delivery_score_change(
     room: &mut EventRoom,
@@ -457,7 +398,6 @@ pub fn altar_delivery_score_change(
         .count() as i32;
     let k_count = room.karus_users.values().filter(|u| !u.logged_out).count() as i32;
 
-    // C++ Reference: JuraidBdwFragSystem.cpp:253-256
     // Score += 10 * nation_user_count for the delivering nation
     if delivering_nation == 2 && e_count > 0 {
         room.elmorad_score += ALTAR_DELIVERY_POINTS * e_count;
@@ -466,7 +406,6 @@ pub fn altar_delivery_score_change(
     }
 
     // Increment monument count
-    // C++ Reference: JuraidBdwFragSystem.cpp:259
     if delivering_nation == 2 {
         bdw_state.elmorad_monument_count += 1;
     } else {
@@ -474,7 +413,6 @@ pub fn altar_delivery_score_change(
     }
 
     // Award +10 bdw_points to ALL same-nation users
-    // C++ Reference: JuraidBdwFragSystem.cpp:307-309, 330-332
     if delivering_nation == 1 {
         for u in room.karus_users.values_mut() {
             if !u.logged_out {
@@ -492,7 +430,6 @@ pub fn altar_delivery_score_change(
     // Check win condition
     let winner = check_win_condition(room);
 
-    // C++ Reference: JuraidBdwFragSystem.cpp:276-280
     // On win: set finish state and clear altar respawn timer.
     if winner.is_some() {
         room.finish_packet_sent = true;
@@ -505,18 +442,12 @@ pub fn altar_delivery_score_change(
 }
 
 /// Set up altar respawn timer after delivery or carrier logout.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp:76-77` — `m_tAltarSpawnTimed = UNIXTIME + 60`
 pub fn start_altar_respawn_timer(bdw_state: &mut BdwRoomState, now: u64) {
     bdw_state.altar_respawn_time = now + ALTAR_RESPAWN_DELAY_SECS;
     bdw_state.altar_respawn_pending = true;
 }
 
 /// Check if the altar respawn timer has expired for a room.
-///
-/// C++ Reference: `CGameServerDlg::BDWMonumentAltarTimer()` in
-/// `JuraidBdwFragSystem.cpp:7-23`
-///
 /// Returns true if the altar should be respawned now.
 pub fn altar_timer_tick(bdw_state: &BdwRoomState, now: u64) -> bool {
     if !bdw_state.altar_respawn_pending {
@@ -529,19 +460,12 @@ pub fn altar_timer_tick(bdw_state: &BdwRoomState, now: u64) -> bool {
 }
 
 /// Complete altar respawn: clear the respawn timer.
-///
-/// C++ Reference: `CGameServerDlg::BDWMonumentAltarRespawn()` in
-/// `JuraidBdwFragSystem.cpp:27-50`
 pub fn altar_respawn_complete(bdw_state: &mut BdwRoomState) {
     bdw_state.altar_respawn_pending = false;
     bdw_state.altar_respawn_time = 0;
 }
 
 /// Handle flag carrier logout: clear flag and start respawn timer.
-///
-/// C++ Reference: `CUser::BDWUserHasObtainedLoqOut()` in
-/// `JuraidBdwFragSystem.cpp:148-194`
-///
 /// Returns true if the carrier had the flag (timer was started).
 pub fn flag_carrier_logout(
     room: &mut EventRoom,
@@ -575,10 +499,6 @@ pub fn flag_carrier_logout(
 }
 
 /// Mark a user as the flag carrier after they killed the altar NPC.
-///
-/// C++ Reference: `CNpc::BDWMonumentAltarSystem(CUser *pUser)` in
-/// `JuraidBdwFragSystem.cpp:343-369`
-///
 /// Returns the carrier's nation (1 or 2), or 0 if user not found.
 pub fn flag_pickup(room: &mut EventRoom, user_name: &str) -> u8 {
     if let Some(u) = room.karus_users.get_mut(user_name) {
@@ -593,7 +513,6 @@ pub fn flag_pickup(room: &mut EventRoom, user_name: &str) -> u8 {
 }
 
 /// Find the current flag carrier in a room.
-///
 /// Returns `Some((user_name, session_id, nation))` if someone has the flag.
 pub fn find_flag_carrier(room: &EventRoom) -> Option<(String, u16, u8)> {
     for u in room.karus_users.values() {

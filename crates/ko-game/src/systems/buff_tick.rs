@@ -1,15 +1,9 @@
 //! Buff duration expiry tick system.
-//!
-//! C++ Reference: `UserDurationSkillSystem.cpp` — `CUser::Type4Duration()`
-//!
 //! Runs every 1 second, checking all sessions for expired buffs.
 //! When a buff expires, it is removed from the session and a
 //! `MAGIC_DURATION_EXPIRED` packet is broadcast to the 3×3 region.
-//!
 //! ## MAGIC_DURATION_EXPIRED packet (S→C)
-//!
 //! Opcode: `WIZ_MAGIC_PROCESS` (0x31), sub-opcode 5
-//!
 //! ```text
 //! [u8 MAGIC_DURATION_EXPIRED(5)] [u8 buff_type]
 //! ```
@@ -33,7 +27,6 @@ use crate::magic_constants::{ABNORMAL_CHAOS_NORMAL, ABNORMAL_NORMAL};
 use crate::state_change_constants::STATE_CHANGE_ABNORMAL;
 
 /// Start the buff expiry background task.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
 pub fn start_buff_tick_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -124,8 +117,6 @@ fn process_buff_tick(world: &WorldState) {
 }
 
 /// Check for expired blink (respawn invulnerability) on all sessions.
-///
-/// C++ Reference: `User.cpp:4078-4090` — `CUser::BlinkTimeCheck()`
 /// When `UNIXTIME >= m_tBlinkExpiryTime`, clear blink and broadcast
 /// `StateChangeServerDirect(3, ABNORMAL_NORMAL)`.
 /// Process blink expiry from pre-collected results (single-pass variant).
@@ -133,7 +124,6 @@ fn process_blink_expiry_from_results(world: &WorldState, expired: &[(SessionId, 
     for &(sid, zone_id) in expired {
         world.clear_blink(sid);
 
-        // C++ Reference: User.cpp:4085-4087
         //   if (GetZoneID() == ZONE_CHAOS_DUNGEON || GetZoneID() == ZONE_DUNGEON_DEFENCE)
         //       StateChangeServerDirect(3, ABNORMAL_CHAOS_NORMAL);
         //   else StateChangeServerDirect(3, ABNORMAL_NORMAL);
@@ -164,10 +154,7 @@ fn process_blink_expiry_from_results(world: &WorldState, expired: &[(SessionId, 
 }
 
 /// Build a WIZ_STATE_CHANGE broadcast for blink expiry with configurable abnormal type.
-///
 /// Format: `[u32 socket_id] [u8 bType=3] [u32 abnormal_type]`
-///
-/// C++ Reference: `User.cpp:4085-4087` — uses ABNORMAL_CHAOS_NORMAL (7) for chaos/dungeon
 /// zones, ABNORMAL_NORMAL (1) elsewhere.
 fn build_blink_expired_packet_with_type(sid: u32, abnormal_type: u32) -> Packet {
     let mut pkt = Packet::new(Opcode::WizStateChange as u8);
@@ -178,8 +165,6 @@ fn build_blink_expired_packet_with_type(sid: u32, abnormal_type: u32) -> Packet 
 }
 
 /// Build a WIZ_STATE_CHANGE with bType=12 (secondary state reset).
-///
-/// C++ Reference: `MagicProcess.cpp:1431` — `StateChangeServerDirect(12, 0)`
 fn build_blink_expired_packet_with_type12(sid: u32, value: u32) -> Packet {
     let mut pkt = Packet::new(Opcode::WizStateChange as u8);
     pkt.write_u32(sid);
@@ -189,16 +174,12 @@ fn build_blink_expired_packet_with_type12(sid: u32, value: u32) -> Packet {
 }
 
 /// Build a WIZ_STATE_CHANGE broadcast for blink expiry (default: ABNORMAL_NORMAL).
-///
-/// C++ Reference: `User.cpp:4087` — `StateChangeServerDirect(3, ABNORMAL_NORMAL)`
 #[cfg(test)]
 fn build_blink_expired_packet(sid: u32) -> Packet {
     build_blink_expired_packet_with_type(sid, ABNORMAL_NORMAL)
 }
 
 /// Build a `MAGIC_DURATION_EXPIRED` packet for a specific buff type.
-///
-/// C++ Reference: `MagicInstance.cpp:4656-4658`
 /// ```text
 /// Packet result(WIZ_MAGIC_PROCESS, uint8(MAGIC_DURATION_EXPIRED));
 /// result << uint8(BUFF_TYPE);
@@ -215,15 +196,11 @@ use crate::buff_constants::*;
 use crate::magic_constants::{USER_STATUS_CURE, USER_STATUS_POISON, USER_STATUS_SPEED};
 
 /// Perform buff-type-specific cleanup when a buff expires.
-///
-/// C++ Reference: `MagicProcess.cpp` — `RemoveType4Buff()` lines 1031-1572
-///
 /// Each buff type resets specific session fields and broadcasts visual state
 /// changes to the client. This must run **before** `SetUserAbility()` so that
 /// cleared fields are reflected in the stat recalculation.
 pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is_buff: bool) {
     match buff_type {
-        // C++ Reference: MagicProcess.cpp:1251-1261
         // FREEZE: clear block state, restore skills, clear invisibility,
         // broadcast ABNORMAL_NORMAL (or transform skill if transformed)
         BUFF_TYPE_FREEZE => {
@@ -249,7 +226,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
                     sender_event_room,
                 );
 
-                // C++ Reference: MagicProcess.cpp:1260 — if transformed, also
                 // broadcast StateChangeServerDirect(3, m_sTransformSkillID)
                 if let Some(skill_id) = transform_skill_id {
                     let transform_pkt = build_blink_expired_packet_with_type(sid as u32, skill_id);
@@ -265,14 +241,12 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             }
         }
 
-        // C++ Reference: MagicProcess.cpp:1120-1121 + 1530-1534
         // SPEED/SPEED2: send USER_STATUS_SPEED cure only if this was a debuff
         // (pSkill.bMoral >= MORAL_ENEMY)
         BUFF_TYPE_SPEED | BUFF_TYPE_SPEED2 if !is_buff => {
             send_user_status_update_packet(world, sid, USER_STATUS_SPEED, USER_STATUS_CURE);
         }
 
-        // C++ Reference: MagicProcess.cpp:1390-1392 + 1535-1538
         // STUN: send USER_STATUS_POISON cure only if this was a debuff AND
         // the target has no other remaining debuffs (!pTarget->isDebuffed())
         BUFF_TYPE_STUN if !is_buff => {
@@ -286,7 +260,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             }
         }
 
-        // C++ Reference: MagicProcess.cpp:1091-1098
         // SIZE: clear size_effect and broadcast ABNORMAL_NORMAL (or transform skill if transformed)
         BUFF_TYPE_SIZE => {
             world.update_session(sid, |h| {
@@ -317,7 +290,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             }
         }
 
-        // C++ Reference: MagicProcess.cpp:1277-1278
         // MAGE_ARMOR: clear reflect armor type
         BUFF_TYPE_MAGE_ARMOR => {
             world.update_session(sid, |h| {
@@ -325,7 +297,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1379-1383
         // MIRROR_DAMAGE_PARTY (Minak's Thorn): clear mirror damage state
         BUFF_TYPE_MIRROR_DAMAGE_PARTY => {
             world.update_session(sid, |h| {
@@ -335,7 +306,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1385-1388
         // DAGGER_BOW_DEFENSE (Eskrima): reset dagger/bow defense amounts to 100
         BUFF_TYPE_DAGGER_BOW_DEFENSE => {
             world.update_session(sid, |h| {
@@ -344,7 +314,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1403-1409
         // REDUCE_TARGET: broadcast ABNORMAL_NORMAL
         BUFF_TYPE_REDUCE_TARGET => {
             if let Some((pos, sender_event_room)) = world.with_session(sid, |h| (h.position, h.event_room)) {
@@ -360,7 +329,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             }
         }
 
-        // C++ Reference: MagicProcess.cpp:1437-1439
         // SILENCE_TARGET: restore skill casting ability
         BUFF_TYPE_SILENCE_TARGET => {
             world.update_session(sid, |h| {
@@ -368,7 +336,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1442-1444
         // NO_POTIONS: restore potion consumption ability
         BUFF_TYPE_NO_POTIONS => {
             world.update_session(sid, |h| {
@@ -376,7 +343,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1422-1431
         // KAUL_TRANSFORMATION: clear is_kaul, broadcast old abnormal type
         BUFF_TYPE_KAUL_TRANSFORMATION => {
             let old_abnormal = world
@@ -384,7 +350,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
                 .unwrap_or(ABNORMAL_NORMAL);
             world.update_session(sid, |h| {
                 h.is_kaul = false;
-                // C++ Reference: Unit.h:280 — canUseSkills() restored when Kaul expires
                 h.can_use_skills = true;
             });
 
@@ -412,7 +377,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             }
         }
 
-        // C++ Reference: MagicProcess.cpp:1432-1436
         // UNDEAD: clear is_undead flag (stat cleanup via SetUserAbility)
         BUFF_TYPE_UNDEAD => {
             world.update_session(sid, |h| {
@@ -420,7 +384,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1238-1248
         // DISABLE_TARGETING / BLIND / UNSIGHT: clear is_blinded flag
         BUFF_TYPE_DISABLE_TARGETING | BUFF_TYPE_BLIND | BUFF_TYPE_UNSIGHT => {
             world.update_session(sid, |h| {
@@ -432,7 +395,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             }
         }
 
-        // C++ Reference: MagicProcess.cpp:1441-1443
         // BLOCK_PHYSICAL_DAMAGE: clear block_physical flag
         BUFF_TYPE_BLOCK_PHYSICAL_DAMAGE => {
             world.update_session(sid, |h| {
@@ -440,7 +402,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1445-1447
         // BLOCK_MAGICAL_DAMAGE: clear block_magic flag
         BUFF_TYPE_BLOCK_MAGICAL_DAMAGE => {
             world.update_session(sid, |h| {
@@ -448,7 +409,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1497-1501
         // DEVIL_TRANSFORM: clear is_devil, broadcast StateChange(12, 0)
         BUFF_TYPE_DEVIL_TRANSFORM => {
             world.update_session(sid, |h| {
@@ -467,7 +427,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             }
         }
 
-        // C++ Reference: MagicProcess.cpp:1399-1401
         // NO_RECALL: restore teleport ability
         BUFF_TYPE_NO_RECALL => {
             world.update_session(sid, |h| {
@@ -475,7 +434,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1281-1283
         // PROHIBIT_INVIS: restore stealth ability
         BUFF_TYPE_PROHIBIT_INVIS => {
             world.update_session(sid, |h| {
@@ -483,17 +441,14 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1285-1289
         // RESIS_AND_MAGIC_DMG: reset magic damage reduction to 100 (no reduction)
         BUFF_TYPE_RESIS_AND_MAGIC_DMG => {
             world.update_session(sid, |h| {
                 h.magic_damage_reduction = 100;
             });
-            // C++ Reference: MagicProcess.cpp:1288 — send cure status
             send_user_status_update_packet(world, sid, USER_STATUS_POISON, USER_STATUS_CURE);
         }
 
-        // C++ Reference: MagicProcess.cpp:1304-1306
         // BLOCK_CURSE: clear curse block
         BUFF_TYPE_BLOCK_CURSE => {
             world.update_session(sid, |h| {
@@ -501,7 +456,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1308-1310
         // BLOCK_CURSE_REFLECT: clear curse reflect
         BUFF_TYPE_BLOCK_CURSE_REFLECT => {
             world.update_session(sid, |h| {
@@ -509,7 +463,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1264-1266
         // INSTANT_MAGIC: clear instant cast
         BUFF_TYPE_INSTANT_MAGIC => {
             world.update_session(sid, |h| {
@@ -517,7 +470,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1470-1478
         // NP_DROP_NOAH: reset scroll bonus (only one NP_DROP_NOAH can be active at a time)
         BUFF_TYPE_NP_DROP_NOAH => {
             world.update_session(sid, |h| {
@@ -525,7 +477,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1480-1482
         // SNOWMAN_TITI: broadcast old abnormal type to restore visual
         BUFF_TYPE_SNOWMAN_TITI => {
             let old_abnormal = world
@@ -544,7 +495,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             }
         }
 
-        // C++ Reference: MagicProcess.cpp:1312-1315
         // MANA_ABSORB: decrement mana absorb pct, reset absorb count
         BUFF_TYPE_MANA_ABSORB => {
             world.update_session(sid, |h| {
@@ -553,7 +503,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1317-1334
         // IGNORE_WEAPON: clear weapons_disabled flag and restore weapon visuals
         BUFF_TYPE_IGNORE_WEAPON => {
             world.update_session(sid, |h| {
@@ -606,7 +555,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             }
         }
 
-        // C++ Reference: MagicProcess.cpp:1268-1275
         // DECREASE_RESIST: reset all pct resistance multipliers to 100
         BUFF_TYPE_DECREASE_RESIST => {
             world.update_session(sid, |h| {
@@ -619,7 +567,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1154-1157
         // EXPERIENCE: reset EXP gain buff11 amount (only one type-11 buff active at a time)
         BUFF_TYPE_EXPERIENCE => {
             world.update_session(sid, |h| {
@@ -627,7 +574,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1336-1357
         // VARIOUS_EFFECTS: reset EXP buff33 and NP bonus from this buff type
         BUFF_TYPE_VARIOUS_EFFECTS => {
             world.update_session(sid, |h| {
@@ -636,7 +582,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1394-1397
         // LOYALTY_AMOUNT: reset NP bonus from this buff type
         BUFF_TYPE_LOYALTY_AMOUNT => {
             world.update_session(sid, |h| {
@@ -644,7 +589,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1162-1165
         // WEIGHT: reset carry weight multiplier to default (100)
         BUFF_TYPE_WEIGHT => {
             world.update_session(sid, |h| {
@@ -652,7 +596,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1189-1192
         // LOYALTY: reset NP gain multiplier to default (100)
         BUFF_TYPE_LOYALTY => {
             world.update_session(sid, |h| {
@@ -660,7 +603,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1194-1197
         // NOAH_BONUS: reset gold gain multiplier to default (100)
         BUFF_TYPE_NOAH_BONUS => {
             world.update_session(sid, |h| {
@@ -668,7 +610,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1199-1202
         // PREMIUM_MERCHANT: reset premium merchant flag
         BUFF_TYPE_PREMIUM_MERCHANT => {
             world.update_session(sid, |h| {
@@ -676,7 +617,6 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
             });
         }
 
-        // C++ Reference: MagicProcess.cpp:1087-1088, 1356
         // JACKPOT: clear m_jackpotype
         BUFF_TYPE_JACKPOT => {
             world.update_session(sid, |h| {
@@ -690,10 +630,7 @@ pub(crate) fn buff_type_cleanup(world: &WorldState, sid: u16, buff_type: i32, is
 
 /// Build and send a `SendUserStatusUpdate` packet to a single session,
 /// then broadcast `PARTY_STATUSCHANGE` to party members.
-///
-/// C++ Reference: `User.cpp:4370-4393` — `CUser::SendUserStatusUpdate()`
 /// Format: `WIZ_ZONEABILITY [u8 sub=2] [u8 status_type] [u8 status_behaviour]`
-///
 /// C++ also calls `SendPartyStatusUpdate()` (`PartyHandler.cpp:1275-1282`)
 /// which sends `WIZ_PARTY [u8 0x09] [u32 socketID] [u8 status] [u8 result]`
 /// to all party members.
@@ -709,7 +646,6 @@ pub(crate) fn send_user_status_update_packet(
     pkt.write_u8(status_behaviour);
     world.send_to_session_owned(sid, pkt);
 
-    // C++ Reference: PartyHandler.cpp:1275-1282 — SendPartyStatusUpdate()
     if let Some(party_id) = world.get_party_id(sid) {
         let mut party_pkt = Packet::new(Opcode::WizParty as u8);
         party_pkt.write_u8(crate::handler::party::PARTY_STATUSCHANGE);
@@ -723,24 +659,19 @@ pub(crate) fn send_user_status_update_packet(
 use crate::magic_constants::MAGIC_CANCEL_TRANSFORMATION;
 
 /// Check for expired transformations (Type6Duration) on all sessions.
-///
 /// Process transformation expiry from pre-collected results (single-pass variant).
-///
-/// C++ Reference: `MagicProcess.cpp:468-477` — `CUser::Type6Duration()`
 fn process_transformation_expiry_from_results(
     world: &WorldState,
     expired: &[(SessionId, u32, u16)],
 ) {
     for &(sid, _skill_id, _zone_id) in expired {
         // 1. Send MAGIC_CANCEL_TRANSFORMATION to the caster
-        // C++ Reference: MagicInstance.cpp:6774
         //   Packet result(WIZ_MAGIC_PROCESS, uint8(MAGIC_CANCEL_TRANSFORMATION));
         let mut cancel_pkt = Packet::new(Opcode::WizMagicProcess as u8);
         cancel_pkt.write_u8(MAGIC_CANCEL_TRANSFORMATION);
         world.send_to_session_owned(sid, cancel_pkt);
 
         // 2. Broadcast StateChangeServerDirect(3, ABNORMAL_NORMAL)
-        // C++ Reference: MagicInstance.cpp:6782
         let mut state_pkt = Packet::new(Opcode::WizStateChange as u8);
         state_pkt.write_u32(sid as u32);
         state_pkt.write_u8(STATE_CHANGE_ABNORMAL);
@@ -760,7 +691,6 @@ fn process_transformation_expiry_from_results(
         world.clear_transformation(sid);
 
         // 4. Recalculate stats after transformation ends
-        // C++ Reference: MagicInstance.cpp:6780 — `pUser->SetUserAbility()`
         world.set_user_ability(sid);
 
         // 5. Remove from saved magic
@@ -775,8 +705,6 @@ fn process_transformation_expiry_from_results(
 }
 
 /// Re-enable skills after blink expires while still transformed.
-///
-/// C++ Reference: `User.cpp:994-995`
 /// ```text
 /// if (!isBlinking() && isTransformed() && m_bCanUseSkills == false)
 ///     m_bCanUseSkills = true;
@@ -820,7 +748,6 @@ mod tests {
 
     #[test]
     fn test_blink_expired_packet_format() {
-        // C++ Reference: User.cpp:4087 — StateChangeServerDirect(3, ABNORMAL_NORMAL)
         let pkt = build_blink_expired_packet(42);
         assert_eq!(pkt.opcode, Opcode::WizStateChange as u8);
         assert_eq!(pkt.data.len(), 9); // u32 + u8 + u32
@@ -853,7 +780,6 @@ mod tests {
 
     #[test]
     fn test_abnormal_chaos_normal_constant() {
-        // C++ Reference: GameDefine.h:1402
         assert_eq!(ABNORMAL_CHAOS_NORMAL, 7);
     }
 
@@ -865,7 +791,6 @@ mod tests {
 
     #[test]
     fn test_blink_expired_chaos_dungeon_packet() {
-        // C++ Reference: User.cpp:4085-4086
         // In chaos dungeon, blink expiry broadcasts ABNORMAL_CHAOS_NORMAL (7)
         let pkt = build_blink_expired_packet_with_type(42, ABNORMAL_CHAOS_NORMAL);
         assert_eq!(pkt.opcode, Opcode::WizStateChange as u8);
@@ -915,13 +840,11 @@ mod tests {
 
     #[test]
     fn test_magic_cancel_transformation_constant() {
-        // C++ Reference: packets.h — MAGIC_CANCEL_TRANSFORMATION = 7
         assert_eq!(MAGIC_CANCEL_TRANSFORMATION, 7);
     }
 
     #[test]
     fn test_transformation_cancel_packet_format() {
-        // C++ Reference: MagicInstance.cpp:6774
         //   Packet result(WIZ_MAGIC_PROCESS, uint8(MAGIC_CANCEL_TRANSFORMATION));
         let mut pkt = Packet::new(Opcode::WizMagicProcess as u8);
         pkt.write_u8(MAGIC_CANCEL_TRANSFORMATION);
@@ -937,7 +860,6 @@ mod tests {
     #[test]
     fn test_transformation_expiry_state_change_packet() {
         // After transformation expires, broadcast StateChangeServerDirect(3, ABNORMAL_NORMAL)
-        // C++ Reference: MagicInstance.cpp:6782
         let sid: u32 = 42;
         let mut pkt = Packet::new(Opcode::WizStateChange as u8);
         pkt.write_u32(sid);
@@ -956,7 +878,6 @@ mod tests {
 
     #[test]
     fn test_transformation_duration_check_logic() {
-        // C++ Reference: MagicProcess.cpp:470
         //   if (!isTransformed() || (UNIXTIME2 - m_tTransformationStartTime) < m_sTransformationDuration)
         //       return; // not expired yet
 
@@ -976,7 +897,6 @@ mod tests {
 
     #[test]
     fn test_transformation_duration_milliseconds_conversion() {
-        // C++ Reference: MagicInstance.cpp:5186
         //   m_sTransformationDuration = ULONGLONG(sDuration) * 1000;
         let duration_secs: u16 = 120;
         let duration_ms = duration_secs as u64 * 1000;
@@ -1001,7 +921,6 @@ mod tests {
     fn test_transformation_cancel_calls_set_user_ability() {
         // Verify the process_transformation_expiry function structure:
         // After clear_transformation(), set_user_ability() is called.
-        // C++ Reference: MagicInstance.cpp:6780 — `pUser->SetUserAbility()`
         //
         // This is a structural test confirming the call ordering.
         // The actual SetUserAbility computation is tested in inventory.rs.
@@ -1376,7 +1295,6 @@ mod tests {
 
     #[test]
     fn test_buff_type_cleanup_constants() {
-        // C++ Reference: GameDefine.h:4255-4298 — BuffType enum values
         assert_eq!(BUFF_TYPE_SIZE, 3);
         assert_eq!(BUFF_TYPE_SPEED, 6);
         assert_eq!(BUFF_TYPE_FREEZE, 22);
@@ -1388,7 +1306,6 @@ mod tests {
 
     #[test]
     fn test_user_status_constants() {
-        // C++ Reference: Define.h:553-556
         assert_eq!(USER_STATUS_CURE, 0);
         assert_eq!(USER_STATUS_POISON, 2);
         assert_eq!(USER_STATUS_SPEED, 3);
@@ -1396,7 +1313,6 @@ mod tests {
 
     #[test]
     fn test_user_status_update_packet_format() {
-        // C++ Reference: User.cpp:4370-4393
         // Format: WIZ_ZONEABILITY [u8 2] [u8 status_type] [u8 status_behaviour]
         let mut pkt = Packet::new(Opcode::WizZoneability as u8);
         pkt.write_u8(2);
@@ -1529,7 +1445,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_speed_friendly_buff_no_cure() {
-        // C++ Reference: MagicProcess.cpp:1530 — only send cure if bMoral >= MORAL_ENEMY
         // Friendly speed buffs (is_buff=true) should NOT send cure packets on expiry.
         let world = setup_world();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -1573,7 +1488,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_stun_debuff_with_remaining_debuff_no_cure() {
-        // C++ Reference: MagicProcess.cpp:1535 — !pTarget->isDebuffed()
         // If another debuff is still active, STUN expiry should NOT send cure.
         let world = setup_world();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();

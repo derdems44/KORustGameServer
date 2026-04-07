@@ -1,9 +1,5 @@
 //! WIZ_ATTACK (0x08) handler -- physical melee attack.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/AttackHandler.cpp:32-256`
-//!
 //! ## Client Request (C->S)
-//!
 //! | Type  | Description                        |
 //! |-------|------------------------------------|
 //! | u8    | bType (attack sub-type)            |
@@ -13,9 +9,7 @@
 //! | i16le | distance (to target)               |
 //! | u8    | unknown                            |
 //! | u8    | unknowns                           |
-//!
 //! ## Server Broadcast (S->C, to 3x3 region)
-//!
 //! | Type  | Description                        |
 //! |-------|------------------------------------|
 //! | u8    | bType (attack sub-type)            |
@@ -23,9 +17,7 @@
 //! | u32le | attacker session ID                |
 //! | u32le | target ID                          |
 //! | u8    | unknown (echoed from client)       |
-//!
 //! ## Attack Result Constants
-//!
 //! - `ATTACK_FAIL` (0): attack missed or blocked
 //! - `ATTACK_SUCCESS` (1): attack landed, target still alive
 //! - `ATTACK_TARGET_DEAD` (2): attack killed the target
@@ -73,43 +65,29 @@ use crate::buff_constants::{BUFF_TYPE_BLIND, BUFF_TYPE_FREEZE, BUFF_TYPE_KAUL_TR
 // ── Melee constants ─────────────────────────────────────────────────────────
 
 /// Minimum melee attack delay (empty-handed or mage).
-///
-/// C++ Reference: `AttackHandler.cpp:91` -- `delaytime < 100`
 const MIN_MELEE_DELAY: i16 = 100;
 
 /// Server-side rate limit between R-attacks (milliseconds).
-///
-/// C++ Reference: `User.h:33` -- `#define PLAYER_R_HIT_REQUEST_INTERVAL 900`
 const PLAYER_R_HIT_REQUEST_INTERVAL: u64 = 900;
 
 /// Maximum attack range for melee (in game units).
-///
 /// When no weapon is equipped, use a generous melee range to
 /// avoid rejecting legitimate attacks.
 const DEFAULT_MELEE_RANGE: f32 = 15.0;
 
 /// GM weapon item ID — bypasses delay checks.
-///
-/// C++ Reference: `AttackHandler.cpp:63`
 const GM_WEAPON_ID: u32 = 389158000;
 
 /// Minimum weapon power for bare-hand attacks.
-///
-/// C++ Reference: `UserAbilityHandler.cpp:122` -- `if (totalpower < 3) totalpower = 3`
 const MIN_WEAPON_POWER: u16 = 3;
 
 /// Default attack amount multiplier (no buffs).
-///
-/// C++ Reference: `Unit.cpp:63` -- `m_bAttackAmount = 100`
 #[cfg(test)]
 const DEFAULT_ATTACK_AMOUNT: u16 = 100;
 
 // ── Class group helpers ─────────────────────────────────────────────────────
 
 /// Get the "base class type" from a full class ID.
-///
-/// C++ Reference: `globals.h:479` -- `GetBaseClass() { return GetClass() % 100; }`
-///
 /// The class % 100 gives: 1=Warrior, 2=Rogue, 3=Mage, 4=Priest,
 /// 5=WarriorNovice, 6=WarriorMaster, 7=RogueNovice, 8=RogueMaster,
 /// 9=MageNovice, 10=MageMaster, 11=PriestNovice, 12=PriestMaster,
@@ -119,36 +97,26 @@ fn base_class(class: u16) -> u16 {
 }
 
 /// Check if class belongs to the Warrior group (1, 5, 6).
-///
-/// C++ Reference: `globals.h:491`
 fn is_warrior(class: u16) -> bool {
     matches!(base_class(class), 1 | 5 | 6)
 }
 
 /// Check if class belongs to the Rogue group (2, 7, 8).
-///
-/// C++ Reference: `globals.h:493`
 fn is_rogue(class: u16) -> bool {
     matches!(base_class(class), 2 | 7 | 8)
 }
 
 /// Check if class belongs to the Mage group (3, 9, 10).
-///
-/// C++ Reference: `globals.h:494`
 fn is_mage(class: u16) -> bool {
     matches!(base_class(class), 3 | 9 | 10)
 }
 
 /// Check if class belongs to the Priest group (4, 11, 12).
-///
-/// C++ Reference: `globals.h:495`
 fn is_priest(class: u16) -> bool {
     matches!(base_class(class), 4 | 11 | 12)
 }
 
 /// Map a class to its class group index (0-based) for AP/AC class bonus arrays.
-///
-/// C++ Reference: `CUser::GetBaseClass()` in `UserSkillStatPointSystem.cpp:1232-1258`
 /// Returns GROUP_WARRIOR(1)-1=0, GROUP_ROGUE(2)-1=1, GROUP_MAGE(3)-1=2, GROUP_CLERIC(4)-1=3.
 /// Returns `None` for Kurian or unknown classes (no class bonus slot).
 pub(crate) fn class_group_index(class: u16) -> Option<usize> {
@@ -169,15 +137,11 @@ use crate::inventory_constants::{
 };
 
 /// Check if item is a Timing Delay weapon.
-///
-/// C++ Reference: `_ITEM_TABLE::isTimingDelay()` in `GameDefine.h:1628-1633`
 fn is_timing_delay(item_num: u32) -> bool {
     item_num == 900335523 || item_num == 900336524 || item_num == 900337525
 }
 
 /// Check if item is a Wirinim Unique Delay weapon.
-///
-/// C++ Reference: `_ITEM_TABLE::isWirinomUniqDelay()` in `GameDefine.h:1635-1644`
 fn is_wirinom_uniq_delay(item_num: u32) -> bool {
     (127410731..=127410740).contains(&item_num)
         || (127420741..=127420750).contains(&item_num)
@@ -190,8 +154,6 @@ fn is_wirinom_uniq_delay(item_num: u32) -> bool {
 }
 
 /// Check if item is a Wirinim Rebirth Delay weapon.
-///
-/// C++ Reference: `_ITEM_TABLE::isWirinomRebDelay()` in `GameDefine.h:1647-1653`
 fn is_wirinom_reb_delay(item_num: u32) -> bool {
     (127411181..=127411210).contains(&item_num)
         || (127421211..=127421240).contains(&item_num)
@@ -200,22 +162,16 @@ fn is_wirinom_reb_delay(item_num: u32) -> bool {
 }
 
 /// Check if item is a Garges Sword Delay weapon.
-///
-/// C++ Reference: `_ITEM_TABLE::isGargesSwordDelay()` in `GameDefine.h:1661-1665`
 fn is_garges_sword_delay(item_num: u32) -> bool {
     (1110582731..=1110582740).contains(&item_num) || item_num == 1110582451
 }
 
 /// Check if a weapon kind is a bow or crossbow.
-///
-/// C++ Reference: `_ITEM_TABLE::isBow()` in `GameDefine.h:1615`
 fn is_bow_weapon(kind: i32) -> bool {
     kind == WEAPON_KIND_BOW || kind == WEAPON_KIND_CROSSBOW
 }
 
 /// Get the weapon range in game units for server-side distance validation.
-///
-/// C++ Reference: `User.cpp:4277-4291` — reads right-hand weapon range,
 /// falls back to left-hand. Returns `pTable.m_sRange / 10.0`.
 fn get_weapon_range(world: &WorldState, sid: SessionId) -> f32 {
     // Single session lock for both weapon slot item IDs (2 DashMap reads → 1)
@@ -255,16 +211,12 @@ fn get_weapon_range(world: &WorldState, sid: SessionId) -> f32 {
 }
 
 /// Check if the player is in an enemy safety area (no-PvP zone).
-///
-/// C++ Reference: `Unit::isInEnemySafetyArea()` in `Unit.cpp:3304-3357`
-///
 /// Safety areas are nation-specific spawn/village areas where the ENEMY
 /// cannot attack. Each zone defines circular or rectangular safe regions.
-///
 /// "Enemy safety area" means: the area is safe for my enemies — I cannot attack here.
 /// E.g., an Elmorad player near Elmorad village cannot attack Karus players there.
 pub(crate) fn is_in_enemy_safety_area(zone_id: u16, x: f32, z: f32, nation: u8) -> bool {
-    /// Circular distance check (squared) — matches C++ `isInRangeSlow(x, z, range)`.
+    /// Circular distance check (squared) — matches `isInRangeSlow(x, z, range)`.
     fn in_range(px: f32, pz: f32, cx: f32, cz: f32, radius: f32) -> bool {
         let dx = px - cx;
         let dz = pz - cz;
@@ -331,13 +283,9 @@ pub(crate) fn is_in_enemy_safety_area(zone_id: u16, x: f32, z: f32, nation: u8) 
 }
 
 /// Check if the player is in their own safety area (protected from enemy attack).
-///
-/// C++ Reference: `Unit::isInOwnSafetyArea()` in `Unit.cpp:3364-3417`
-///
 /// "Own safety area" means: this area is safe for ME — enemies cannot attack me here.
 /// Uses the same coordinates as `isInEnemySafetyArea` but with INVERTED nation logic.
 /// E.g., a Karus player near Elmorad village is in their own safety area.
-///
 /// Used in `MagicProcess.cpp:384` for `MORAL_AREA_ALL` skill target validation
 /// and in `is_hostile_to()` for target protection check.
 pub(crate) fn is_in_own_safety_area(zone_id: u16, x: f32, z: f32, nation: u8) -> bool {
@@ -411,13 +359,9 @@ pub(crate) fn is_in_own_safety_area(zone_id: u16, x: f32, z: f32, nation: u8) ->
 }
 
 /// Apply weapon-type-specific armor resistance to PvP damage.
-///
-/// C++ Reference: `Unit::GetACDamage()` in `Unit.cpp:1817-1896`
-///
 /// Each equipped weapon is checked against the target's weapon-type resistances
 /// (accumulated from armor). The formula per weapon:
 ///   `damage -= damage * target_resistance / 250`
-///
 /// For daggers and bows, an additional amount modifier is applied:
 ///   `damage -= damage * (resistance * amount / 100) / 250`
 /// where `dagger_r_amount`/`bow_r_amount` default to 100 and are reduced
@@ -437,7 +381,6 @@ pub(crate) fn get_ac_damage(
         };
 
         let resistance = if kind == WEAPON_KIND_DAGGER {
-            // C++ Reference: Unit.cpp:1846 — `m_sDaggerR * m_byDaggerRAmount / 100`
             target_stats.dagger_r as i32 * dagger_r_amount as i32 / 100
         } else if kind == WEAPON_KIND_1H_SWORD || kind == WEAPON_KIND_2H_SWORD {
             target_stats.sword_r as i32
@@ -448,7 +391,6 @@ pub(crate) fn get_ac_damage(
         } else if kind == WEAPON_KIND_1H_SPEAR || kind == WEAPON_KIND_2H_SPEAR {
             target_stats.spear_r as i32
         } else if kind == WEAPON_KIND_BOW || kind == WEAPON_KIND_CROSSBOW {
-            // C++ Reference: Unit.cpp:1856 — `m_sBowR * m_byBowRAmount / 100`
             target_stats.bow_r as i32 * bow_r_amount as i32 / 100
         } else if kind == WEAPON_KIND_JAMADAR {
             target_stats.jamadar_r as i32
@@ -464,24 +406,18 @@ pub(crate) fn get_ac_damage(
 // ── Combat stat computations ────────────────────────────────────────────────
 
 /// Calculate total attack power (m_sTotalHit) for a character.
-///
-/// C++ Reference: `UserAbilityHandler.cpp:160-189` (SetUserAbility)
-///
 /// Formula (simplified for no equipment):
 /// - `power` = weapon damage, clamped min 3 (bare-hand)
 /// - `coeff` = weapon-type coefficient from class table (0 for bare-hand)
 /// - Rogue:   `(0.005 * power * (dex + 40)) + (coeff * power * level * dex) + 3`
 /// - Warrior: `(0.005 * power * (main_stat + 40)) + (coeff * power * level * main_stat) + 3 + base_ap`
 /// - Others:  Same as Warrior formula with STR as main stat.
-///
 /// `base_ap` = max(0, main_stat - 150) for stats > 150.
 fn compute_total_hit(ch: &CharacterInfo, _coeff: &CoefficientRow) -> u16 {
     let power = MIN_WEAPON_POWER as f32;
     // Weapon coefficient is 0.0 for bare-hand (no weapon equipped).
-    // C++ Reference: UserAbilityHandler.cpp:90 -- returns 0.0f when no weapon
     let weapon_coeff: f32 = 0.0;
     // No AP bonus buffs — default 100%.
-    // C++ Reference: UserAbilityHandler.cpp:161 -- BonusAp = (m_byAPBonusAmount + 100) / 100
     let bonus_ap: f32 = 1.0;
 
     let str_val = ch.str as f32;
@@ -489,7 +425,6 @@ fn compute_total_hit(ch: &CharacterInfo, _coeff: &CoefficientRow) -> u16 {
     let int_val = ch.intel as f32;
 
     // BaseAp: bonus for stats > 150
-    // C++ Reference: UserAbilityHandler.cpp:129-136
     let base_ap = if str_val > 150.0 {
         str_val - 150.0
     } else if int_val > 150.0 {
@@ -500,24 +435,20 @@ fn compute_total_hit(ch: &CharacterInfo, _coeff: &CoefficientRow) -> u16 {
 
     let level = ch.level as f32;
     let total_hit = if is_rogue(ch.class) {
-        // C++ Reference: UserAbilityHandler.cpp:169
         ((0.005 * power * (dex_val + 40.0)) + (weapon_coeff * power * level * dex_val) + 3.0)
             * bonus_ap
     } else if is_warrior(ch.class) {
-        // C++ Reference: UserAbilityHandler.cpp:179-186
         let main_stat = if str_val >= int_val { str_val } else { int_val };
         ((0.005 * power * (main_stat + 40.0)) + (weapon_coeff * power * level * main_stat) + 3.0)
             * bonus_ap
             + base_ap
     } else if is_priest(ch.class) {
-        // C++ Reference: UserAbilityHandler.cpp:170-177
         let main_stat = if str_val > int_val { str_val } else { int_val };
         ((0.005 * power * (main_stat + 40.0)) + (weapon_coeff * power * level * main_stat) + 3.0)
             * bonus_ap
             + base_ap
     } else {
         // Kurian / default: STR-based
-        // C++ Reference: UserAbilityHandler.cpp:188-189
         ((0.005 * power * (str_val + 40.0)) + (weapon_coeff * power * level * str_val) + 3.0)
             * bonus_ap
             + base_ap
@@ -527,21 +458,15 @@ fn compute_total_hit(ch: &CharacterInfo, _coeff: &CoefficientRow) -> u16 {
 }
 
 /// Calculate total armor class (m_sTotalAc) for a character.
-///
-/// C++ Reference: `UserAbilityHandler.cpp:199` -- `m_sTotalAc = AC * (level + item_ac)`
-///
 /// Without equipment, `item_ac = 0`, so: `AC_coeff * level`.
 fn compute_total_ac(ch: &CharacterInfo, coeff: &CoefficientRow) -> u16 {
     (coeff.ac * ch.level as f64).max(0.0) as u16
 }
 
 /// Calculate total hit rate for a character.
-///
-/// C++ Reference: `UserAbilityHandler.cpp:355`
 /// ```text
 /// m_fTotalHitrate = ((1 + Hitrate * level * dex) * item_hitrate / 100) * (hit_rate_amount / 100)
 /// ```
-///
 /// Without items: `item_hitrate = 100`, `hit_rate_amount = 100`.
 fn compute_hitrate(ch: &CharacterInfo, coeff: &CoefficientRow) -> f32 {
     // item_hitrate defaults to 100, hit_rate_amount defaults to 100
@@ -549,23 +474,16 @@ fn compute_hitrate(ch: &CharacterInfo, coeff: &CoefficientRow) -> f32 {
 }
 
 /// Calculate total evasion rate for a character.
-///
-/// C++ Reference: `UserAbilityHandler.cpp:356`
 /// ```text
 /// m_fTotalEvasionrate = ((1 + Evasionrate * level * dex) * item_evasion / 100) * (avoid_amount / 100)
 /// ```
-///
 /// Without items: `item_evasion = 100`, `avoid_amount = 100`.
 fn compute_evasion(ch: &CharacterInfo, coeff: &CoefficientRow) -> f32 {
     1.0 + coeff.evasionrate as f32 * ch.level as f32 * ch.dex as f32
 }
 
 /// Determine hit result using the C++ hit rate table.
-///
-/// C++ Reference: `Unit.cpp:1898-1984` -- `Unit::GetHitRate(float rate)`
-///
 /// Returns one of: GREAT_SUCCESS (1), SUCCESS (2), NORMAL (3), FAIL (4).
-///
 /// Each rate bracket has different probability distributions:
 /// - rate >= 5.0:  35% great, 40% success, 23% normal, 2% fail
 /// - rate < 0.2:   2% great, 8% success, 40% normal, 50% fail
@@ -664,11 +582,7 @@ fn get_hit_rate(rate: f32, rng: &mut impl Rng) -> u8 {
 }
 
 /// Calculate R-attack (normal melee) damage.
-///
-/// C++ Reference: `Unit.cpp:261-510` (CUser::GetDamage, R-attack branch)
-///
 /// ## Formula
-///
 /// 1. `temp_ap = total_hit * attack_amount` (attack_amount = 100 default)
 /// 2. `temp_ac = target.total_ac` (no buff/debuff adjustments yet)
 /// 3. `temp_hit_B = (temp_ap * 200 / 100) / (temp_ac + 240)`
@@ -700,9 +614,6 @@ fn calculate_r_damage(
 }
 
 /// Physical damage calculation with optional class bonus arrays for PvP.
-///
-/// C++ Reference: `CUser::GetDamage` in `Unit.cpp:261-510`
-///
 /// When `attacker_ap_class_bonus` and `target_ac_class_bonus` are provided,
 /// applies class-specific AP/AC bonuses using the target's base class as
 /// the array index (C++ active `#else` branch, Unit.cpp:320-322).
@@ -724,14 +635,11 @@ fn calculate_r_damage_with_class_bonus(
     // set_user_ability() (equipped weapon + buffs + stats). This is the
     // correct production path.  Fallback to compute_total_hit() only in
     // unit tests where no WorldState/inventory is available.
-    // C++ Reference: Unit.cpp:305 — uses m_sTotalHit from SetUserAbility()
     let total_hit =
         total_hit_override.unwrap_or_else(|| compute_total_hit(attacker, attacker_coeff));
 
-    // C++ Reference: Unit.cpp:305 -- temp_ap = m_sTotalHit * m_bAttackAmount
     let mut temp_ap = total_hit as i32 * attack_amount;
 
-    // C++ Reference: Unit.cpp:301 -- temp_ac = m_sTotalAc + m_sACAmount
     // When target_ac_override is Some, it provides EquippedStats.total_ac + buff_ac
     // (the full C++ m_sTotalAc + m_sACAmount). Without override, falls back to
     // coefficient-based AC (for tests without WorldState).
@@ -739,7 +647,6 @@ fn calculate_r_damage_with_class_bonus(
         target_ac_override.unwrap_or_else(|| compute_total_ac(target, target_coeff) as i32);
 
     // ── Apply class-specific AP/AC bonuses (PvP only) ───────────────────
-    // C++ Reference: Unit.cpp:320-322 (active #else branch)
     // Uses TARGET's base class to index both arrays.
     if let Some(idx) = class_group_index(target.class) {
         if let Some(ac_bonus) = target_ac_class_bonus {
@@ -750,7 +657,6 @@ fn calculate_r_damage_with_class_bonus(
         }
     }
 
-    // C++ Reference: Unit.cpp:358 -- temp_hit_B = (temp_ap * 200 / 100) / (temp_ac + 240)
     let temp_hit_b = if temp_ac + 240 > 0 {
         (temp_ap * 2) / (temp_ac + 240)
     } else {
@@ -765,7 +671,6 @@ fn calculate_r_damage_with_class_bonus(
     let attacker_hitrate = compute_hitrate(attacker, attacker_coeff);
     let target_evasion = compute_evasion(target, target_coeff);
 
-    // C++ Reference: Unit.cpp:436 -- R-attack: hitrate/evasion + 1.0
     let rate = if target_evasion > 0.0 {
         attacker_hitrate / target_evasion + 1.0
     } else {
@@ -777,7 +682,6 @@ fn calculate_r_damage_with_class_bonus(
     // ── Step 3: Damage calculation based on hit result ──────────────────
     match hit_result {
         GREAT_SUCCESS | SUCCESS | NORMAL => {
-            // C++ Reference: Unit.cpp:461-490 (Normal Hit branch)
             let random = if temp_hit_b > 0 {
                 rng.gen_range(0..=temp_hit_b)
             } else {
@@ -785,26 +689,20 @@ fn calculate_r_damage_with_class_bonus(
             };
 
             let damage = if is_priest(attacker.class) {
-                // C++ Reference: Unit.cpp:478
                 (0.15 * temp_hit_b as f32 + 0.2 * random as f32) as i32
             } else {
-                // C++ Reference: Unit.cpp:480
                 (0.75 * temp_hit_b as f32 + 0.3 * random as f32) as i32
             };
 
             damage.max(1) as i16
         }
         _ => {
-            // C++ Reference: Unit.cpp:493-507 -- R-attack FAIL = 0
             0
         }
     }
 }
 
 /// Apply zone-specific damage overrides.
-///
-/// C++ Reference: `AttackHandler.cpp:157-170`
-///
 /// - Snow Battle: R-attack damage = 0
 /// - Chaos Dungeon: fixed 50 (500/10)
 /// - Dungeon Defence: fixed 50 (500/10)
@@ -819,12 +717,9 @@ fn apply_zone_damage_override(zone_id: u16, damage: i16) -> i16 {
 // ── Main handler ────────────────────────────────────────────────────────────
 
 /// Handle WIZ_ATTACK (0x08) from the client.
-///
 /// Parses the attack packet, validates pre-conditions, calculates
-/// damage using the C++ reference formula, applies HP change, triggers
+/// damage using the reference formula, applies HP change, triggers
 /// death if needed, and broadcasts the result to the 3x3 region.
-///
-/// C++ Reference: `CUser::Attack` in `AttackHandler.cpp:32-256`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -834,7 +729,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let sid = session.session_id();
 
     // ── Parse client packet ────────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:37-41
     //   pkt >> bType >> bResult >> tid >> delaytime >> distance >> unknown >> unknowns;
     let mut reader = PacketReader::new(&pkt.data);
     let b_type = reader.read_u8().unwrap_or(0);
@@ -852,7 +746,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let tid = tid_signed as u32;
 
     // ── Pre-attack validation: attacker state ──────────────────────────
-    // C++ Reference: AttackHandler.cpp:43 -- sitting or incapacitated check
     let attacker = match world.get_character_info(sid) {
         Some(ch) => ch,
         None => return Ok(()),
@@ -864,14 +757,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Sitting players cannot attack
-    // C++ Reference: AttackHandler.cpp:43 -- m_bResHpType == USER_SITDOWN
     if attacker.res_hp_type == USER_SITDOWN {
         return Ok(());
     }
 
     // Incapacitated check: blinded, blinking, or kaul state
-    // C++ Reference: AttackHandler.cpp:43 — isIncapacitated()
-    // C++ Reference: Unit.h:278 — isDead() || isBlinded() || isBlinking() || isKaul()
     // (isDead already checked above)
     {
         let now_unix = std::time::SystemTime::now()
@@ -897,21 +787,17 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // GM attack ban check.
-    // C++ Reference: User.h:905 — isAttackDisabled()
     if world.is_attack_disabled(sid) {
         return Ok(());
     }
 
     // Cannot attack in enemy safety areas (villages, temples, arena spawn)
-    // C++ Reference: AttackHandler.cpp:43 — isInEnemySafetyArea()
-    // C++ Reference: Unit.cpp:3304-3357
     let pos = world.get_position(sid).unwrap_or_default();
     if is_in_enemy_safety_area(pos.zone_id, pos.x, pos.z, attacker.nation) {
         return Ok(());
     }
 
     // Special event zone (Zindan War) attack block
-    // C++ Reference: AttackHandler.cpp:46-55
     // Block R-attacks in SPBATTLE zones when the event is NOT opened
     // (unless Cinderella War is active in that zone)
     if is_in_special_event_zone(pos.zone_id)
@@ -922,7 +808,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Cinderella War pre-start attack block
-    // C++ Reference: AttackHandler.cpp:50-55
     // Block R-attacks in Cinderella zone when war is ON but NOT started
     if !world.is_zindan_event_opened()
         && world.is_cinderella_active()
@@ -938,16 +823,13 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let is_gm = attacker.authority == 0;
 
     // ── Remove stealth before attacking ──────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:57 — `RemoveStealth();`
     crate::handler::stealth::remove_stealth(&world, sid);
 
     // ── Weapon delay validation ─────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:59-92
     let right_weapon = world.get_right_hand_weapon(sid);
     let left_weapon = world.get_left_hand_weapon(sid);
 
     // GM weapon bypass: item 389158000 in either hand + GM authority
-    // C++ Reference: AttackHandler.cpp:63
     let nocheck = is_gm
         && (right_weapon
             .as_ref()
@@ -957,7 +839,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                 .is_some_and(|w| w.num as u32 == GM_WEAPON_ID));
 
     // Reject attacks with bows (handled by archery, not R-attack)
-    // C++ Reference: AttackHandler.cpp:65
     let right_is_bow = right_weapon
         .as_ref()
         .is_some_and(|w| is_bow_weapon(w.kind.unwrap_or(0)));
@@ -969,7 +850,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Server-side rate limit: 900ms between attacks
-    // C++ Reference: AttackHandler.cpp:67-68
     if !nocheck {
         let now = Instant::now();
         let can_attack = world
@@ -989,7 +869,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Weapon delay check: only for non-mage classes with a weapon
-    // C++ Reference: AttackHandler.cpp:71-92
     if !nocheck {
         let attacker_is_mage = is_mage(attacker.class);
         if let Some(ref weapon) = right_weapon {
@@ -1000,7 +879,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
                 if is_timing_delay(item_num) {
                     // Timing Delay weapons: +9ms tolerance
-                    // C++: delaytime < (pRightTable.m_sDelay + 9) || distance > pRightTable.m_sRange
                     if delaytime < (weapon_delay + 9) || distance > weapon_range {
                         tracing::debug!(
                             "[sid={}] Attack rejected: timing delay weapon check (delaytime={}, required={}, distance={}, range={})",
@@ -1013,7 +891,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                     || is_garges_sword_delay(item_num)
                 {
                     // Wirinim/Garges weapons: -4ms tolerance
-                    // C++: delaytime < (pRightTable.m_sDelay - 4) || distance > pRightTable.m_sRange
                     if delaytime < (weapon_delay - 4) || distance > weapon_range {
                         tracing::debug!(
                             "[sid={}] Attack rejected: special weapon delay check (delaytime={}, required={}, distance={}, range={})",
@@ -1023,7 +900,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                     }
                 } else {
                     // Normal weapon: exact delay
-                    // C++: delaytime < pRightTable.m_sDelay || distance > pRightTable.m_sRange
                     if delaytime < weapon_delay || distance > weapon_range {
                         tracing::debug!(
                             "[sid={}] Attack rejected: weapon delay check (delaytime={}, required={}, distance={}, range={})",
@@ -1035,7 +911,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
         } else if delaytime < MIN_MELEE_DELAY {
             // Empty-handed (no weapon): minimum 100ms
-            // C++ Reference: AttackHandler.cpp:91
             tracing::debug!(
                 "[sid={}] Attack rejected: empty-handed delaytime {} < {}",
                 sid,
@@ -1047,7 +922,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Target validation ──────────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:94-96 -- pTarget = g_pMain->GetUnitPtr(tid)
     let target_is_player = tid < crate::npc::NPC_BAND;
 
     if target_is_player {
@@ -1066,12 +940,9 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle a player-vs-player attack.
-///
 /// Validates target state, computes damage using the real C++ formula,
 /// applies HP change, triggers death if HP reaches 0, and broadcasts
 /// the result.
-///
-/// C++ Reference: `CUser::GetDamage` in `Unit.cpp:261-510`
 fn handle_player_attack(
     world: &WorldState,
     attacker_sid: SessionId,
@@ -1092,13 +963,11 @@ fn handle_player_attack(
         return;
     }
 
-    // C++ Reference: UserHealtMagicSpSystem.cpp:66-67 — GM immunity
     if target.authority == 0 {
         broadcast_attack_result(world, attacker_sid, b_type, ATTACK_FAIL, tid, unknown);
         return;
     }
 
-    // C++ Reference: Unit.cpp:2050-2051 — CanAttack() checks pTarget->isBlinking()
     // Blinking targets (respawn invulnerability) are immune to R-attacks.
     {
         let now_unix = std::time::SystemTime::now()
@@ -1110,13 +979,11 @@ fn handle_player_attack(
         }
     }
 
-    // C++ Reference: AttackHandler.cpp:145-146 — frozen targets immune to R-attack
     if world.has_buff(target_sid, BUFF_TYPE_FREEZE) {
         return;
     }
 
     // ── Distance check ─────────────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:128-131 -- isInAttackRange
     let target_pos = match world.get_position(target_sid) {
         Some(p) => p,
         None => return,
@@ -1128,7 +995,6 @@ fn handle_player_attack(
     }
 
     // 2D distance check (squared) -- C++ uses isInAttackRange
-    // C++ Reference: User.cpp:4274-4331 -- fRange = fBaseMeleeRange + fWeaponRange
     let weapon_range = get_weapon_range(world, attacker_sid);
     let attack_range = DEFAULT_MELEE_RANGE + weapon_range;
 
@@ -1149,7 +1015,6 @@ fn handle_player_attack(
     }
 
     // ── Temple event attack gate ────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:172-176
     //   if (isInTempleEventZone() && !virt_eventattack_check()) return;
     //   if (isInTempleEventZone() && (!isSameEventRoom(pTarget) || !pTempleEvent.isAttackable)) return;
     {
@@ -1193,7 +1058,6 @@ fn handle_player_attack(
     }
 
     // ── Monster Stone event room isolation ─────────────────────────────
-    // C++ Reference: AttackHandler.cpp:142 — isSameEventRoom check
     //   isInTempleQuestEventZone() && (!isSameEventRoom(pTarget) && m_sMonsterStoneStatus)
     // Players in Monster Stone zones with an active Monster Stone room must
     // be in the same event room to attack. The m_sMonsterStoneStatus guard
@@ -1209,7 +1073,6 @@ fn handle_player_attack(
     }
 
     // ── Kaul transformation block ─────────────────────────────────────
-    // C++ Reference: m_bIsKaul — Kaul players cannot attack
     if world
         .with_session(attacker_sid, |h| h.is_kaul)
         .unwrap_or(false)
@@ -1218,7 +1081,6 @@ fn handle_player_attack(
     }
 
     // ── PvP permission check (isHostileTo) ────────────────────────────
-    // C++ Reference: Unit.cpp:3009-3126 — "default deny" model
     // Only allows PvP in specific zones / conditions.
     let attacker = match world.get_character_info(attacker_sid) {
         Some(ch) => ch,
@@ -1287,13 +1149,11 @@ fn handle_player_attack(
     let target_stats = &target_snap.equipped_stats;
 
     // ── Block physical damage check ──────────────────────────────────
-    // C++ Reference: Unit.cpp:355-356 — `if (pTarget->m_bBlockPhysical) return 0;`
     if target_snap.block_physical {
         broadcast_attack_result(world, attacker_sid, b_type, ATTACK_SUCCESS, tid, unknown);
         return;
     }
 
-    // C++ Reference: Unit.cpp:301,960 — `Ac = (m_sTotalAc * m_sACPercent / 100 + m_sACAmount) - m_sACSourAmount`
     // AC% applied to base first, then flat buff AC added, then AC source reduction subtracted.
     let target_full_ac = ((target_stats.total_ac as i32) * target_snap.ac_pct / 100
         + target_snap.ac_amount
@@ -1314,12 +1174,10 @@ fn handle_player_attack(
     );
 
     // ── Apply buff-based PvP modifiers ──────────────────────────────
-    // C++ Reference: Unit.cpp:314 — `temp_ap = temp_ap * m_bPlayerAttackAmount / 100`
     if damage > 0 && attacker_snap.player_attack_amount != 100 {
         damage = (damage as i32 * attacker_snap.player_attack_amount / 100) as i16;
     }
 
-    // C++ Reference: Unit.cpp:745-746 — mage weapon quality multiplier
     if damage > 0 && is_mage(attacker.class) {
         damage = (damage as f64 * world.get_plus_damage_from_item_ids(
             attacker_snap.left_hand_item_id,
@@ -1328,13 +1186,11 @@ fn handle_player_attack(
     }
 
     // ── R-attack damage multiplier for level>30 non-priests ──────────
-    // C++ Reference: Unit.cpp:484-489 — `dm *= g_pMain->pDamageSetting.rdamage`
     if damage > 0 && attacker.level > 30 && !is_priest(attacker.class) {
         damage = (damage as f64 * world.get_r_damage_multiplier()) as i16;
     }
 
     // ── Elemental weapon damage bonuses (GetMagicDamage) ─────────────
-    // C++ Reference: Unit.cpp:513 — GetMagicDamage called BEFORE GetACDamage
     // Adds fire/ice/lightning/poison damage from attacker's weapons minus target resistance.
     if damage > 0 {
         damage = apply_elemental_weapon_damage_pvp(
@@ -1352,7 +1208,6 @@ fn handle_player_attack(
     }
 
     // ── Weapon-type armor resistance (GetACDamage) ──────────────────
-    // C++ Reference: Unit.cpp:516 — GetACDamage BEFORE class multiplier
     // Reduces damage based on target's weapon-type-specific armor resistances (PvP only).
     if damage > 0 {
         let right_kind = if attacker_snap.right_hand_item_id != 0 {
@@ -1375,13 +1230,11 @@ fn handle_player_attack(
     }
 
     // ── Class-vs-class PvP multiplier ─────────────────────────────────
-    // C++ Reference: Unit.cpp:521-608 — class matchup multiplier (AFTER AC reduction)
     if damage > 0 {
         let mult = world.get_class_damage_multiplier(attacker.class, target.class);
         damage = (damage as f64 * mult) as i16;
     }
 
-    // C++ Reference: Unit.cpp:726-743 — perk percentDamagePlayer bonus (PvP)
     if damage > 0 {
         let perk_dmg = world.compute_perk_bonus(&attacker_snap.perk_levels, 10, false);
         if perk_dmg > 0 {
@@ -1391,22 +1244,17 @@ fn handle_player_attack(
     }
 
     // ── Zone damage overrides ──────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:157-170
     damage = apply_zone_damage_override(attacker_pos.zone_id, damage);
 
     // ── MAX_DAMAGE cap ─────────────────────────────────────────────────
-    // C++ Reference: Define.h:30 — `#define MAX_DAMAGE 32000`
-    // C++ Reference: Unit.cpp:788-791 — clamp at end of GetDamage()
     damage = damage.min(crate::attack_constants::MAX_DAMAGE as i16);
 
     // ── Apply damage ───────────────────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:237-251
     if damage <= 0 {
         broadcast_attack_result(world, attacker_sid, b_type, ATTACK_FAIL, tid, unknown);
         return;
     }
 
-    // C++ Reference: UserHealtMagicSpSystem.cpp:43-135
     // C++ order: save originalAmount → mirror → mastery → mana absorb (uses originalAmount)
     // Save original damage BEFORE mirror/mastery for mana absorb calculation.
     let original_damage = damage;
@@ -1420,7 +1268,6 @@ fn handle_player_attack(
         .unwrap_or((0, 0));
 
     // ── Mirror damage victim reduction ──────────────────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:74-112 — mirror FIRST, uses full `amount`
     let (mirror_dmg, mirror_direct) = if !not_use_zone {
         let (active, direct, amount) = (
             target_snap.mirror_damage,
@@ -1445,7 +1292,6 @@ fn handle_player_attack(
     }
 
     // ── Mastery passive damage reduction ────────────────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:114-123
     // Matchless: SkillPointMaster >= 10 → 15% reduction
     // Absoluteness: SkillPointMaster >= 5 → 10% reduction
     if !not_use_zone && crate::handler::class_change::is_mastered(target.class) {
@@ -1460,7 +1306,6 @@ fn handle_player_attack(
     }
 
     // ── Mana Absorb (Outrage/Frenzy/Mana Shield) ─────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:125-135
     // C++ uses `originalAmount` (pre-mirror) for absorb calculation,
     // but subtracts absorbed from current `amount` (post-mirror).
     {
@@ -1496,15 +1341,12 @@ fn handle_player_attack(
     world.update_character_hp(target_sid, new_hp);
 
     // Send WIZ_HP_CHANGE to victim so their client updates their own HP bar
-    // C++ Reference: UserHealtMagicSpSystem.cpp:178-194
     let hp_pkt = build_hp_change_packet_with_attacker(target.max_hp, new_hp, attacker_sid as u32);
     world.send_to_session_owned(target_sid, hp_pkt);
 
-    // C++ Reference: UserHealtMagicSpSystem.cpp:196-200 — SendPartyHPUpdate on every HP change
     crate::handler::party::broadcast_party_hp(world, target_sid);
 
     // ── Mirror damage reflection (skill buff) ──────────────────────────
-    // C++ Reference: UserHealtMagicSpSystem.cpp:74-110
     // Mirror was pre-computed above; now reflect to attacker or party.
     if mirror_dmg > 0 {
         if mirror_direct {
@@ -1520,7 +1362,6 @@ fn handle_player_attack(
             world.send_to_session_owned(attacker_sid, atk_hp_pkt);
         } else if world.is_in_party(target_sid) {
             // Party distribution: spread mirror damage among attacker's party.
-            // C++ Reference: UserHealtMagicSpSystem.cpp:89-109
             if let Some(atk_party_id) = world.get_party_id(attacker_sid) {
                 if let Some(party) = world.get_party(atk_party_id) {
                     let members = party.active_members();
@@ -1557,7 +1398,6 @@ fn handle_player_attack(
     }
 
     // ── Equipment mirror damage (ITEM_TYPE_MIRROR_DAMAGE) ───────────
-    // C++ Reference: Unit.cpp:1674-1796 — GetAttackDamage() accumulates
     // mirror_damage from equipped items and reflects: damage * total / 300.
     // This is separate from the skill-based mirror (buff 44) above.
     {
@@ -1588,7 +1428,6 @@ fn handle_player_attack(
     }
 
     // ── Equipment durability loss ─────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:246-250
     // Every attack takes a little of the attacker's weapon durability.
     world.item_wore_out(attacker_sid, WORE_TYPE_ATTACK, damage as i32);
     // Every hit takes a little of the defender's armour durability.
@@ -1596,7 +1435,6 @@ fn handle_player_attack(
 
     let b_result = if new_hp <= 0 {
         // Target died -- broadcast death
-        // C++ Reference: AttackHandler.cpp:240-241
         dead::broadcast_death(world, target_sid);
 
         // FerihaLog: KillingUserInsertLog
@@ -1620,7 +1458,6 @@ fn handle_player_attack(
         }
 
         // ── War zone death tracking ──────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:622-643
         // Increment war death counters when a player dies in an active war zone.
         // The counter tracks the DEAD player's nation (more deaths = worse).
         if crate::systems::war::is_battle_zone(attacker_pos.zone_id) && world.is_war_open() {
@@ -1634,30 +1471,25 @@ fn handle_player_attack(
         }
 
         // ── Tournament kill scoring ─────────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:556-567
         // Increment the killer's clan scoreboard in tournament zones.
         if super::tournament::is_tournament_zone(attacker_pos.zone_id) {
             super::tournament::register_kill(world, attacker_pos.zone_id, attacker.knights_id);
         }
 
         // ── Zone kill reward ──────────────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:716-719
         // After a PvP kill in a PK zone, increment kill count and give rewards.
         if is_pk_zone(attacker_pos.zone_id) {
             give_kill_reward(world, attacker_sid, attacker_pos.zone_id);
         }
 
         // ── Track killer for resurrection EXP recovery ─────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:741
         dead::set_who_killed_me(world, target_sid, attacker_sid);
 
         // ── PvP loyalty (NP) change ──────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:726-728
         // If the zone grants loyalty, give NP to killer (or party) and deduct from victim.
         dead::pvp_loyalty_on_death(world, attacker_sid, target_sid);
 
         // ── Rivalry / Anger Gauge ────────────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:589-611 — OnDeathKilledUser
         // In Ardream / Ronark Land zones: increment victim's anger gauge, assign
         // killer as victim's rival (if none), and check for revenge kills.
         {
@@ -1672,7 +1504,6 @@ fn handle_player_attack(
                 attacker_pos.zone_id,
                 now_secs,
             );
-            // C++ Reference: UserHealtMagicSpSystem.cpp:601 — revenge kill grants RIVALRY_NP_BONUS (150 NP)
             if is_revenge {
                 crate::systems::loyalty::send_loyalty_change(
                     world,
@@ -1686,16 +1517,13 @@ fn handle_player_attack(
         }
 
         // ── PvP gold change ─────────────────────────────────────────────
-        // C++ Reference: UserGoldSystem.cpp:3-77 — victim loses 50%, killer gains 40%
         dead::gold_change_on_death(world, attacker_sid, target_sid);
 
         // ── PvP death notice ────────────────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:513-544
         // Broadcast kill notice to zone so all players see "[X] killed [Y]".
         dead::send_death_notice(world, attacker_sid, target_sid);
 
         // ── Zindan War score update ─────────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:712-713
         if is_in_special_event_zone(attacker_pos.zone_id) && world.is_zindan_event_opened() {
             let nation = attacker.nation;
             let new_count = {
@@ -1713,12 +1541,10 @@ fn handle_player_attack(
         }
 
         // ── Chaos dungeon item rob ──────────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:454-459
         // Strip chaos dungeon skill items on death (zone 85 only).
         dead::rob_chaos_skill_items(world, target_sid);
 
         // ── Temple event kill scoring ───────────────────────────────────
-        // C++ Reference: UserHealtMagicSpSystem.cpp:499-536
         // Per-zone kill scoring: BDW → BDWUpdateRoomKillCount,
         // Chaos → ChaosExpansionKillCount/DeadCount, Juraid → JRUpdateRoomKillCount
         {
@@ -1737,14 +1563,12 @@ fn handle_player_attack(
             }
 
             // ── Cinderella War kill tracking ──────────────────────────────
-            // C++ Reference: CindirellaWar.cpp:534-557
             if world.is_cinderella_active() && attacker_pos.zone_id == world.cinderella_zone_id() {
                 super::cinderella::cinderella_update_kda(world, attacker_sid, target_sid);
             }
         }
 
         // ── Achievement: PvP kill/death counters ──────────────────────────
-        // C++ Reference: AchieveHandler.cpp — UserDefeatCount++ on kill,
         // UserDeathCount++ on death. Sends WIZ_ACHIEVEMENT2 (0xA5) to killer.
         world.update_session(attacker_sid, |h| {
             h.achieve_summary.user_defeat_count =
@@ -1786,12 +1610,9 @@ fn handle_player_attack(
 }
 
 /// Handle a player-vs-NPC/Monster attack.
-///
 /// Validates NPC state, calculates damage using a simplified formula
 /// (player AP vs NPC AC), deducts NPC HP, handles death (XP + respawn),
 /// and broadcasts the result.
-///
-/// C++ Reference: `CUser::Attack` NPC branch in `AttackHandler.cpp:103-235`
 async fn handle_npc_attack(
     world: Arc<WorldState>,
     attacker_sid: SessionId,
@@ -1801,7 +1622,6 @@ async fn handle_npc_attack(
     unknown: u8,
 ) {
     // ── Bot target: apply damage, send HP update, handle death ─────
-    // C++ Reference: `CBot::HpChange()` in `BotHealthHandler.cpp:3-151`
     // Bots are stored in world.bots (not the NPC instance map).
     // Unlike the previous stub that only tracked last_attacker_id, we now
     // apply actual damage using the player's attack stats against a simplified
@@ -1843,7 +1663,6 @@ async fn handle_npc_attack(
         };
         // Use pre-computed total_hit from set_user_ability() — includes actual
         // weapon damage, stat bonuses, and buffs.
-        // C++ Reference: Unit.cpp:305 — uses m_sTotalHit from SetUserAbility()
         let total_hit = attacker_snap.equipped_stats.total_hit;
         let temp_ap = total_hit as i32 * attacker_snap.attack_amount;
         let bot_ac = (bot.sta_stat as i32 * 3) + (bot.level as i32 * 2);
@@ -1889,7 +1708,6 @@ async fn handle_npc_attack(
         }
 
         // ── Elemental weapon damage bonuses (GetMagicDamage) ─────────
-        // C++ Reference: Unit.cpp:513 — GetMagicDamage for bot targets
         // Bots have no tracked elemental resistance, so full bonus applies.
         if damage > 0 {
             let mut elem_bonus: i32 = 0;
@@ -1913,7 +1731,6 @@ async fn handle_npc_attack(
             }
         }
 
-        // C++ Reference: Unit.cpp:726-743 — perk percentDamagePlayer bonus (Bot = Player index)
         if damage > 0 {
             let perk_dmg = world.compute_perk_bonus(&attacker_snap.perk_levels, 10, false);
             if perk_dmg > 0 {
@@ -1938,7 +1755,6 @@ async fn handle_npc_attack(
         });
 
         // Send WIZ_TARGET_HP to attacker
-        // C++ Reference: `TO_USER(pAttacker)->SendTargetHP(0, GetID(), amount, false)`
         // C++ sends ORIGINAL damage (before passives) to attacker for display.
         let mut target_hp_pkt = Packet::new(Opcode::WizTargetHp as u8);
         target_hp_pkt.write_u32(npc_id);
@@ -1984,7 +1800,6 @@ async fn handle_npc_attack(
     };
 
     // ── NPC type pre-blocking ─────────────────────────────────────
-    // C++ Reference: AttackHandler.cpp:103-126 — certain NPC types block R-attack entirely
     {
         let npc_type = tmpl.npc_type;
 
@@ -2003,7 +1818,6 @@ async fn handle_npc_attack(
             return;
         }
 
-        // C++ Reference: Unit.cpp:2082-2108 — Monument nation attack checks
         {
             if npc_type == NPC_BIFROST_MONUMENT {
                 let beef = world.get_beef_event();
@@ -2083,7 +1897,6 @@ async fn handle_npc_attack(
     }
 
     // ── Deva Bird attack check (Juraid Mountain) ─────────────────
-    // C++ Reference: `CUser::CheckDevaAttack()` in `AttackHandler.cpp:3-30`
     // Deva Bird (proto 8106) can only be attacked if all 3 bridges for the
     // attacker's nation are built in the player's event room.
     {
@@ -2105,8 +1918,6 @@ async fn handle_npc_attack(
     }
 
     // ── virt_eventattack_check — temple event attack validation ──
-    // C++ Reference: `CUser::virt_eventattack_check()` in
-    // `JuraidBdwFragSystem.cpp:493-524`
     // Blocks attacks in finished/inactive temple event rooms.
     {
         let attacker_name = world
@@ -2140,7 +1951,6 @@ async fn handle_npc_attack(
         return;
     }
 
-    // C++ Reference: User.cpp:4274-4331 -- fRange = fBaseMeleeRange + fWeaponRange
     let weapon_range = get_weapon_range(&world, attacker_sid);
     let attack_range = DEFAULT_MELEE_RANGE + weapon_range;
 
@@ -2179,7 +1989,6 @@ async fn handle_npc_attack(
 
     // ── Damage calculation ─────────────────────────────────────────
     // Uses same formula base as PvP but with NPC AC instead of target player AC.
-    // C++ Reference: Unit.cpp:358 — temp_hit_B = (temp_ap * 200 / 100) / (temp_ac + 240)
     let mut rng = rand::rngs::StdRng::from_entropy();
 
     // Snapshot attacker combat data in a single DashMap read.
@@ -2189,12 +1998,10 @@ async fn handle_npc_attack(
     };
     // Use pre-computed total_hit from set_user_ability() — includes actual
     // weapon damage, stat bonuses, and buffs.
-    // C++ Reference: Unit.cpp:305 — uses m_sTotalHit from SetUserAbility()
     let total_hit = npc_attacker_snap.equipped_stats.total_hit;
     let temp_ap = total_hit as i32 * npc_attacker_snap.attack_amount;
 
     // Apply monster defense multiplier to NPC AC
-    // C++ Reference: Unit.cpp:345 — `acc *= g_pMain->pDamageSetting.mondef`
     // War buff: nation NPCs get AC × 1.2 during war (ChangeAbility).
     let raw_npc_ac = world.get_npc_war_ac(&tmpl);
     let npc_ac = (raw_npc_ac as f64 * world.get_mon_def_multiplier()) as i32;
@@ -2228,7 +2035,6 @@ async fn handle_npc_attack(
                 d.max(1) as i16
             }
             _ => {
-                // C++ Reference: Unit.cpp:500-505 — GM always deals 30000 to NPCs on miss
                 if is_gm {
                     30000i16
                 } else {
@@ -2238,7 +2044,6 @@ async fn handle_npc_attack(
         }
     };
 
-    // C++ Reference: Unit.cpp:1555-1556 — mage weapon quality multiplier
     if damage > 0 && is_mage(attacker.class) {
         damage = (damage as f64 * world.get_plus_damage_from_item_ids(
             npc_attacker_snap.left_hand_item_id,
@@ -2247,25 +2052,21 @@ async fn handle_npc_attack(
     }
 
     // ── R-attack damage multiplier for level>30 non-priests ──────────
-    // C++ Reference: Unit.cpp:484-489 — `dm *= g_pMain->pDamageSetting.rdamage`
     if damage > 0 && attacker.level > 30 && !is_priest(attacker.class) {
         damage = (damage as f64 * world.get_r_damage_multiplier()) as i16;
     }
 
     // Apply monster take-damage multiplier
-    // C++ Reference: Unit.cpp:510 — `daaa *= g_pMain->pDamageSetting.montakedamage`
     if damage > 0 {
         damage = (damage as f64 * world.get_mon_take_damage_multiplier()) as i16;
     }
 
     // ── Elemental weapon damage bonuses (GetMagicDamage) ─────────────
-    // C++ Reference: Unit.cpp:513 — GetMagicDamage for NPC targets
     // Uses NPC template elemental resistances instead of player session values.
     if damage > 0 {
         damage = apply_elemental_weapon_damage_npc(&npc_attacker_snap.equipped_stats, &tmpl, damage);
     }
 
-    // C++ Reference: Unit.cpp:708-720 — perk percentDamageMonster bonus (PvE)
     if damage > 0 {
         let perk_dmg = world.compute_perk_bonus(&npc_attacker_snap.perk_levels, 9, false);
         if perk_dmg > 0 {
@@ -2275,7 +2076,6 @@ async fn handle_npc_attack(
     }
 
     // ── Vaccuni transformation damage override ─────────────────────
-    // C++ Reference: AttackHandler.cpp:231-232 — `if (VaccuniAttack()) damage = 30000;`
     // Specific NPC proto IDs with event + item requirements deal 30000 fixed damage.
     let damage = if check_vaccuni_attack(&world, attacker_sid, &npc) {
         30000_i16
@@ -2284,7 +2084,6 @@ async fn handle_npc_attack(
     };
 
     // ── NPC type-specific damage overrides ──────────────────────────
-    // C++ Reference: AttackHandler.cpp:178-235 — special NPC types have fixed damage rules
     let damage =
         apply_npc_type_damage_override(&world, attacker_sid, &attacker, &tmpl, &npc, damage);
 
@@ -2292,8 +2091,6 @@ async fn handle_npc_attack(
     let damage = apply_zone_damage_override(attacker_pos.zone_id, damage);
 
     // Cap damage at MAX_DAMAGE — matches player attack path
-    // C++ Reference: Define.h:30 — `#define MAX_DAMAGE 32000`
-    // C++ Reference: Unit.cpp:788-791 — damage capped in GetDamage()
     let damage = damage.min(crate::attack_constants::MAX_DAMAGE as i16);
 
     if damage <= 0 {
@@ -2307,7 +2104,6 @@ async fn handle_npc_attack(
     world.record_npc_damage(npc_id, attacker_sid, damage as i32);
 
     // ── Attacker weapon durability loss ──────────────────────────────
-    // C++ Reference: AttackHandler.cpp:246 — ItemWoreOut(ATTACK, damage)
     world.item_wore_out(attacker_sid, WORE_TYPE_ATTACK, damage as i32);
 
     // Notify NPC AI about damage (reactive aggro — C++ ChangeTarget)
@@ -2349,13 +2145,8 @@ async fn handle_npc_attack(
 }
 
 /// Handle NPC death: broadcast death, award XP (party or solo), set AI state to Dead.
-///
-/// C++ Reference: `CNpc::Dead()` + `CUser::RecvUserExp()` in `User.cpp:2487-2641`
 /// Handle all NPC death side-effects: broadcast death, award XP (party or solo),
 /// generate loot, and set AI state to Dead.
-///
-/// C++ Reference: `CNpc::Dead()` in `Npc.cpp:1292-1312`
-///
 /// This is the SINGLE point of NPC death handling — called from both physical
 /// attack and magic damage paths to ensure consistent behavior.
 pub(crate) async fn handle_npc_death(
@@ -2402,13 +2193,11 @@ pub(crate) async fn handle_npc_death(
     }
 
     // ── Daily rank stat: MHTotalKill++ ────────────────────────────────
-    // C++ Reference: Npc.cpp:992 — `pUser->pUserDailyRank.MHTotalKill++`
     world.update_session(killer_sid, |h| {
         h.dr_mh_total_kill += 1;
     });
 
     // ── Achievement: MonsterDefeatCount++ ────────────────────────────
-    // C++ Reference: AchieveHandler.cpp:357 — `m_AchieveInfo.MonsterDefeatCount++`
     // Called via AchieveMonsterCountAdd() on each NPC death.
     world.update_session(killer_sid, |h| {
         h.achieve_summary.monster_defeat_count =
@@ -2423,7 +2212,6 @@ pub(crate) async fn handle_npc_death(
     }
 
     // ── Award XP + Loyalty (NP) — damage-weighted distribution ──
-    // C++ Reference: `User.cpp:2487-2641` — RecvUserExp()
     // Iterates m_DamagedUserList and distributes XP/NP proportionally to
     // each damager's contribution. Party members' damage is consolidated
     // into one representative entry so the whole party gets proportional XP.
@@ -2534,7 +2322,6 @@ pub(crate) async fn handle_npc_death(
                         }
                     } else {
                         // Each eligible party member gets the SAME proportional XP
-                        // C++ Reference: User.cpp:2630-2631
                         let total_level: u32 = eligible.iter().map(|&(_, lvl)| lvl as u32).sum();
                         let num_members = eligible.len() as f64;
 
@@ -2546,7 +2333,6 @@ pub(crate) async fn handle_npc_death(
                             }
 
                             // Party NP: level-weighted formula
-                            // C++ Reference: User.cpp:2635
                             // loyalty * (1 + 0.2*(members-1)) * memberLevel / totalLevel
                             if proportional_loyalty > 0 && total_level > 0 {
                                 let party_bonus = 1.0 + 0.2 * (num_members - 1.0);
@@ -2593,7 +2379,6 @@ pub(crate) async fn handle_npc_death(
     }
 
     // ── Quest monster kill tracking (C++ CNpc::OnDeathProcess) ─────
-    // C++ Reference: Npc.cpp:1030-1070 — if killer is in party, call for ALL
     // party members within RANGE_80M; otherwise call only for the killer.
     {
         let npc_proto = npc.proto_id;
@@ -2626,7 +2411,6 @@ pub(crate) async fn handle_npc_death(
     }
 
     // ── Daily quest monster kill tracking (C++ CNpc::OnDeathProcess) ──
-    // C++ Reference: Npc.cpp:1057-1069 — UpdateDailyQuestCount(GetProtoID())
     // Same party/solo pattern as regular quest tracking above.
     {
         let npc_proto = npc.proto_id;
@@ -2692,7 +2476,6 @@ pub(crate) async fn handle_npc_death(
     }
 
     // ── Monster Stone boss kill (C++ CNpc::MonsterStoneKillProcess) ────
-    // C++ Reference: MonsterStoneSystem.cpp:507-541
     // When a Monster Stone boss (summon_type == 1) dies, mark the room as
     // boss-killed and send victory packets to all room users.
     if npc.event_room > 0 && npc.summon_type == 1 {
@@ -2700,7 +2483,6 @@ pub(crate) async fn handle_npc_death(
     }
 
     // ── BDW altar flag pickup (C++ CNpc::OnDeath → BDWMonumentAltarSystem) ──
-    // C++ Reference: Npc.cpp:897-901 — in C++ this is checked in the monster branch,
     // but we check it unconditionally since the altar NPC (9840) has is_monster=true.
     if npc.zone_id == bdw::ZONE_BDW && tmpl.npc_type == bdw::NPC_BORDER_MONUMENT {
         bdw_altar_flag_pickup(world, killer_sid, npc.zone_id, npc_id);
@@ -2732,7 +2514,6 @@ pub(crate) async fn handle_npc_death(
     }
 
     // ── Forgotten Temple monster death (C++ CNpc::ForgettenTempleMonsterDead) ──
-    // C++ Reference: FTHandler.cpp:189-217
     // When a monster dies in zone 55, decrement FT monster count and
     // optionally trigger a death skill (special boss monsters).
     if npc.zone_id == super::forgotten_temple::ZONE_FORGOTTEN_TEMPLE && npc.is_monster {
@@ -2749,9 +2530,7 @@ pub(crate) async fn handle_npc_death(
                 "Forgotten Temple: boss death skill triggered"
             );
             // Broadcast full MAGIC_EFFECTING packet to all zone users.
-            // C++ Reference: FTHandler.cpp:208-216 — MagicInstance with Run()
             // Packet format: [u8 opcode][u32 skill][u32 caster][u32 target][u32 sData * 7]
-            // C++: sTargetID = -1 (zone-wide), sData[0]=127, sData[2]=127
             let mut death_pkt = Packet::new(Opcode::WizMagicProcess as u8);
             death_pkt.write_u8(3); // MAGIC_EFFECTING
             death_pkt.write_u32(sid); // nSkillID
@@ -2773,7 +2552,6 @@ pub(crate) async fn handle_npc_death(
     }
 
     // ── Under The Castle monster death (C++ CNpc::UnderTheCastleProcess) ──
-    // C++ Reference: UnderTheCastleSystem.cpp:294-456
     // When a monster dies in zone 86, determine movie/gate/reward actions
     // and broadcast WIZ_UTC_MOVIE if applicable.
     if npc.zone_id == super::under_castle::ZONE_UNDER_CASTLE && npc.is_monster {
@@ -2808,7 +2586,6 @@ pub(crate) async fn handle_npc_death(
                 reward_room = result.reward_room,
                 "Under The Castle: reward room triggered"
             );
-            // C++ Reference: SendItemUnderTheCastleRoomUsers(ZONE_UNDER_CASTLE, room, GetX(), GetZ())
             // Distribute room rewards to nearby users based on proximity to
             // room center and boss death position.
             distribute_utc_room_rewards(world, result.reward_room, npc.x, npc.z);
@@ -2816,7 +2593,6 @@ pub(crate) async fn handle_npc_death(
 
         if result.spawn_exit_portals {
             tracing::info!("Under The Castle: final boss dead, spawning exit portals");
-            // C++ Reference: UnderTheCastleSystem.cpp:429-430
             // SpawnEventNpc(29197, false, ZONE_UNDER_CASTLE, 852, 0, 830, ...)
             // SpawnEventNpc(29197, false, ZONE_UNDER_CASTLE, 825, 0, 873, ...)
             world.spawn_event_npc(
@@ -2984,7 +2760,6 @@ pub(crate) async fn handle_npc_death(
     }
 
     // ── Collection Race kill tracking ─────────────────────────────────
-    // C++ Reference: CollectionRaceHandler.cpp:385-493 — CollectionRaceSendDead()
     // Called for the killer only (CR is an individual event, not party-based).
     {
         let cr = world.collection_race_event().clone();
@@ -3025,7 +2800,6 @@ pub(crate) async fn handle_npc_death(
     // ── Monster respawn loop (C++ Npc.cpp:909-915) ────────────────────
     // When a monster with a matching entry in `monster_respawn_loop` dies,
     // schedule a delayed respawn of the next NPC in the chain.
-    // C++: SpawnEventNpc(pSummon->iborn, true, zone, x, 0, z, 1, 3, deadtime*MINUTE, ...)
     if let Some(chain) = world.get_respawn_chain(npc.proto_id as i16) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -3048,18 +2822,12 @@ pub(crate) async fn handle_npc_death(
 }
 
 /// Distribute Under The Castle room rewards to nearby players.
-///
-/// C++ Reference: `CGameServerDlg::SendItemUnderTheCastleRoomUsers()` in
-/// `GameServerDlg.cpp:2138-2269`
-///
 /// Each room boss kill awards TROPHY_OF_FLAME (1 or 2 based on proximity)
 /// plus room-specific bonus items to all eligible players in zone 86.
-///
 /// Proximity logic:
 /// - If player is within BOTH the room center range AND the boss kill range (15m) -> 2 trophies
 /// - If player is within EITHER the room center range OR the boss kill range -> 1 trophy
 /// - Neither -> skip (no reward for this player)
-///
 /// Room-specific bonus items (given to ALL qualifying players regardless of trophy count):
 /// - Room 1: Trophy only
 /// - Room 2: + Dented Ironmass
@@ -3123,10 +2891,6 @@ fn distribute_utc_room_rewards(world: &WorldState, room: u8, boss_x: f32, boss_z
 }
 
 /// Handle Monster Stone boss kill — mark room, set grace period, notify users.
-///
-/// C++ Reference: `CNpc::MonsterStoneKillProcess(CUser*)` in
-/// `MonsterStoneSystem.cpp:507-541`
-///
 /// Sets `isBossKilled = true`, `WaitingTime = now + 20`, and sends
 /// `WIZ_EVENT/TEMPLE_EVENT_FINISH` + `WIZ_QUEST` to all room users.
 fn monster_stone_boss_kill(world: &WorldState, event_room: u16) {
@@ -3153,7 +2917,6 @@ fn monster_stone_boss_kill(world: &WorldState, event_room: u16) {
     drop(mgr);
 
     // Send boss kill packets to all room users
-    // C++ Reference: MonsterStoneSystem.cpp:524-537
     let (finish_pkt, quest_pkt) = monster_stone::build_boss_kill_packets();
     let arc_finish = Arc::new(finish_pkt);
     let arc_quest = Arc::new(quest_pkt);
@@ -3170,10 +2933,6 @@ fn monster_stone_boss_kill(world: &WorldState, event_room: u16) {
 }
 
 /// Handle Draki Tower monster kill — decrement counter, advance stage if all dead.
-///
-/// C++ Reference: `CNpc::OnDeathProcess()` in `Npc.cpp:959-967`
-///                `CUser::ChangeDrakiMode()` in `DrakiTowerSystem.cpp:320-347`
-///
 /// Decrements `draki_monster_kill` counter. When it reaches 0, calls
 /// `advance_stage()` to determine the next stage, then sends timer packets
 /// and spawns the next wave.
@@ -3391,8 +3150,6 @@ fn collect_draki_spawn_data(
 }
 
 /// Send the 3-packet Draki Tower timer sequence to a player.
-///
-/// C++ Reference: `SendDrakiTempleDetail()` lines 161-184
 /// Sends WIZ_SELECT_MSG, WIZ_EVENT/TIMER, and WIZ_BIFROST.
 fn send_draki_timer_packets(
     world: &WorldState,
@@ -3434,9 +3191,6 @@ fn send_draki_timer_packets(
 }
 
 /// Persist Draki Tower progress to the database.
-///
-/// C++ Reference: `CUser::DrakiTowerSavedUserInfo()` in `DrakiTowerSystem.cpp:351-372`
-///
 /// Saves elapsed time and linear stage index for the player.
 pub(crate) async fn draki_tower_save_progress(world: &WorldState, sid: SessionId, now: u64) {
     use crate::handler::draki_tower;
@@ -3489,8 +3243,6 @@ pub(crate) async fn draki_tower_save_progress(world: &WorldState, sid: SessionId
 }
 
 /// Update rift ranking when tower is completed.
-///
-/// C++ Reference: `DrakiTowerSystem.cpp:199-206` — achievement check (elapsed <= 1200s)
 async fn draki_tower_update_rank(world: &WorldState, sid: SessionId, elapsed_seconds: u32) {
     use crate::handler::draki_tower;
     use ko_db::repositories::draki_tower::DrakiTowerRepository;
@@ -3543,10 +3295,7 @@ async fn draki_tower_update_rank(world: &WorldState, sid: SessionId, elapsed_sec
 }
 
 /// Handle Dungeon Defence monster kill — distribute rewards and advance stage.
-///
-/// C++ Reference: `CNpc::DungeonDefenceProcess()` in `DungeonDefenceSystem.cpp:540-638`
 /// and kill-count decrement in `Npc.cpp:971-984`.
-///
 /// 1. Validate the monster is a DD monster (proto ID check).
 /// 2. Calculate rewards (rift jewels, monster coins, lunar tokens for bosses).
 /// 3. Give items to killer and party members.
@@ -3632,9 +3381,6 @@ fn dd_monster_kill(world: &WorldState, killer_sid: SessionId, event_room: u16, p
 }
 
 /// Decrement DD room kill counter and advance stage when all monsters are dead.
-///
-/// C++ Reference: `Npc.cpp:971-984` (kill count decrement) and
-/// `CUser::ChangeDungeonDefenceStage()` in `DungeonDefenceSystem.cpp:461-512`
 fn dd_decrement_and_advance(world: &WorldState, event_room: u16) {
     use crate::handler::dungeon_defence;
 
@@ -3718,10 +3464,6 @@ fn dd_decrement_and_advance(world: &WorldState, event_room: u16) {
 }
 
 /// Handle BDW altar flag pickup when the altar NPC is killed.
-///
-/// C++ Reference: `CNpc::BDWMonumentAltarSystem(CUser *pUser)` in
-/// `JuraidBdwFragSystem.cpp:343-369`
-///
 /// 1. Validates user is in a valid BDW room and BDW is active
 /// 2. Sets `has_altar_obtained = true` (flag pickup)
 /// 3. Broadcasts `TEMPLE_EVENT_ALTAR_FLAG` (sub-opcode 49) to all users in the room
@@ -3768,7 +3510,6 @@ fn bdw_altar_flag_pickup(world: &WorldState, killer_sid: SessionId, _zone_id: u1
         let nation = bdw::flag_pickup(&mut room, &killer_name);
 
         // Store the altar NPC ID so we can restore its HP on respawn
-        // C++ Reference: _BDW_ROOM_INFO::pAltar
         if nation != 0 {
             if let Some(bdw_state) = bdw_mgr.get_room_state_mut(room_id) {
                 bdw_state.altar_npc_id = npc_id;
@@ -3783,13 +3524,10 @@ fn bdw_altar_flag_pickup(world: &WorldState, killer_sid: SessionId, _zone_id: u1
     }
 
     // Broadcast altar flag pickup to all room users
-    // C++ Reference: JuraidBdwFragSystem.cpp:364-369
     let flag_pkt = event_room::build_altar_flag_packet(&killer_name, nation);
     dead::broadcast_to_bdw_room(world, room_id, &flag_pkt);
 
     // Apply BUFF_TYPE_FRAGMENT_OF_MANES speed debuff to carrier
-    // C++ Reference: JuraidBdwFragSystem.cpp:355-363 — MagicInstance with skill 492063
-    // C++ Reference: MagicProcess.cpp:796-798 — case BUFF_TYPE_FRAGMENT_OF_MANES:
     //   pTarget->m_bSpeedAmount = pType->bSpeed;
     world.apply_buff(
         killer_sid,
@@ -3838,11 +3576,8 @@ fn bdw_altar_flag_pickup(world: &WorldState, killer_sid: SessionId, _zone_id: u1
 }
 
 /// Award NPC kill XP to a single player, applying level-difference modifier.
-///
 /// Uses `level::exp_change()` for proper level-up/down handling and correct
 /// WIZ_EXP_CHANGE packet format.
-///
-/// C++ Reference: `CUser::RecvUserExp()` in `User.cpp:2487-2641`
 async fn award_npc_xp(world: &WorldState, sid: SessionId, base_exp: i64, npc_level: u8) {
     let player_level = match world.get_character_info(sid) {
         Some(ch) => ch.level,
@@ -3850,7 +3585,6 @@ async fn award_npc_xp(world: &WorldState, sid: SessionId, base_exp: i64, npc_lev
     };
 
     // Apply level-difference modifier
-    // C++ Reference: `CNpc::GetRewardModifier()` in `Npc.cpp:785-798`
     let modifier = super::level::get_reward_modifier(npc_level, player_level);
     let final_exp = (base_exp as f32 * modifier) as i64;
 
@@ -3858,15 +3592,12 @@ async fn award_npc_xp(world: &WorldState, sid: SessionId, base_exp: i64, npc_lev
         return;
     }
 
-    // C++ Reference: User.cpp:2558 — JackPotExp check before ExpChange
     if !world.try_jackpot_exp(sid, final_exp).await {
         super::level::exp_change(world, sid, final_exp).await;
     }
 }
 
 /// Award NPC kill loyalty (NP) to a solo player, applying level-difference modifier.
-///
-/// C++ Reference: `CUser::RecvUserExp()` in `User.cpp:2563-2572`
 fn award_npc_loyalty_solo(world: &WorldState, sid: SessionId, base_loyalty: i32, npc_level: u8) {
     if base_loyalty <= 0 {
         return;
@@ -3876,7 +3607,6 @@ fn award_npc_loyalty_solo(world: &WorldState, sid: SessionId, base_loyalty: i32,
         None => return,
     };
 
-    // C++ Reference: User.cpp:2565 — same GetRewardModifier as XP
     let modifier = super::level::get_reward_modifier(npc_level, player_level);
     let final_loyalty = ((base_loyalty as f32) * modifier).ceil() as i32;
     if final_loyalty > 0 {
@@ -3892,9 +3622,6 @@ fn award_npc_loyalty_solo(world: &WorldState, sid: SessionId, base_loyalty: i32,
 }
 
 /// Send WIZ_TARGET_HP for an NPC target (HP bar update).
-///
-/// C++ Reference: `User.cpp:2712-2857` (SendTargetHP for NPC targets)
-///
 /// Packet format: `[u32 npc_id][u8 0][u32 max_hp][u32 current_hp][u32 0][u32 0][u8 0]`
 fn send_npc_target_hp_update(
     world: &WorldState,
@@ -3917,14 +3644,11 @@ fn send_npc_target_hp_update(
 }
 
 /// Build and broadcast the attack result packet to the 3x3 region.
-///
-/// C++ Reference: `AttackHandler.cpp:253-255`
 /// ```text
 /// Packet result(WIZ_ATTACK, bType);
 /// result << bResult << uint32(GetSocketID()) << uint32(tid) << unknown;
 /// SendToRegion(&result, nullptr, GetEventRoom());
 /// ```
-///
 /// Wire format: `[u8 bType][u8 bResult][u32 attacker_id][u32 target_id][u8 unknown]`
 fn broadcast_attack_result(
     world: &WorldState,
@@ -3956,8 +3680,6 @@ fn broadcast_attack_result(
 
 /// Send a WIZ_TARGET_HP update to the attacker so the client updates the
 /// target's HP bar after taking damage.
-///
-/// C++ Reference: `User.cpp:2712-2857` (SendTargetHP)
 fn send_target_hp_update(
     world: &WorldState,
     attacker_sid: SessionId,
@@ -3985,8 +3707,6 @@ fn send_target_hp_update(
 }
 
 /// Check if a zone is a PK zone (allows PvP combat).
-///
-/// C++ Reference: `CUser::isInPKZone()` in `BotHandler.h:390-395`
 fn is_pk_zone(zone_id: u16) -> bool {
     zone_id == ZONE_RONARK_LAND
         || zone_id == ZONE_ARDREAM
@@ -3996,16 +3716,11 @@ fn is_pk_zone(zone_id: u16) -> bool {
 }
 
 /// Check if a class is a priest class (base class 4, 11, or 12).
-///
-/// C++ Reference: `Unit.h` — `isPriest()` checks class modulo for priest archetypes.
 fn is_priest_class(class: u16) -> bool {
     matches!(class % 100, 4 | 11 | 12)
 }
 
 /// Give zone kill rewards after a PvP kill.
-///
-/// C++ Reference: `CUser::GiveKillReward()` in `User.cpp:3348-3437`
-///
 /// Logic:
 /// 1. Increment the killer's PvP kill count.
 /// 2. For each zone_kill_reward row matching the killer's zone:
@@ -4032,7 +3747,6 @@ fn give_kill_reward(world: &WorldState, killer_sid: SessionId, zone_id: u16) {
 
     let in_party = killer_info.party_id.is_some();
     let killer_class = killer_info.class;
-    // C++ Reference: User.cpp:3386 — GetEventRoom() check for room isolation
     let killer_event_room = world.get_event_room(killer_sid);
 
     // Get zone kill rewards for this zone
@@ -4066,7 +3780,6 @@ fn give_kill_reward(world: &WorldState, killer_sid: SessionId, zone_id: u16) {
         }
 
         // Check party requirement
-        // C++ Reference: pReward->Party == 1 && !isInParty() -> skip (party only)
         //                pReward->Party == 0 && isInParty() -> skip (solo only)
         if reward.party_required == 1 && !in_party {
             continue;
@@ -4078,7 +3791,6 @@ fn give_kill_reward(world: &WorldState, killer_sid: SessionId, zone_id: u16) {
         let mut self_reward = true;
 
         // If in party and all_party_reward, give to all party members in zone+room
-        // C++ Reference: User.cpp:3386
         //   if (pUser->GetZoneID() != GetZoneID()
         //    || pUser->GetEventRoom() != GetEventRoom()
         //    || pUser->GetPartyID() != GetPartyID()) continue;
@@ -4099,12 +3811,10 @@ fn give_kill_reward(world: &WorldState, killer_sid: SessionId, zone_id: u16) {
             self_reward = false;
         } else if in_party && !reward.all_party_reward && !is_priest_class(killer_class) {
             // Non-priest killer in party: chance to redirect reward to a priest
-            // C++ Reference: User.cpp:3398-3424
             let redirect_roll: u16 = rng.gen_range(0..=10000);
             let priest_rate_threshold = (reward.priest_rate.min(100) as u16) * 100;
             if redirect_roll < priest_rate_threshold {
                 for &member_sid in &party_sids {
-                    // C++ Reference: User.cpp:3413 — same zone + event room filter
                     let is_priest_in_zone = world
                         .with_session(member_sid, |h| {
                             if let Some(ref ch) = h.character {
@@ -4131,8 +3841,6 @@ fn give_kill_reward(world: &WorldState, killer_sid: SessionId, zone_id: u16) {
 }
 
 /// Give a single zone kill reward item to a player.
-///
-/// C++ Reference: `GiveKillReward()` reward application — lines 3389-3434
 /// - When `isBank` (give_to_warehouse) is true, item goes to warehouse via
 ///   `GiveWerehouseItem(ItemID, sCount, false, false, Time)`.
 /// - When `Time` (item_expiration) > 0, item gets an expiry timestamp:
@@ -4170,8 +3878,6 @@ fn give_reward_to_player(
 // ── PvP zone helpers ───────────────────────────────────────────────────────
 
 /// Apply NPC type-specific damage overrides.
-///
-/// C++ Reference: `AttackHandler.cpp:178-235` — special NPC types have fixed damage.
 /// Prison NPC needs punishment stick + 5% MP cost, Fosil needs pickaxe, etc.
 fn apply_npc_type_damage_override(
     world: &WorldState,
@@ -4236,7 +3942,6 @@ fn apply_npc_type_damage_override(
         NPC_PARTNER_TYPE if tmpl.group == 0 => 0, // Nation::NONE companion
         NPC_BORDER_MONUMENT => 10,
         _ => {
-            // C++ Reference: AttackHandler.cpp:208-210 — m_OrgNation == 3 → damage = 0
             // Neutral peaceful NPCs cannot be R-attacked.
             // NPC nation is stored in the AI state, but group field on template
             // represents the original nation. For runtime nation, use npc_ai.
@@ -4251,9 +3956,6 @@ fn apply_npc_type_damage_override(
 }
 
 /// Check if the player has an active Vaccuni transformation that deals 30000 fixed damage.
-///
-/// C++ Reference: `CUser::VaccuniAttack()` in `User.cpp:4662-4711`
-///
 /// Specific NPC proto IDs require both a quest event flag and a special weapon
 /// equipped in the right hand. If conditions are met, returns true (damage = 30000).
 fn check_vaccuni_attack(
@@ -4309,9 +4011,6 @@ fn check_vaccuni_attack(
 }
 
 /// Check if the player is in an arena area (Moradon arena or ZONE_ARENA).
-///
-/// C++ Reference: `Unit::isInArena()` in `Unit.cpp:3241-3263`
-///
 /// Returns true if:
 /// - In ZONE_ARENA (48) — all locations considered arena
 /// - In Moradon (21-25) AND within Moradon arena bounds (x: 684-735, z: 360-491)
@@ -4327,8 +4026,6 @@ pub(crate) fn is_in_arena(zone_id: u16, x: f32, z: f32) -> bool {
 }
 
 /// Check if the zone is a normal PVP zone (allows nation-vs-nation combat).
-///
-/// C++ Reference: `Unit::isInPVPZone()` in `Unit.cpp:3272-3297`
 pub(crate) fn is_in_pvp_zone(zone_id: u16) -> bool {
     zone_id == ZONE_RONARK_LAND
         || zone_id == ZONE_RONARK_LAND_BASE
@@ -4350,36 +4047,25 @@ pub(crate) fn is_in_pvp_zone(zone_id: u16) -> bool {
 }
 
 /// Check if the zone is a special event zone (Zindan War / SPBATTLE zones 105-115).
-///
-/// C++ Reference: `Unit::isInSpecialEventZone()` in `Unit.h:204-210`
 /// ZONE_SPBATTLE_BASE = 104, SPBATTLE1 = 105 .. SPBATTLE11 = 115
 pub(crate) fn is_in_special_event_zone(zone_id: u16) -> bool {
     (105..=115).contains(&zone_id)
 }
 
 /// Check if the zone is Luferson Castle (Karus nation zones).
-///
-/// C++ Reference: `Unit::isInLufersonCastle()` in `Unit.h:61-65`
 fn is_in_luferson_castle(zone_id: u16) -> bool {
     zone_id == ZONE_KARUS || zone_id == ZONE_KARUS2 || zone_id == ZONE_KARUS3
 }
 
 /// Check if the zone is El Morad Castle (El Morad nation zones).
-///
-/// C++ Reference: `Unit::isInElmoradCastle()` in `Unit.h:73-77`
 fn is_in_elmorad_castle(zone_id: u16) -> bool {
     zone_id == ZONE_ELMORAD || zone_id == ZONE_ELMORAD2 || zone_id == ZONE_ELMORAD3
 }
 
 /// Core PvP permission check — determines if attacker can attack target.
-///
-/// C++ Reference: `CUser::isHostileTo(Unit*)` in `Unit.cpp:3009-3126`
-///
 /// This implements the "default deny" model: PvP is only allowed in specific
 /// zones and under specific conditions. Returns `true` if the attack is allowed.
-///
 /// ## Zone Rules (in priority order)
-///
 /// 1. **Moradon Arena**: Party arena (same party can't attack), melee arena (can't attack self)
 /// 2. **ZONE_ARENA**: Rose clan arena restrictions, safety area check, otherwise allow
 /// 3. **Own safety area**: Target in own safety area → deny (cross-nation only)
@@ -4399,7 +4085,6 @@ pub(crate) fn is_hostile_to(
     target_pos: &Position,
 ) -> bool {
     // Self-targeting is never hostile.
-    // C++ Reference: Unit.cpp — isHostileTo() returns false when pTarget == this
     if attacker_sid == target_sid {
         return false;
     }
@@ -4409,12 +4094,10 @@ pub(crate) fn is_hostile_to(
     let attacker_z = attacker_pos.z;
 
     // ── Event room check ────────────────────────────────────────────────
-    // C++ Reference: Unit.cpp:3015 — GetEventRoom() != pTarget->GetEventRoom()
     // Handled earlier in the temple event gate block (lines ~1108-1150)
     // which blocks cross-room attacks before reaching is_hostile_to.
 
     // ── Moradon / Arena combat ──────────────────────────────────────────
-    // C++ Reference: Unit.cpp:3025-3044
     if is_in_arena(attacker_zone, attacker_x, attacker_z)
         && is_in_arena(target_pos.zone_id, target_pos.x, target_pos.z)
     {
@@ -4437,7 +4120,6 @@ pub(crate) fn is_hostile_to(
     }
 
     // ── ZONE_ARENA (full arena zone) ────────────────────────────────────
-    // C++ Reference: Unit.cpp:3047-3064
     if attacker_zone == ZONE_ARENA {
         fn in_range_slow(px: f32, pz: f32, cx: f32, cz: f32, radius: f32) -> bool {
             let dx = px - cx;
@@ -4468,7 +4150,6 @@ pub(crate) fn is_hostile_to(
     }
 
     // ── Target in own safety area ───────────────────────────────────────
-    // C++ Reference: Unit.cpp:3067-3069
     if attacker.nation != target.nation
         && is_in_own_safety_area(
             target_pos.zone_id,
@@ -4481,13 +4162,11 @@ pub(crate) fn is_hostile_to(
     }
 
     // ── PVP zones: opposite nation can fight ────────────────────────────
-    // C++ Reference: Unit.cpp:3071-3074
     if attacker.nation != target.nation && is_in_pvp_zone(attacker_zone) {
         return true;
     }
 
     // ── Abyss zones: opposite nation can fight ──────────────────────────
-    // C++ Reference: Unit.cpp:3076-3081
     if attacker.nation != target.nation
         && (attacker_zone == ZONE_DESPERATION_ABYSS
             || attacker_zone == ZONE_HELL_ABYSS
@@ -4497,7 +4176,6 @@ pub(crate) fn is_hostile_to(
     }
 
     // ── Chaos Temple: all can fight ─────────────────────────────────────
-    // C++ Reference: Unit.cpp:3083-3084 — ChaosTempleEventZone()
     // When Chaos Dungeon event is active and both players are in zone 85,
     // everyone can attack everyone (free-for-all PvP, no nation check).
     if attacker_zone == ZONE_CHAOS_DUNGEON {
@@ -4510,7 +4188,6 @@ pub(crate) fn is_hostile_to(
     }
 
     // ── Delos (Castle Siege Warfare) ────────────────────────────────────
-    // C++ Reference: Unit.cpp:3086-3098
     if attacker_zone == ZONE_DELOS {
         let csw = match world.csw_event().try_read() {
             Ok(guard) => guard,
@@ -4539,7 +4216,6 @@ pub(crate) fn is_hostile_to(
     }
 
     // ── Castle wars (Elmorad/Luferson zones when war is open) ───────────
-    // C++ Reference: Unit.cpp:3101-3105
     if attacker.nation != target.nation
         && (is_in_elmorad_castle(attacker_zone) || is_in_luferson_castle(attacker_zone))
     {
@@ -4550,7 +4226,6 @@ pub(crate) fn is_hostile_to(
     }
 
     // ── Cinderella zone ─────────────────────────────────────────────────
-    // C++ Reference: Unit.cpp:3107-3114 — isCindirellaZone()
     // When Cinderella War is active, event users of opposite nations can fight.
     if world.is_cinderella_active() && world.cinderella_zone_id() == attacker_zone {
         if attacker.nation == target.nation {
@@ -4564,7 +4239,6 @@ pub(crate) fn is_hostile_to(
     }
 
     // ── GM override: can attack in castle zones without open flags ──────
-    // C++ Reference: Unit.cpp:3116-3122
     let is_gm = attacker.authority == 0;
     if is_gm
         && attacker.nation != target.nation
@@ -4574,7 +4248,6 @@ pub(crate) fn is_hostile_to(
     }
 
     // ── Default: deny PvP ───────────────────────────────────────────────
-    // C++ Reference: Unit.cpp:3124-3125
     false
 }
 
@@ -4589,12 +4262,8 @@ const ITEM_TYPE_MP_DRAIN: u8 = 0x07;
 const MAX_RESISTANCE: i32 = 200;
 
 /// Apply elemental weapon damage bonuses from attacker's equipped items (PvP).
-///
-/// C++ Reference: `Unit.cpp:1606-1815` — `GetMagicDamage()`
-///
 /// Iterates attacker's `equipped_item_bonuses` and adds fire/cold/lightning/poison
 /// damage reduced by target's elemental resistance. Also handles HP/MP drain.
-///
 /// Formula per element: `bonus_amount - bonus_amount * total_resistance / 200`
 /// Resistance = `(base_r * pct_r / 100 + resistance_bonus)`, capped at 200.
 #[allow(clippy::too_many_arguments)]
@@ -4659,7 +4328,6 @@ fn apply_elemental_weapon_damage_pvp(
     }
 
     // Apply HP drain: heal attacker by drain amount
-    // C++ Reference: Unit.cpp:1746-1762 — ITEM_TYPE_HP_DRAIN
     if hp_drain_total > 0 {
         let drained = hp_drain_total;
         world.update_character_stats(attacker_sid, |ch| {
@@ -4668,7 +4336,6 @@ fn apply_elemental_weapon_damage_pvp(
     }
 
     // Apply MP damage: reduce target MP
-    // C++ Reference: Unit.cpp:1764-1780 — ITEM_TYPE_MP_DAMAGE
     if mp_damage_total > 0 {
         world.update_character_stats(target_sid, |ch| {
             ch.mp = (ch.mp as i32 - mp_damage_total).max(0) as i16;
@@ -4676,7 +4343,6 @@ fn apply_elemental_weapon_damage_pvp(
     }
 
     // Apply MP drain: reduce target MP and restore attacker MP
-    // C++ Reference: Unit.cpp:1782-1810 — ITEM_TYPE_MP_DRAIN
     if mp_drain_total > 0 {
         world.update_character_stats(target_sid, |ch| {
             ch.mp = (ch.mp as i32 - mp_drain_total).max(0) as i16;
@@ -4694,9 +4360,6 @@ fn apply_elemental_weapon_damage_pvp(
 }
 
 /// Apply elemental weapon damage bonuses against an NPC target.
-///
-/// C++ Reference: `Unit.cpp:1606-1815` — `GetMagicDamage()` (NPC path)
-///
 /// NPC targets use resistance values from the NPC template. NPCs have no
 /// buff-based resistance percentages, so base resistance is used directly.
 fn apply_elemental_weapon_damage_npc(
@@ -4738,7 +4401,7 @@ mod tests {
     use super::*;
     use crate::world::BOT_ID_BASE;
 
-    /// Test the attack broadcast packet format matches C++ reference.
+    /// Test the attack broadcast packet format matches expected value.
     #[test]
     fn test_attack_broadcast_format() {
         // Build broadcast: [u8 bType][u8 bResult][u32 attacker][u32 target][u8 unknown]
@@ -4836,8 +4499,6 @@ mod tests {
 
     // ── Sprint 301: MAX_DAMAGE cap ─────────────────────────────────
 
-    /// C++ Reference: Define.h:30 — `MAX_DAMAGE = 32000`
-    /// C++ Reference: Unit.cpp:788-791 — damage capped at 32000
     #[test]
     fn test_max_damage_cap() {
         use crate::attack_constants::MAX_DAMAGE;
@@ -5640,7 +5301,6 @@ mod tests {
 
     /// Test class-vs-class damage multiplier integration.
     ///
-    /// C++ Reference: Unit.cpp:523-604 — damage multiplier applied after base damage
     #[test]
     fn test_class_damage_multiplier_pvp() {
         let world = WorldState::new();
@@ -5657,7 +5317,6 @@ mod tests {
 
     /// Test monster defense multiplier integration.
     ///
-    /// C++ Reference: Unit.cpp:345 — `acc *= mondef`
     #[test]
     fn test_mon_def_multiplier_default() {
         let world = WorldState::new();
@@ -5674,7 +5333,6 @@ mod tests {
 
     /// Test monster take-damage multiplier default.
     ///
-    /// C++ Reference: Unit.cpp:510 — `daaa *= montakedamage`
     #[test]
     fn test_mon_take_damage_multiplier_default() {
         let world = WorldState::new();
@@ -5691,7 +5349,6 @@ mod tests {
 
     /// Test r_damage multiplier default.
     ///
-    /// C++ Reference: Unit.cpp:487 — `dm *= rdamage` for non-priest level 30+
     #[test]
     fn test_r_damage_multiplier_default() {
         let world = WorldState::new();
@@ -6189,7 +5846,6 @@ mod tests {
 
     #[test]
     fn test_buff_type_constants() {
-        // C++ Reference: GameDefine.h — BUFF_TYPE_BLIND = 21, BUFF_TYPE_KAUL_TRANSFORMATION = 154
         assert_eq!(BUFF_TYPE_BLIND, 21);
         assert_eq!(BUFF_TYPE_KAUL_TRANSFORMATION, 154);
     }
@@ -6344,7 +6000,6 @@ mod tests {
     #[test]
     fn test_npc_tree_fixed_damage() {
         // NPC_TREE always takes 20 damage regardless of player attack power
-        // C++ Reference: AttackHandler.cpp:227
         let _normal_damage: i16 = 5000;
         // When npc_type is NPC_TREE, damage should be overridden to 20
         assert_eq!(NPC_TREE, 2);
@@ -6355,7 +6010,6 @@ mod tests {
     #[test]
     fn test_npc_border_monument_fixed_damage() {
         // NPC_BORDER_MONUMENT always takes 10 damage
-        // C++ Reference: AttackHandler.cpp:233-234
         assert_eq!(NPC_BORDER_MONUMENT, 212);
         // Fixed damage = 10
         assert_eq!(10i16, 10);
@@ -6364,7 +6018,6 @@ mod tests {
     #[test]
     fn test_npc_refugee_damage_by_proto() {
         // NPC_REFUGEE: specific protos get 20, others get 10
-        // C++ Reference: AttackHandler.cpp:214-226
         let special_protos: [u16; 4] = [3202, 3203, 3252, 3253];
         for proto in special_protos {
             assert!(matches!(proto, 3202 | 3203 | 3252 | 3253));
@@ -6376,7 +6029,6 @@ mod tests {
     #[test]
     fn test_npc_object_flag_proto_511() {
         // NPC_OBJECT_FLAG with proto 511 → damage = 1
-        // C++ Reference: AttackHandler.cpp:212-213
         assert_eq!(NPC_OBJECT_FLAG, 15);
         // Only proto 511 gets this override
         assert_eq!(511u16, 511);
@@ -6385,7 +6037,6 @@ mod tests {
     #[test]
     fn test_npc_neutral_nation_3_blocked() {
         // NPCs with org_nation/group == 3 cannot be R-attacked
-        // C++ Reference: AttackHandler.cpp:208-210
         let group: u8 = 3;
         assert_eq!(group, 3);
         // Damage should be 0 for nation-3 NPCs
@@ -6394,7 +6045,6 @@ mod tests {
     #[test]
     fn test_npc_partner_type_nation_none_blocked() {
         // NPC_PARTNER_TYPE with Nation::NONE → damage = 0
-        // C++ Reference: AttackHandler.cpp:229-230
         let group: u8 = 0; // Nation::NONE
         assert_eq!(NPC_PARTNER_TYPE, 213);
         assert_eq!(group, 0);
@@ -6402,14 +6052,12 @@ mod tests {
 
     #[test]
     fn test_punishment_stick_item_id() {
-        // C++ Reference: GameDefine.h:1622 — `GetNum() == 900356000`
         const PUNISHMENT_STICK_ID: i32 = 900356000;
         assert_eq!(PUNISHMENT_STICK_ID, 900356000);
     }
 
     #[test]
     fn test_weapon_pickaxe_kind() {
-        // C++ Reference: GameDefine.h:1234 — `WEAPON_PICKAXE = 61`
         const WEAPON_PICKAXE: i32 = 61;
         assert_eq!(WEAPON_PICKAXE, 61);
     }
@@ -6418,7 +6066,6 @@ mod tests {
 
     #[test]
     fn test_mirror_damage_party_cpp_precedence_bug() {
-        // C++ Reference: UserHealtMagicSpSystem.cpp:101
         //   mirrorDamage = mirrorDamage / p_count < 2 ? 2 : p_count;
         // Due to C++ precedence: (mirrorDamage/p_count < 2) evaluates as bool,
         // then ternary picks 2 or p_count.
@@ -6447,7 +6094,6 @@ mod tests {
 
     #[test]
     fn test_mirror_damage_party_self_excluded() {
-        // C++ Reference: UserHealtMagicSpSystem.cpp:105
         //   if (p == nullptr || p == this) continue;
         // The victim (target) should not receive mirror damage
         let target_sid: u16 = 5;
@@ -6462,7 +6108,6 @@ mod tests {
 
     #[test]
     fn test_mirror_damage_party_attacker_party_lookup() {
-        // C++ Reference: UserHealtMagicSpSystem.cpp:92
         //   pParty = g_pMain->GetPartyPtr(pUser->GetPartyID())
         // Mirror party distribution looks up ATTACKER's party, not victim's
         let attacker_party_id: u16 = 42;
@@ -6477,7 +6122,6 @@ mod tests {
 
     #[test]
     fn test_mirror_damage_victim_reduction() {
-        // C++ Reference: UserHealtMagicSpSystem.cpp:82-83
         //   mirrorDamage = (m_byMirrorAmount * amount) / 100;
         //   amount -= mirrorDamage;
         // In C++, amount is negative. In Rust, damage is positive.
@@ -6512,7 +6156,6 @@ mod tests {
 
     #[test]
     fn test_chaos_dungeon_zone_constant() {
-        // C++ Reference: Define.h:204 — ZONE_CHAOS_DUNGEON 85
         assert_eq!(ZONE_CHAOS_DUNGEON, 85);
     }
 
@@ -6535,7 +6178,6 @@ mod tests {
 
     #[test]
     fn test_cinderella_war_opposite_nations_can_fight() {
-        // C++ Reference: Unit.cpp:3107-3114
         // Cinderella War: opposite nations who are event users can PvP
         let attacker_nation: u8 = 1; // Karus
         let target_nation: u8 = 2; // El Morad
@@ -6547,7 +6189,6 @@ mod tests {
 
     #[test]
     fn test_cinderella_war_same_nation_cannot_fight() {
-        // C++ Reference: Unit.cpp:3109 — GetNation() == pTarget->GetNation() → false
         let attacker_nation: u8 = 2;
         let target_nation: u8 = 2;
         let is_event_active = true;
@@ -6557,7 +6198,6 @@ mod tests {
 
     #[test]
     fn test_cinderella_war_non_event_user_cannot_fight() {
-        // C++ Reference: Unit.cpp:3112 — pCindWar.isEventUser() check
         let attacker_nation: u8 = 1;
         let target_nation: u8 = 2;
         let both_event_users = false; // One is not registered
@@ -6567,7 +6207,6 @@ mod tests {
 
     #[test]
     fn test_monster_stone_boss_kill_detection() {
-        // C++ Reference: MonsterStoneSystem.cpp:507-514
         // Boss kill is triggered when NPC has event_room > 0 and summon_type == 1
         let npc = crate::npc::NpcInstance {
             nid: 10100,
@@ -6615,7 +6254,6 @@ mod tests {
 
     #[test]
     fn test_monster_stone_boss_kill_room_id_conversion() {
-        // C++ Reference: event_room is 1-based (roomid + 1)
         // GetEventRoom() - 1 gives the 0-based room index
         let event_room: u16 = 42; // 1-based
         let room_id = event_room - 1; // 0-based
@@ -6626,7 +6264,6 @@ mod tests {
 
     #[test]
     fn test_monster_stone_combat_isolation_same_room_allowed() {
-        // C++ Reference: Unit.cpp:3112-3115 — isSameEventRoom()
         // Players in the same event room CAN attack each other
         let world = crate::world::WorldState::new();
         let (tx1, _rx1) = tokio::sync::mpsc::unbounded_channel();
@@ -6701,7 +6338,6 @@ mod tests {
 
     #[test]
     fn test_monster_stone_status_false_skips_room_check() {
-        // C++ Reference: AttackHandler.cpp:142 — m_sMonsterStoneStatus guard
         // When monster_stone_status is false, event room isolation is NOT enforced
         // even if the player is in a Monster Stone zone with a different event_room.
         let world = crate::world::WorldState::new();
@@ -6800,7 +6436,6 @@ mod tests {
 
     #[test]
     fn test_give_kill_reward_event_room_filter_same_room() {
-        // C++ Reference: User.cpp:3386 — party members in the SAME event room
         // should pass the event_room filter.
         let world = crate::world::WorldState::new();
         let (tx1, _rx1) = tokio::sync::mpsc::unbounded_channel();
@@ -6834,7 +6469,6 @@ mod tests {
 
     #[test]
     fn test_give_kill_reward_event_room_filter_different_room() {
-        // C++ Reference: User.cpp:3386 — party members in a DIFFERENT event room
         // should be filtered out and NOT receive rewards.
         let world = crate::world::WorldState::new();
         let (tx1, _rx1) = tokio::sync::mpsc::unbounded_channel();
@@ -7117,7 +6751,6 @@ mod tests {
 
     /// is_hostile_to returns false when attacker == target (self-targeting).
     ///
-    /// C++ Reference: Unit.cpp — isHostileTo(pTarget) returns false when pTarget == this
     #[test]
     fn test_is_hostile_to_self_targeting_blocked() {
         let world = WorldState::new();

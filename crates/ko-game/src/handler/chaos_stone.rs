@@ -1,9 +1,5 @@
 //! Chaos Stone world event handler.
-//!
-//! C++ Reference: `ChaosStone.cpp` (348 LOC), portions of `GameDefine.h:3792-3857`
-//!
 //! ## System Overview
-//!
 //! Chaos Stones are world-spawned destructible NPCs in zones 71 (Ronark Land),
 //! 72 (Ardream), and 73 (unused/future). When destroyed, they:
 //! 1. Send a zone-wide notice (`CHAOS_STONE_ENEMY_NOTICE`)
@@ -11,20 +7,14 @@
 //! 3. Spawn summoned monsters (from `chaos_stone_summon_list`) at the stone's position
 //! 4. Begin a 30-minute respawn timer for the stone itself
 //! 5. Track summoned monster boss kills; when all bosses are dead, mark wave complete
-//!
 //! ## Rank Progression
-//!
 //! Each zone has 4 ranks. When a stone of rank N is killed, its `ChaosStoneInfo`
 //! advances to rank N+1. If rank N+1 doesn't exist in `chaos_stone_spawn`, it
 //! wraps back to rank 1.
-//!
 //! ## Monster Family Rotation
-//!
 //! After spawning monsters of family F, the family counter increments. If the new
 //! family doesn't exist in `chaos_stone_summon_stage` for that zone, it wraps to 1.
-//!
 //! ## Constants
-//!
 //! | Name | Value | Description |
 //! |------|-------|-------------|
 //! | `CHAOS_STONE_RESPAWN_TIME` | 1800 (30 min) | Time before stone respawns |
@@ -39,22 +29,19 @@ use ko_db::models::chaos_stone::{
 };
 use ko_db::models::SpecialStoneRow;
 
-/// Respawn timer for chaos stones (seconds). C++ `30 * MINUTE`.
+/// Respawn timer for chaos stones (seconds). `30 * MINUTE`.
 pub const CHAOS_STONE_RESPAWN_TIME: u32 = 30 * 60; // 1800s
 
-/// Radius around stone position for spawned monsters. C++ `CHAOS_STONE_MONSTER_RESPAWN_RADIUS`.
+/// Radius around stone position for spawned monsters. `CHAOS_STONE_MONSTER_RESPAWN_RADIUS`.
 pub const CHAOS_STONE_MONSTER_RESPAWN_RADIUS: u16 = 20;
 
-/// Lifetime of spawned special-stone monsters (seconds). C++ `CHAOS_STONE_MONSTER_LIVE_TIME`.
+/// Lifetime of spawned special-stone monsters (seconds). `CHAOS_STONE_MONSTER_LIVE_TIME`.
 pub const CHAOS_STONE_MONSTER_LIVE_TIME: u32 = 900;
 
-/// Maximum number of tracked boss IDs per stone info. C++ `sBoosID[10]`.
+/// Maximum number of tracked boss IDs per stone info. `sBoosID[10]`.
 pub const MAX_BOSS_IDS: usize = 10;
 
 /// Runtime state for a single chaos stone instance.
-///
-/// C++ Reference: `_CHAOS_STONE_INFO` in `GameDefine.h:3792-3827`
-///
 /// One `ChaosStoneInfo` is created per rank-1 spawn entry during `ChaosStoneLoad()`.
 pub struct ChaosStoneInfo {
     /// Index in the info array (1-based, matches loading order).
@@ -106,7 +93,6 @@ impl ChaosStoneInfo {
 
     /// Reset the chaos stone info to default state.
     ///
-    /// C++ Reference: `_CHAOS_STONE_INFO::Initialize()` in `GameDefine.h:3812-3826`
     pub fn reset(&self) {
         self.chaos_index.store(0, Ordering::Relaxed);
         self.chaos_id.store(0, Ordering::Relaxed);
@@ -133,9 +119,6 @@ impl Default for ChaosStoneInfo {
 }
 
 /// Initialize chaos stone info entries from spawn data.
-///
-/// C++ Reference: `CGameServerDlg::ChaosStoneLoad()` in `ChaosStone.cpp:8-49`
-///
 /// Creates one `ChaosStoneInfo` per rank-1 spawn entry. Returns a 1-indexed
 /// map (index -> info) matching the C++ array indexing.
 pub fn load_chaos_stones(spawns: &[ChaosStoneSpawnRow]) -> HashMap<u8, ChaosStoneInfo> {
@@ -179,9 +162,6 @@ pub enum ChaosStoneTimerResult {
 }
 
 /// Tick the respawn timer for all chaos stone infos.
-///
-/// C++ Reference: `CGameServerDlg::ChaosStoneRespawnTimer()` in `ChaosStone.cpp:53-76`
-///
 /// Should be called once per second. Returns a list of stones that need respawning.
 pub fn respawn_timer_tick(infos: &HashMap<u8, ChaosStoneInfo>) -> Vec<ChaosStoneTimerResult> {
     let mut results = Vec::new();
@@ -217,8 +197,6 @@ pub fn respawn_timer_tick(infos: &HashMap<u8, ChaosStoneInfo>) -> Vec<ChaosStone
 }
 
 /// Find the chaos stone info index for a given stone.
-///
-/// C++ Reference: `CGameServerDlg::ChaosStoneSummonSelectStage()` in `ChaosStone.cpp:80-93`
 pub fn find_info_index(
     infos: &HashMap<u8, ChaosStoneInfo>,
     chaos_id: u16,
@@ -237,8 +215,6 @@ pub fn find_info_index(
 }
 
 /// Find spawn row index for a given chaos stone proto and rank.
-///
-/// C++ Reference: `CNpc::ChaosStoneSelectStage()` in `ChaosStone.cpp:124-141`
 pub fn find_spawn_index(
     spawns: &[ChaosStoneSpawnRow],
     proto_id: u16,
@@ -254,9 +230,6 @@ pub fn find_spawn_index(
 }
 
 /// Process chaos stone death — advances rank, starts respawn timer, returns info index.
-///
-/// C++ Reference: `CNpc::ChaosStoneDeath()` in `ChaosStone.cpp:145-196`
-///
 /// Returns the chaos_index of the info entry that was updated, for use with
 /// `death_respawn_monsters()`.
 pub fn on_chaos_stone_death(
@@ -310,11 +283,8 @@ pub fn on_chaos_stone_death(
 }
 
 /// Register spawned boss NPC runtime IDs for kill tracking.
-///
-/// C++ Reference: `NpcThread.cpp:790-825` — when `SpawnEventType::ChaosStoneSummon`
 /// NPCs are processed, their `GetID()` runtime IDs are stored in `sBoosID[0-9]`
 /// and `sBoosKilledCount` is incremented.
-///
 /// Must be called after `spawn_event_npc()` returns the spawned NPC IDs.
 pub fn register_spawned_bosses(
     infos: &HashMap<u8, ChaosStoneInfo>,
@@ -344,9 +314,6 @@ pub fn register_spawned_bosses(
 }
 
 /// Get summoned monster IDs for a chaos stone death event.
-///
-/// C++ Reference: `CNpc::ChaosStoneDeathRespawnMonster()` in `ChaosStone.cpp:232-259`
-///
 /// Returns the list of NPC template IDs to spawn, filtered by zone and monster family.
 /// Also advances the monster family counter for next time.
 pub fn death_respawn_monsters(
@@ -386,8 +353,6 @@ pub fn death_respawn_monsters(
 }
 
 /// Check if a given family exists for a zone in the stage list.
-///
-/// C++ Reference: `CGameServerDlg::ChaosStoneSummonSelectFamilyStage()` in `ChaosStone.cpp:263-284`
 pub fn family_exists_for_zone(
     stages: &[ChaosStoneSummonStageRow],
     zone_id: u16,
@@ -399,9 +364,6 @@ pub fn family_exists_for_zone(
 }
 
 /// Process a summoned monster boss death — decrements boss kill count.
-///
-/// C++ Reference: `CNpc::ChaosStoneBossKilledBy()` in `ChaosStone.cpp:288-313`
-///
 /// Returns `true` if all bosses for that stone are now dead (wave complete).
 pub fn on_boss_killed(infos: &HashMap<u8, ChaosStoneInfo>, npc_id: u32, zone_id: u16) -> bool {
     for info in infos.values() {
@@ -430,9 +392,6 @@ pub fn on_boss_killed(infos: &HashMap<u8, ChaosStoneInfo>, npc_id: u32, zone_id:
 }
 
 /// Get the spawn data for respawning a chaos stone.
-///
-/// C++ Reference: `CGameServerDlg::ChaosStoneSummon()` in `ChaosStone.cpp:97-120`
-///
 /// Returns the matching spawn row for respawning the stone NPC.
 pub fn get_respawn_data(
     spawns: &[ChaosStoneSpawnRow],
@@ -449,7 +408,6 @@ pub fn get_respawn_data(
 }
 
 /// Collect reward items from an `EventChaosRewardRow`.
-///
 /// Returns up to 5 (item_id, count, expiration) tuples for non-zero items.
 pub fn collect_reward_items(reward: &EventChaosRewardRow) -> Vec<(i32, i32, i32)> {
     let mut items = Vec::new();
@@ -479,18 +437,14 @@ pub fn get_reward_by_rank(
     rewards.iter().find(|r| r.rank_id == rank)
 }
 
-/// NPC type constant for special stones. C++ `NPC_MONSTER_SPECIAL = 221`.
+/// NPC type constant for special stones. `NPC_MONSTER_SPECIAL = 221`.
 pub const NPC_MONSTER_SPECIAL: u8 = 221;
 
 /// Process a special stone death — randomly selects and spawns a monster.
-///
-/// C++ Reference: `CNpc::SpecialStoneDeath()` in `ChaosStone.cpp:198-227`
-///
 /// When a special stone NPC (type 221) is killed:
 /// 1. Collects all matching entries from `k_special_stone` (same proto_id + zone)
 /// 2. Randomly picks one entry
 /// 3. Returns the (summon_npc, summon_count) to spawn at the stone's position
-///
 /// Returns `None` if no matching entries exist.
 pub fn on_special_stone_death(
     stones: &[SpecialStoneRow],

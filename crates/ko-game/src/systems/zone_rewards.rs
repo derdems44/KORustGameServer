@@ -1,16 +1,10 @@
 //! Zone online reward tick system.
-//!
-//! C++ Reference: `User.cpp:1643-1719` — `CUser::ZoneOnlineRewardCheck()`,
 //! `ZoneOnlineRewardStart()`, `ZoneOnlineRewardChange()`, `ZoneOnlineSendReward()`.
-//!
 //! Every 10 seconds the background task checks all online sessions. For each
 //! session with initialised timers, if the timer for a given reward entry has
 //! expired **and** the player is in the matching zone, the reward is granted.
-//!
 //! Premium players use `pre_` fields (different interval, item, loyalty, cash).
-//!
 //! ## Lifecycle
-//!
 //! - **Start** (`zone_online_reward_start`): called at game entry — copies the
 //!   global reward list into per-player timers (now + interval).
 //! - **Change** (`zone_online_reward_change`): called on zone change / respawn —
@@ -31,22 +25,19 @@ use crate::zone::SessionId;
 //
 // Resolved in Sprint 202: `give_kill_reward` in `handler/attack.rs` now checks
 // `h.event_room == killer_event_room` for both all-party and priest-redirect
-// paths, matching C++ `User.cpp:3386` and `User.cpp:3413`.
+// paths, matching `User.cpp:3386` and `User.cpp:3413`.
 //
 // The zone *online* rewards in this file are per-player (no party distribution),
 // so no event room check is needed here.
 // ────────────────────────────────────────────────────────────────────────────────
 
 /// Background tick interval in seconds.
-///
-/// C++ Reference: `User.cpp:1623-1627` — `m_zoneonrewardtime = UNIXTIME + 10`
 const ZONE_ONLINE_REWARD_TICK_SECS: u64 = 10;
 
 /// One minute in seconds.
 const MINUTE: u64 = 60;
 
 /// Start the zone online reward background task.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
 pub fn start_zone_online_reward_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -68,9 +59,6 @@ fn now_secs() -> u64 {
 }
 
 /// Initialise per-player online reward timers at game entry.
-///
-/// C++ Reference: `User.cpp:1672-1688` — `CUser::ZoneOnlineRewardStart()`
-///
 /// Copies the global reward list length into a per-session timer vec.
 /// Each entry is set to `now + interval` (premium uses `pre_minute`).
 pub fn zone_online_reward_start(world: &WorldState, sid: SessionId) {
@@ -102,9 +90,6 @@ pub fn zone_online_reward_start(world: &WorldState, sid: SessionId) {
 }
 
 /// Reset per-player online reward timers on zone change or respawn.
-///
-/// C++ Reference: `User.cpp:1691-1696` — `CUser::ZoneOnlineRewardChange()`
-///
 /// Resets all timers to `now + minute` so the player starts a fresh
 /// countdown in the new zone. Unlike `zone_online_reward_start`, this
 /// function ALWAYS uses the normal `minute` interval — no premium check.
@@ -132,8 +117,6 @@ pub fn zone_online_reward_change(world: &WorldState, sid: SessionId) {
 }
 
 /// Process one zone online reward tick for all online sessions.
-///
-/// C++ Reference: `User.cpp:1643-1669` — `CUser::ZoneOnlineRewardCheck()`
 fn process_zone_online_reward_tick(world: &WorldState) {
     let rewards = world.get_zone_online_rewards();
     if rewards.is_empty() {
@@ -163,7 +146,6 @@ fn process_session_online_reward(
             Some(c) => c,
             None => return None,
         };
-        // C++ Reference: `if (isDead() || isOfflineStatus()) return;`
         if ch.hp <= 0 || ch.res_hp_type == crate::world::USER_DEAD {
             return None;
         }
@@ -188,12 +170,10 @@ fn process_session_online_reward(
 
     // Check each reward entry.
     for (i, reward) in rewards.iter().enumerate() {
-        // C++: `if (p->usingtime > UNIXTIME) continue;`
         if timers[i] > now {
             continue;
         }
 
-        // C++: `if (GetZoneID() == p->bZoneID)`
         if zone_id != reward.zone_id as u16 {
             continue;
         }
@@ -218,9 +198,6 @@ fn process_session_online_reward(
 }
 
 /// Grant a zone online reward to a player.
-///
-/// C++ Reference: `User.cpp:1699-1719` — `CUser::ZoneOnlineSendReward()`
-///
 /// Selects premium vs normal fields, gives item (if not merchanting),
 /// loyalty, and cash.
 fn zone_online_send_reward(
@@ -248,7 +225,6 @@ fn zone_online_send_reward(
         )
     };
 
-    // C++ Reference: `if (!isMerchanting()) GiveItem()`
     if !is_merchanting && item_id > 0 && item_count > 0 {
         let given = world.give_item(
             sid,
@@ -265,13 +241,10 @@ fn zone_online_send_reward(
         }
     }
 
-    // C++ Reference: `SendLoyaltyChange(loyalty)`
     if loyalty > 0 {
         send_loyalty_change(world, sid, loyalty, false, true, false);
     }
 
-    // C++ Reference: `GiveBalance(cash, tl)` — KC + TL reward.
-    // C++ Reference: `KnightCashSystem.cpp:4-12` — adds to m_nKnightCash + DB save.
     if cash > 0 || tl > 0 {
         // Compute new balances atomically in a single lock.
         let (new_kc, new_tl, account_id) = world
@@ -318,7 +291,6 @@ fn zone_online_send_reward(
 
 // ── Online Cash Reward (pServerSetting) ─────────────────────────────────────
 //
-// C++ Reference: `User.cpp:1206-1216` — CUser::Update()
 //   if (g_pMain->pServerSetting.onlinecash
 //       && g_pMain->pServerSetting.onlinecashtime
 //       && UNIXTIME > m_bOnlineCashTime)
@@ -335,7 +307,6 @@ fn zone_online_send_reward(
 use crate::world::types::{ZONE_MORADON, ZONE_RONARK_LAND};
 
 /// Process the online cash reward for all sessions.
-///
 /// Called every 10 seconds from the zone online reward background task.
 /// Checks `online_give_cash` + `online_cash_time` from server settings,
 /// then grants 1 KC (Moradon) or 2 KC (Ronark Land) per interval.
@@ -679,7 +650,6 @@ mod tests {
 
     /// H1 fix: `zone_online_reward_change` always uses normal `minute`, never premium.
     ///
-    /// C++ Reference: `User.cpp:1695` — `itr->usingtime = UNIXTIME + (itr->minute * MINUTE);`
     /// Unlike `ZoneOnlineRewardStart`, the `Change` variant has no premium branch.
     #[test]
     fn test_zone_online_reward_change_ignores_premium() {

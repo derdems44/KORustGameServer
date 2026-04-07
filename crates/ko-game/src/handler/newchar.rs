@@ -1,9 +1,5 @@
 //! WIZ_NEW_CHAR (0x02) handler — character creation.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CharacterSelectionHandler.cpp:398-442`
-//!
 //! ## Request (C->S)
-//!
 //! | Offset | Type   | Description |
 //! |--------|--------|-------------|
 //! | 0      | u8     | Character index (0-3) |
@@ -17,18 +13,13 @@
 //! | N+10   | u8     | DEX |
 //! | N+11   | u8     | INT |
 //! | N+12   | u8     | CHA |
-//!
 //! ## Response (S->C)
-//!
 //! v2600 has TWO dispatch paths for opcode 0x02:
-//!
 //! 1. **Top-level handler** (0xB47BA0, param_4=1): reads `[u8 result]`.
 //!    If result != 1 → exits silently. Then calls ALLCHAR_refresh.
 //!    C++ server sends `[u8 0]` for success — handler exits, ALLCHAR_refresh runs.
-//!
 //! 2. **CharSelectRecv sub=0x02** (0x74E7F1): reads `[i32 result] [string name]`.
 //!    Only triggered by opcode 0x0C sub=0x02, NOT by opcode 0x02.
-//!
 //! Strategy: Send opcode 0x0C sub=0x02 for CharSelectRecv feedback,
 //! then send ALLCHAR refresh (0x0C sub=0x01) to update character list.
 
@@ -63,7 +54,6 @@ const DEFAULT_PZ: i32 = 53200;
 const DEFAULT_PY: i32 = 0;
 
 /// Send NEWCHAR error response (opcode 0x02).
-///
 /// v2600 top-level handler (sub_B47BA0, a4=1): reads first byte.
 /// If byte != 1 → exits silently (no error display).
 /// Error codes are sent as u8: 0=success, 1-11=error.
@@ -169,7 +159,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // Apply starting equipment from CREATE_NEW_CHAR_SET table
-            // C++ Reference: g_DBAgent.LoadNewCharSet(strCharID, sClass)
             // The create_new_char_set table uses base class values (1-4, 13),
             // not the full class value (101, 102, 201, etc.).
             let class_type = (class % 100) as i16;
@@ -189,7 +178,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // Apply starting stats from CREATE_NEW_CHAR_VALUE table (job_type=0 for new char)
-            // C++ Reference: g_DBAgent.LoadNewCharValue(strCharID, sClass)
             if let Some(stats) = world.get_starting_stats(class_type, 0) {
                 if let Err(e) = char_repo.apply_starting_stats(&char_name, &stats).await {
                     tracing::error!(
@@ -201,7 +189,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // ── Initialize per-character tables (C++ CREATE_NEW_CHAR SP parity) ──
-            // C++ Reference: CREATE_NEW_CHAR SP creates rows in 12+ tables.
             // These INSERTs ensure downstream systems (daily rank, genie, perks)
             // find pre-existing rows on first login.
 
@@ -226,7 +213,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // user_genie_data — genie row with optional initial hours from server_settings.
-            // C++ Reference: CharacterSelectionHandler.cpp:1025-1026 — giveGenieHour
             let give_genie_hour = session
                 .world()
                 .get_server_settings()
@@ -288,7 +274,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // Auto-grant premium from server_settings.
-            // C++ Reference: DatabaseThread.cpp:1172-1173 (ReqCreateNewChar)
             //   if (pServerSetting.premiumID && pServerSetting.premiumTime)
             //     GivePremium((uint8)premiumID, premiumTime, true);
             let (prem_id, prem_time) = session
@@ -323,8 +308,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
 /// Validate new character parameters.
 /// Returns NEWCHAR_SUCCESS (0) if valid, or an error code.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:411-426`
 /// Validation order matches C++ exactly:
 /// 1. char_index > 3
 /// 2. total > 300 OR race/class combo invalid → INVALID_DETAILS
@@ -392,16 +375,12 @@ fn validate_new_char(
 }
 
 /// Validate race is in the allowed set.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:448-470` — `NewCharRaceVaid()`
 /// Valid races: 1-4 (Karus), 6 (Kurian), 11-14 (El Morad)
 fn new_char_race_valid(race: u8) -> bool {
     matches!(race, 1 | 2 | 3 | 4 | 6 | 11 | 12 | 13 | 14)
 }
 
 /// Validate class is in the allowed set.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:476-520` — `NewCharClassVaid()`
 /// Valid classes: 101-115 (Karus side), 201-215 (El Morad side)
 fn new_char_class_valid(class: u16) -> bool {
     matches!(
@@ -439,8 +418,6 @@ fn new_char_class_valid(class: u16) -> bool {
 }
 
 /// Validate race/class combination is compatible.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:526-571` — `NewCharValid()`
 /// Each race can only start with specific base classes.
 fn new_char_valid(race: u8, class: u16) -> bool {
     match race {

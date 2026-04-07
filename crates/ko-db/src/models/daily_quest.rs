@@ -1,19 +1,13 @@
 //! Daily quest definition and user progress models.
-//!
-//! C++ Reference: `_DAILY_QUEST` struct in `GameDefine.h:4862`,
 //!                `_DAILY_USERQUEST` struct in `GameDefine.h:4878`,
 //!                `DailyQuestArray` in `LoadServerData.h:183`.
 
 /// A row from the `daily_quests` table — server-wide quest definition.
-///
-/// C++ Reference: `_DAILY_QUEST` struct.
-///
 /// | `time_type` | Meaning        |
 /// |-------------|----------------|
 /// | 0           | Repeatable     |
 /// | 1           | Time-gated     |
 /// | 2           | Single (once)  |
-///
 /// | `kill_type` | Meaning     |
 /// |-------------|-------------|
 /// | 0           | Solo only   |
@@ -21,7 +15,7 @@
 /// | 2           | Any         |
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DailyQuestRow {
-    /// Quest definition ID (PK), matches C++ `_DAILY_QUEST::index`.
+    /// Quest definition ID (PK), matches `_DAILY_QUEST::index`.
     pub id: i16,
     /// Display name of the quest.
     pub quest_name: Option<String>,
@@ -70,9 +64,6 @@ pub struct DailyQuestRow {
 }
 
 /// A row from the `user_daily_quest` table — per-character quest progress.
-///
-/// C++ Reference: `_DAILY_USERQUEST` struct.
-///
 /// | `status` | Meaning           |
 /// |----------|-------------------|
 /// | 0        | Time-wait         |
@@ -93,8 +84,6 @@ pub struct UserDailyQuestRow {
 }
 
 /// Daily quest time type enumeration.
-///
-/// C++ Reference: `enum class DailyQuesttimetype { repeat, time, single }`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DailyQuestTimeType {
@@ -107,8 +96,6 @@ pub enum DailyQuestTimeType {
 }
 
 /// Daily quest status enumeration.
-///
-/// C++ Reference: `enum class DailyQuestStatus { timewait, comp, ongoing }`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DailyQuestStatus {

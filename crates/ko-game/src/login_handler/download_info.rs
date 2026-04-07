@@ -1,19 +1,12 @@
 //! LS_DOWNLOADINFO_REQ (0x02) handler — patch download information.
-//!
-//! C++ Reference: `KOOriginalGameServer/LoginServer/LoginSession.cpp:101-148`
-//!
 //! The launcher sends its current client version. The server compares it
 //! against the client_version database table and returns a list of patch
 //! files to download. If the client is up-to-date, an empty list is sent.
-//!
 //! ## Request (Client → Server)
-//!
 //! | Offset | Type  | Description                    |
 //! |--------|-------|--------------------------------|
 //! | 0      | u16le | Client's current version       |
-//!
 //! ## Response (Server → Client)
-//!
 //! | Offset | Type   | Description                   |
 //! |--------|--------|-------------------------------|
 //! | 0      | string | Download URL (u16le len + bytes) |
@@ -27,7 +20,6 @@ use ko_protocol::{LoginOpcode, Packet, PacketReader};
 use crate::login_session::LoginSession;
 
 /// Handle LS_DOWNLOADINFO_REQ from the launcher.
-///
 /// Queries the client_version table for patches newer than the client's
 /// version and returns them as a list of filenames to download.
 pub async fn handle(session: &mut LoginSession, pkt: Packet) -> anyhow::Result<()> {

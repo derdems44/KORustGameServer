@@ -1,13 +1,8 @@
 //! DOT/HOT (Damage/Heal Over Time) tick system.
-//!
-//! C++ Reference: `UserHealtMagicSpSystem.cpp` — `CUser::UserDurationSkill()`
-//!
 //! Runs every 2 seconds, processing all active durational skills (type 3 effects).
 //! Each tick applies the HP amount (negative = damage, positive = heal) and
 //! checks if the effect has expired. Death from DOT damage is handled.
-//!
 //! ## DOT tick interval
-//!
 //! C++ uses a 2-second interval per tick. The `bDuration` field from `MagicType3Row`
 //! determines total ticks: `tick_limit = bDuration / 2`.
 
@@ -24,12 +19,9 @@ use crate::systems::event_room;
 use crate::world::{WorldState, USER_DEAD, ZONE_CHAOS_DUNGEON, ZONE_KNIGHT_ROYALE};
 
 /// DOT tick interval in seconds.
-///
-/// C++ Reference: `DURATION_SKILL_TICK = 2000` (2 seconds)
 const DOT_TICK_INTERVAL_SECS: u64 = 2;
 
 /// Start the DOT/HOT tick background task.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
 pub fn start_dot_tick_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -42,11 +34,8 @@ pub fn start_dot_tick_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()
 }
 
 /// Process one DOT/HOT tick — apply HP changes from all active durational skills.
-///
-/// C++ Reference: `CUser::UserDurationSkill()` — iterates `m_durationalSkills[]`
 fn process_dot_tick(world: &WorldState) {
     // ── Pre-check temple event is_attackable state (once per tick) ───
-    // C++ Reference: MagicInstance.cpp:3635-3638 — skip DOT damage in
     // temple event zones when combat is not allowed.
     let is_event_attackable = world
         .event_room_manager
@@ -57,7 +46,6 @@ fn process_dot_tick(world: &WorldState) {
 
     // Track sessions that had DOT expirations (negative hp_amount that expired)
     // so we can send USER_STATUS_DOT cure when no DOTs remain.
-    // C++ Reference: UserDurationSkillSystem.cpp:147,202-203
     let mut sessions_with_expired_dots: HashSet<u16> = HashSet::new();
 
     for (sid, hp_change, expired) in &ticks {
@@ -84,7 +72,6 @@ fn process_dot_tick(world: &WorldState) {
         // Skip DOT damage in temple event zones when combat is not allowed.
         // The DOT still ticks (tick_count advances, DOT expires normally) but
         // no HP change is applied during non-combat event phases.
-        // C++ Reference: MagicInstance.cpp:3635-3638
         if !is_event_attackable && hp_change < 0 && event_room::is_in_temple_event_zone(pos.zone_id) {
             // Even if skipping HP application, still send expiry packets
             if expired {
@@ -97,21 +84,18 @@ fn process_dot_tick(world: &WorldState) {
         }
 
         // Apply HP change (undead: healing becomes damage)
-        // C++ Reference: UserHealtMagicSpSystem.cpp:138-142 — if m_bIsUndead, amount = -amount
         let mut effective_change = if hp_change > 0 && world.is_undead(sid) {
             -hp_change
         } else {
             hp_change
         };
 
-        // C++ Reference: UserDurationSkillSystem.cpp calls HpChange(isDOT=true)
         // which applies mastery passives + mana absorb (no mirror — pAttacker=nullptr).
         if effective_change < 0 {
             let mut damage = -effective_change;
             let original_damage = damage;
 
             // ── Mastery passive damage reduction ────────────────────────
-            // C++ Reference: UserHealtMagicSpSystem.cpp:114-123
             {
                 let victim_zone = pos.zone_id;
                 let not_use_zone =
@@ -127,7 +111,6 @@ fn process_dot_tick(world: &WorldState) {
             }
 
             // ── Mana Absorb (Outrage/Frenzy/Mana Shield) ─────────────
-            // C++ Reference: UserHealtMagicSpSystem.cpp:125-135
             {
                 let victim_zone = pos.zone_id;
                 let not_use_zone =
@@ -173,12 +156,10 @@ fn process_dot_tick(world: &WorldState) {
         world.update_character_hp(sid, new_hp);
 
         // Send HP update to the player
-        // C++ Reference: UserHealtMagicSpSystem.cpp:179 — result << m_MaxHp << m_sHp << uint32(tid)
         let hp_pkt = crate::systems::regen::build_hp_change_packet(ch.max_hp, new_hp);
         world.send_to_session_owned(sid, hp_pkt);
 
         // Send MAGIC_DURATION_EXPIRED packet when a DOT/HOT slot expires.
-        // C++ Reference: UserDurationSkillSystem.cpp:169-179
         if expired {
             send_dot_expired_packet(world, sid, hp_change);
             if hp_change < 0 {
@@ -204,7 +185,6 @@ fn process_dot_tick(world: &WorldState) {
 
     // After processing all slots: if a session had DOT expirations and no
     // harmful DOTs remain, send USER_STATUS_DOT cure to revert the HP bar.
-    // C++ Reference: UserDurationSkillSystem.cpp:201-203
     for sid in sessions_with_expired_dots {
         if !world.has_active_harmful_dot(sid) {
             send_user_status_update_packet(world, sid, USER_STATUS_DOT, USER_STATUS_CURE);
@@ -265,7 +245,6 @@ fn process_dot_tick(world: &WorldState) {
             }
         } else {
             // NPC survived — notify AI for aggro targeting
-            // C++ Reference: MagicInstance.cpp:5292 — ChangeTarget on DOT damage
             world.notify_npc_damaged(npc_id, caster_sid);
 
             // Send HP bar update to caster
@@ -294,8 +273,6 @@ fn process_dot_tick(world: &WorldState) {
 }
 
 /// Send a `MAGIC_DURATION_EXPIRED` packet when a DOT/HOT slot expires.
-///
-/// C++ Reference: `UserDurationSkillSystem.cpp:171-179`
 /// ```cpp
 /// Packet result(WIZ_MAGIC_PROCESS, uint8(MagicOpcode::MAGIC_DURATION_EXPIRED));
 /// if (pEffect->m_sHPAmount > 0)
@@ -304,7 +281,6 @@ fn process_dot_tick(world: &WorldState) {
 ///     result << uint8(200); // DOT
 /// Send(&result);
 /// ```
-///
 /// The packet reuses the same `MAGIC_DURATION_EXPIRED` sub-opcode (5) as buff
 /// expiry, but the payload byte distinguishes DOT/HOT:
 /// - `100` = HOT (heal-over-time) expired
@@ -479,7 +455,6 @@ mod tests {
 
     /// DOT tick skip: player in BDW zone (84) with is_attackable=false.
     /// DOT damage should be skipped (hp_change < 0 in event zone).
-    /// C++ Reference: MagicInstance.cpp:3635-3638
     #[test]
     fn test_dot_tick_skip_event_zone_not_attackable() {
         let world = WorldState::new();

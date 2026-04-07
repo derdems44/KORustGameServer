@@ -1,21 +1,14 @@
 //! WIZ_OPERATOR (0x40) handler — GM operator commands sent via the client's GM panel.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/GMCommandsHandler.cpp:6-78`
-//!
 //! ## Client -> Server (WIZ_OPERATOR 0x40)
-//!
 //! ```text
 //! [u8 sub_opcode] [string target_name]
 //! ```
-//!
-//! ## Sub-opcodes (C++ `OperatorSubOpcodes` enum in packets.h:665-675)
-//!
+//! ## Sub-opcodes (`OperatorSubOpcodes` enum in packets.h:665-675)
 //! | Code | Name                  | Action                            |
 //! |------|-----------------------|-----------------------------------|
 //! | 1    | OPERATOR_ARREST       | GM teleports to target's location |
 //! | 5    | OPERATOR_CUTOFF       | Disconnect target player          |
 //! | 7    | OPERATOR_SUMMON       | Teleport target to GM's location  |
-//!
 //! Sub-opcodes 2,3,4,6,8,9 are defined in C++ but not handled in OperatorCommand.
 
 use std::sync::atomic::Ordering;
@@ -35,15 +28,12 @@ const PRISON_X: f32 = 170.0;
 /// Prison spawn Z coordinate.
 const PRISON_Z: f32 = 146.0;
 
-/// Operator sub-opcode constants from C++ `OperatorSubOpcodes` enum.
+/// Operator sub-opcode constants from `OperatorSubOpcodes` enum.
 const OPERATOR_ARREST: u8 = 1;
 const OPERATOR_CUTOFF: u8 = 5;
 const OPERATOR_SUMMON: u8 = 7;
 
 /// Handle WIZ_OPERATOR (0x40) — GM operator command.
-///
-/// C++ Reference: `CUser::OperatorCommand` in `GMCommandsHandler.cpp:7-78`
-///
 /// Packet format: `[u8 sub_opcode] [string target_name]`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
@@ -54,7 +44,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let sid = session.session_id();
 
     // Authority check: only GM (authority=0) can use operator commands
-    // C++ Reference: GMCommandsHandler.cpp:9 — `if (!isGM()) return;`
     let char_info = match world.get_character_info(sid) {
         Some(ch) => ch,
         None => return Ok(()),
@@ -88,13 +77,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Lookup target player
-    // C++ Reference: GMCommandsHandler.cpp:23 — GetUserPtr(strUserID, TYPE_CHARACTER)
     let target_sid = world.find_session_by_name(&target_name);
 
     match sub_opcode {
         OPERATOR_ARREST => {
             // GM teleports to target's location
-            // C++ Reference: GMCommandsHandler.cpp:40-49
             if let Some(target) = target_sid {
                 if let Some(target_pos) = world.get_position(target) {
                     info!(
@@ -124,7 +111,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         OPERATOR_SUMMON => {
             // Teleport target player to GM's location
-            // C++ Reference: GMCommandsHandler.cpp:52-60
             if let Some(target) = target_sid {
                 let gm_pos = match world.get_position(sid) {
                     Some(p) => p,
@@ -171,7 +157,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 
         OPERATOR_CUTOFF => {
             // Disconnect target player
-            // C++ Reference: GMCommandsHandler.cpp:63-72 — pUser->Disconnect()
             if let Some(target) = target_sid {
                 info!(
                     "[{}] GM CUTOFF: disconnecting '{}'",
@@ -205,9 +190,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Chat-based GM commands dispatched from the chat handler.
-///
-/// C++ Reference: `CUser::ProcessChatCommand` in `ChatHandler.cpp:700-727`
-///
 /// GM commands are triggered by messages starting with "+".
 /// Returns `true` if the message was handled as a GM command (should not be
 /// broadcast as normal chat).
@@ -233,7 +215,6 @@ pub async fn process_chat_command(
     };
 
     // Only GMs can use chat commands (authority=0: GAME_MASTER, authority=2: GM_USER/instant GM)
-    // C++ ref: ChatHandler.cpp:311 — isGM() || isGMUser()
     if char_info.authority != 0 && char_info.authority != 2 {
         tracing::debug!(
             "[{}] GM command '{}': authority={} (not GM)",
@@ -417,9 +398,6 @@ pub async fn process_chat_command(
 }
 
 /// Send a help/feedback message to the GM via PUBLIC_CHAT.
-///
-/// C++ Reference: `CGameServerDlg::SendHelpDescription` in `ChatHandler.cpp:1381-1389`
-///
 /// Uses WIZ_CHAT with PUBLIC_CHAT type, sent only to the GM who issued the command.
 fn send_help(session: &mut ClientSession, message: &str) {
     let world = session.world().clone();
@@ -446,8 +424,6 @@ fn send_help(session: &mut ClientSession, message: &str) {
 }
 
 /// +give <charname> <itemid> <count> <time> — Give item to another player.
-///
-/// C++ Reference: `CUser::HandleGiveItemCommand` in `GMCommandsHandler.cpp:1101-1156`
 fn handle_give_item(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 2 {
         send_help(session, "Usage: +give CharacterName ItemID [Count]");
@@ -509,8 +485,6 @@ fn handle_give_item(session: &mut ClientSession, args: &[&str]) -> anyhow::Resul
 }
 
 /// +item <itemid> [count] — Give item to self.
-///
-/// C++ Reference: `CUser::HandleGiveItemSelfCommand` in `GMCommandsHandler.cpp:1188-1227`
 fn handle_give_item_self(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
         send_help(session, "Usage: +item ItemID [Count]");
@@ -555,8 +529,6 @@ fn handle_give_item_self(session: &mut ClientSession, args: &[&str]) -> anyhow::
 }
 
 /// +noah <charname> <amount> — Give or take gold from a player.
-///
-/// C++ Reference: `CUser::HandleGoldChangeCommand` in `GMCommandsHandler.cpp:958-1006`
 fn handle_gold_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 2 {
         send_help(session, "Usage: +noah CharacterName Gold(+/-)");
@@ -605,8 +577,6 @@ fn handle_gold_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Res
 }
 
 /// +zone <zone_id> — Teleport GM to the specified zone.
-///
-/// C++ Reference: `CUser::HandleZoneChangeCommand` in `GMCommandsHandler.cpp:1302-1335`
 async fn handle_zone_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
         send_help(session, "Usage: +zone ZoneNumber");
@@ -648,8 +618,6 @@ async fn handle_zone_change(session: &mut ClientSession, args: &[&str]) -> anyho
 }
 
 /// +goto <x> <z> — Teleport GM to coordinates in current zone.
-///
-/// C++ Reference: `CUser::HandleLocationChange` in `GMCommandsHandler.cpp:1338-1372`
 async fn handle_location_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 2 {
         send_help(session, "Usage: +goto X Z");
@@ -693,8 +661,6 @@ async fn handle_location_change(session: &mut ClientSession, args: &[&str]) -> a
 }
 
 /// +summonuser <charname> — Summon a player to GM's location.
-///
-/// C++ Reference: `CUser::HandleSummonUserCommand` in `GMCommandsHandler.cpp:1230-1262`
 fn handle_summon_user(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
         send_help(session, "Usage: +summonuser CharacterName");
@@ -751,8 +717,6 @@ fn handle_summon_user(session: &mut ClientSession, args: &[&str]) -> anyhow::Res
 }
 
 /// +tpon <charname> — Teleport GM to a player's location.
-///
-/// C++ Reference: `CUser::HandleTpOnUserCommand` in `GMCommandsHandler.cpp:1266-1298`
 async fn handle_tp_on_user(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
         send_help(session, "Usage: +tpon CharacterName");
@@ -791,9 +755,6 @@ async fn handle_tp_on_user(session: &mut ClientSession, args: &[&str]) -> anyhow
 }
 
 /// +mon <monster_sid> [count] — Spawn monster at GM's location.
-///
-/// C++ Reference: `CUser::HandleMonsterSummonCommand` in `GMCommandsHandler.cpp:1376-1412`
-///
 /// Calls `world.spawn_event_npc()` to create monster instances at the GM's
 /// current position, register them in the region grid, and broadcast NPC_IN.
 fn handle_monster_summon(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -862,9 +823,6 @@ fn handle_monster_summon(session: &mut ClientSession, args: &[&str]) -> anyhow::
 }
 
 /// +npc <npc_sid> — Spawn NPC at GM's location.
-///
-/// C++ Reference: `CUser::HandleNPCSummonCommand` in `GMCommandsHandler.cpp:1416-1439`
-///
 /// Calls `world.spawn_event_npc()` with `is_monster=false`.
 fn handle_npc_summon(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -921,9 +879,6 @@ fn handle_npc_summon(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
 }
 
 /// +notice <message> — Send server-wide notice.
-///
-/// C++ Reference: `CGameServerDlg::HandleNoticeCommand` in `ChatHandler.cpp`
-///
 /// Broadcasts the message as a WAR_SYSTEM_CHAT (type 8) to all players.
 fn handle_notice(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -960,8 +915,6 @@ fn handle_notice(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<(
 }
 
 /// +count — Show online player count.
-///
-/// C++ Reference: `CGameServerDlg::HandleCountCommand` in `ChatHandler.cpp`
 fn handle_count(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
 
@@ -973,8 +926,6 @@ fn handle_count(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +mute <charname> — Mute a player (prevent chat).
-///
-/// C++ Reference: `CUser::HandleMuteCommand` in `GMCommandsHandler.cpp:102-139`
 async fn handle_mute(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
         send_help(session, "Usage: +mute CharacterName");
@@ -1002,7 +953,6 @@ async fn handle_mute(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
     });
 
     // Persist mute to DB so it survives reconnect
-    // C++ Reference: DBAgent.cpp:1672-1680 — UserAuthorityUpdate(MUTE)
     if let Some(char_id) = world.get_session_name(target_sid) {
         let pool = session.pool().clone();
         let char_repo = ko_db::repositories::character::CharacterRepository::new(&pool);
@@ -1024,8 +974,6 @@ async fn handle_mute(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
 }
 
 /// +unmute <charname> — Unmute a player (allow chat).
-///
-/// C++ Reference: `CUser::HandleUnMuteCommand` in `GMCommandsHandler.cpp:142-179`
 async fn handle_unmute(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
         send_help(session, "Usage: +unmute CharacterName");
@@ -1074,8 +1022,6 @@ async fn handle_unmute(session: &mut ClientSession, args: &[&str]) -> anyhow::Re
 }
 
 /// +ban <charname> — Disconnect/ban a player.
-///
-/// C++ Reference: `CUser::OperatorCommand(OPERATOR_CUTOFF)` — for immediate disconnect.
 /// Full ban persistence requires DB support (authority update).
 fn handle_ban(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -1108,9 +1054,6 @@ fn handle_ban(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> 
 }
 
 /// +kill <npc_id> — Kill/remove an NPC/monster by runtime ID.
-///
-/// C++ Reference: `CUser::HandleMonKillCommand` in `GMCommandsHandler.cpp:1443-1470`
-///
 /// The C++ version uses the player's selected target. Our version accepts
 /// the NPC runtime ID as an argument for easier GM use.
 fn handle_kill(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -1155,9 +1098,6 @@ fn handle_kill(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()>
 }
 
 /// +tp_all <zone_id> [target_zone_id] — Teleport all players from a zone.
-///
-/// C++ Reference: `CUser::HandleTeleportAllCommand` in `GMCommandsHandler.cpp:1473-1511`
-///
 /// If target_zone_id is given, moves all players from zone_id to target_zone_id.
 /// Otherwise, kicks all players from zone_id to their bind point.
 fn handle_teleport_all(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -1249,7 +1189,6 @@ fn handle_teleport_all(session: &mut ClientSession, args: &[&str]) -> anyhow::Re
 }
 
 /// Generic helper for GM `+*_add` event rate commands.
-///
 /// All four event rate commands (exp_add, money_add, np_add, drop_add) share
 /// identical logic — parse a u8 percentage, store it in an `AtomicU8`, and
 /// send a confirmation message.
@@ -1290,40 +1229,30 @@ fn set_event_rate(
 }
 
 /// +exp_add <percent> — Set server-wide bonus EXP percentage.
-///
-/// C++ Reference: `CUser::HandleExpAddCommand` in `GMCommandsHandler.cpp:687-729`
 fn handle_exp_add(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     let tw = session.world().game_time_weather().clone();
     set_event_rate(session, args, &tw.exp_event_amount, "exp_add", "EXP")
 }
 
 /// +money_add <percent> — Set server-wide bonus coin percentage.
-///
-/// C++ Reference: `CUser::HandleMoneyAddCommand` in `GMCommandsHandler.cpp:732-776`
 fn handle_money_add(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     let tw = session.world().game_time_weather().clone();
     set_event_rate(session, args, &tw.coin_event_amount, "money_add", "Coin")
 }
 
 /// +np_add <percent> — Set server-wide bonus NP (loyalty) percentage.
-///
-/// C++ Reference: `CUser::HandleNPAddCommand` in `GMCommandsHandler.cpp:779-821`
 fn handle_np_add(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     let tw = session.world().game_time_weather().clone();
     set_event_rate(session, args, &tw.np_event_amount, "np_add", "NP")
 }
 
 /// +drop_add <percent> — Set server-wide bonus drop rate percentage.
-///
-/// C++ Reference: `CUser::HandleDropAddCommand` in `GMCommandsHandler.cpp:824-867`
 fn handle_drop_add(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     let tw = session.world().game_time_weather().clone();
     set_event_rate(session, args, &tw.drop_event_amount, "drop_add", "Drop")
 }
 
 /// +np_change <charname> <amount> — Change a player's loyalty (NP) points.
-///
-/// C++ Reference: `CUser::HandleLoyaltyChangeCommand` in `GMCommandsHandler.cpp:870-913`
 fn handle_np_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 2 {
         send_help(session, "Usage: +np_change CharacterName Loyalty(+/-)");
@@ -1371,8 +1300,6 @@ fn handle_np_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Resul
 }
 
 /// +exp_change <charname> <amount> — Change a player's experience points.
-///
-/// C++ Reference: `CUser::HandleExpChangeCommand` in `GMCommandsHandler.cpp:916-953`
 fn handle_exp_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 2 {
         send_help(session, "Usage: +exp_change CharacterName Exp(+/-)");
@@ -1424,8 +1351,6 @@ fn handle_exp_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
 }
 
 /// +hapis <charname> — Send a player to the prison zone.
-///
-/// C++ Reference: `CUser::HandleSummonPrison` in `GMCommandsHandler.cpp:1911-1947`
 fn handle_prison(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
         send_help(session, "Usage: +hapis CharacterName");
@@ -1493,8 +1418,6 @@ fn handle_prison(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<(
 }
 
 /// +help — List all available GM commands.
-///
-/// C++ Reference: `CUser::HandleHelpCommand` in `GMCommandsHandler.cpp:83-98`
 fn handle_help(session: &mut ClientSession) -> anyhow::Result<()> {
     let commands = [
         "=== GM Commands (use + or / prefix) ===",
@@ -1578,10 +1501,6 @@ fn handle_help(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +war_open <type> — Start a war event.
-///
-/// C++ Reference: `CUser::HandleBorderDefenceWarOpen` in `GMCommandsHandler.cpp:1696-1706`
-///                `CUser::HandleJuraidMountainOpen` in `GMCommandsHandler.cpp:1708-1718`
-///
 /// Supported types: bdw (Border Defence War), juraid (Juraid Mountain), chaos (Chaos Expansion).
 /// Calls `open_virtual_event()` with the event's vroom_opts to start the Registration phase.
 fn handle_war_open(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -1673,7 +1592,6 @@ fn handle_war_open(session: &mut ClientSession, args: &[&str]) -> anyhow::Result
     // Broadcast sign-up UI + notice on success
     if opened {
         // Send the event sign-up UI broadcast to all eligible players.
-        // C++ Reference: TempleEventStart() in EventMainSystem.cpp:607-633
         let sign_secs = (params.vroom_opts.sign as u64) * 60;
         let start_pkt = crate::systems::event_room::build_event_start_broadcast(
             event_type as i16,
@@ -1711,10 +1629,6 @@ fn handle_war_open(session: &mut ClientSession, args: &[&str]) -> anyhow::Result
 }
 
 /// +war_close <type> — Stop a war event.
-///
-/// C++ Reference: `CUser::HandleBorderDefenceWarClosed` in `GMCommandsHandler.cpp:1720-1730`
-///                `CUser::HandleJuraidMountainClosed` in `GMCommandsHandler.cpp:1732-1742`
-///
 /// Supported types: bdw, juraid, chaos. Same event types as `war_open`.
 /// Calls `manual_close()` to trigger the finish delay → cleanup cycle.
 fn handle_war_close(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -1786,9 +1700,6 @@ fn handle_war_close(session: &mut ClientSession, args: &[&str]) -> anyhow::Resul
 }
 
 /// +funclass_open <setting_id> — Start a Fun Class (Cinderella War) event.
-///
-/// C++ Reference: `CGameServerDlg::CindirellaOpen()` in `CindirellaWar.cpp:622-648`
-///
 /// Validates setting_id, sets event zone, starts prepare phase.
 fn handle_funclass_open(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -1864,9 +1775,6 @@ fn handle_funclass_open(session: &mut ClientSession, args: &[&str]) -> anyhow::R
 }
 
 /// +funclass_close — Stop the active Fun Class (Cinderella War) event.
-///
-/// C++ Reference: `CGameServerDlg::CindirellaClose()` in `CindirellaWar.cpp:655-704`
-///
 /// Restores all participants and clears event state.
 fn handle_funclass_close(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -1909,10 +1817,6 @@ fn handle_funclass_close(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +clear [charname] — Clear inventory (self if no name given).
-///
-/// C++ Reference: `CUser::HandleInventoryClear` in `GMCommandsHandler.cpp:1762-1796`
-///                `CUser::InventoryClear()` in `ItemHandler.cpp:558-605`
-///
 /// Clears all bag inventory slots (SLOT_MAX to SLOT_MAX+HAVE_MAX), sends the
 /// WIZ_ITEM_MOVE refresh packet so the client UI updates, and recalculates weight.
 fn handle_clear(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -1933,7 +1837,6 @@ fn handle_clear(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()
     };
 
     // Clear all bag inventory slots (14..42) — keep equipment slots (0..14)
-    // C++ Reference: InventoryClear clears SLOT_MAX to SLOT_MAX+HAVE_MAX
     world.update_session(target_sid, |h| {
         for slot in h.inventory.iter_mut().skip(14).take(28) {
             slot.item_id = 0;
@@ -1976,7 +1879,6 @@ fn handle_clear(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()
 }
 
 /// +reload_scripts — Invalidate the Lua quest script cache.
-///
 /// Forces all scripts to be re-read and re-compiled on next execution.
 /// Useful for hot-reloading quest scripts during development.
 fn handle_reload_scripts(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -1999,16 +1901,12 @@ fn handle_reload_scripts(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +botspawn <class> <level> [nation] [count] — Spawn bot(s) at GM's position.
-///
-/// C++ Reference: `CUser::HandleBotSpawnFarm()` in `BotChatSpawnHandler.cpp:242-277`
-/// + `CUser::HandleBotSpawnPk()` in `BotChatSpawnHandler.cpp:310-343`
-///
+/// + `CUser::HandleBotSpawnPk()`
 /// Parameters:
 /// - class: 1=warrior, 2=rogue, 3=mage, 4=priest (or C++ class IDs 5=rogue, 6=mage, 8=priest)
 /// - level: 1-83
 /// - nation: 1=Karus, 2=ElMorad (default: GM's nation)
 /// - count: 1-10 (default: 1)
-///
 /// Spawns bots at the GM's current position with random offset (C++: myrand(1,5)).
 fn handle_bot_spawn(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 2 {
@@ -2071,7 +1969,6 @@ fn handle_bot_spawn(session: &mut ClientSession, args: &[&str]) -> anyhow::Resul
     let mut rng = rand::thread_rng();
 
     for _ in 0..count {
-        // C++ Reference: `BotChatSpawnHandler.cpp:271-273`
         //   float BonX = myrand(1, 5) * 1.0f;
         //   float BonZ = myrand(1, 5) * 1.0f;
         let bonus_x: f32 = rng.gen_range(1..=5) as f32;
@@ -2117,11 +2014,8 @@ fn handle_bot_spawn(session: &mut ClientSession, args: &[&str]) -> anyhow::Resul
 }
 
 /// +botkill [all] — Despawn bots in GM's zone or server-wide.
-///
-/// C++ Reference:
 /// - `CUser::HandleBotDisconnected()` in `BotChatSpawnHandler.cpp:2-25` — single bot
 /// - `CUser::HandleBotAllDisconnected()` in `BotChatSpawnHandler.cpp:58-97` — all bots
-///
 /// - `+botkill` (no args): despawn all bots in the GM's current zone
 /// - `+botkill all` or `+allbotkill`: despawn all bots server-wide
 fn handle_bot_kill(
@@ -2166,11 +2060,8 @@ fn handle_bot_kill(
 }
 
 /// GM command: `+tournamentstart ClanRed ClanBlue ZoneID [Duration]`
-///
 /// Starts a tournament between two clans in the specified arena zone.
 /// Default duration: 1800 seconds (30 minutes).
-///
-/// C++ Reference: `HandleTournamentStart` in `ChatHandler.cpp:1230-1232`
 fn handle_tournament_start(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     // Usage: +tournamentstart ClanRed ClanBlue ZoneID [Duration]
     if args.len() < 3 {
@@ -2216,11 +2107,8 @@ fn handle_tournament_start(session: &mut ClientSession, args: &[&str]) -> anyhow
 }
 
 /// GM command: `+tournamentclose ZoneID`
-///
 /// Closes the tournament in the specified arena zone. Kicks all players
 /// in the zone to Moradon and removes the tournament entry.
-///
-/// C++ Reference: `HandleTournamentClose` in `ChatHandler.cpp:1129-1227`
 fn handle_tournament_close(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
         send_help(session, "Usage: +tournamentclose ZoneID");
@@ -2243,11 +2131,8 @@ fn handle_tournament_close(session: &mut ClientSession, args: &[&str]) -> anyhow
 }
 
 /// GM command: `+cswstart [PrepMinutes] [WarMinutes]`
-///
 /// Starts Castle Siege War with preparation phase followed by war phase.
 /// Defaults: PrepMinutes=10, WarMinutes=40 (read from DB if available).
-///
-/// C++ Reference: `CGameServerDlg::CastleSiegeWarfarePrepaOpen()` in `thyke_csw.cpp:99-112`
 async fn handle_csw_start(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     let world = session.world().clone();
 
@@ -2312,10 +2197,7 @@ async fn handle_csw_start(session: &mut ClientSession, args: &[&str]) -> anyhow:
 }
 
 /// GM command: `+cswclose`
-///
 /// Immediately closes Castle Siege War and resets all state.
-///
-/// C++ Reference: `CGameServerDlg::CastleSiegeWarfareClose()` in `thyke_csw.cpp:45-55`
 async fn handle_csw_close(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
 
@@ -2350,9 +2232,6 @@ async fn handle_csw_close(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle `+bifroststart [minutes]` GM command.
-///
-/// C++ Reference: `BeefEventManuelOpening()` in `EventMainTimer.cpp:106-138`
-///
 /// Opens the Bifrost monument event with an optional monument-phase duration
 /// (defaults to 120 minutes if omitted).
 fn handle_bifrost_start(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -2378,7 +2257,6 @@ fn handle_bifrost_start(session: &mut ClientSession, args: &[&str]) -> anyhow::R
 }
 
 /// Handle `+bifrostclose` GM command.
-///
 /// Immediately resets the Bifrost event and kicks all players from the zone.
 fn handle_bifrost_close(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -2415,15 +2293,11 @@ fn handle_bifrost_close(session: &mut ClientSession) -> anyhow::Result<()> {
 // ── Flying Santa/Angel ──────────────────────────────────────────────────
 
 /// Flying event type constants.
-///
-/// C++ Reference: `GameDefine.h:4330-4336` — `FlyingSantaOrAngel` enum
 const FLYING_NONE: u8 = 0;
 const FLYING_SANTA: u8 = 1;
 const FLYING_ANGEL: u8 = 2;
 
 /// Handle +santa, +santaclose, +angel, +angelclose GM commands.
-///
-/// C++ Reference: `ChatHandler.cpp:1352-1367` — `HandleSantaCommand` etc.
 fn handle_santa(session: &mut ClientSession, flying_type: u8) {
     let world = session.world().clone();
     world
@@ -2446,8 +2320,6 @@ fn handle_santa(session: &mut ClientSession, flying_type: u8) {
 }
 
 /// Handle +permanent <text> — Set the permanent chat banner.
-///
-/// C++ Reference: `CGameServerDlg::HandlePermanentChatCommand` in `ChatHandler.cpp:1369-1378`
 /// Broadcasts PERMANENT_CHAT (type 9) to all players and stores state.
 fn handle_permanent_chat(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -2481,8 +2353,6 @@ fn handle_permanent_chat(session: &mut ClientSession, args: &[&str]) -> anyhow::
 }
 
 /// Handle +offpermanent — Clear the permanent chat banner.
-///
-/// C++ Reference: `CGameServerDlg::HandlePermanentChatOffCommand` in `ChatHandler.cpp:1417-1424`
 /// Broadcasts END_PERMANENT_CHAT (type 10) to all players.
 fn handle_permanent_chat_off(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -2509,8 +2379,6 @@ fn handle_permanent_chat_off(session: &mut ClientSession) -> anyhow::Result<()> 
 }
 
 /// Handle +level <name> <level> — Force-set a player's level.
-///
-/// C++ Reference: `ChatHandler.cpp:2098-2141` — `HandleLevelChange`
 /// Requires all equipped items to be unequipped first (SLOT_MAX check).
 /// Calls LevelChange + AllSkillPointChange + AllPointChange.
 fn handle_level_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -2543,7 +2411,6 @@ fn handle_level_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Re
     };
 
     // Call level_change to set level and send proper packets
-    // C++ Reference: LevelChange(Level, false) + AllSkillPointChange + AllPointChange
     crate::handler::level::level_change(&world, target_sid, level, false);
 
     send_help(session, "Level Change Process Success!");
@@ -2552,8 +2419,6 @@ fn handle_level_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Re
 }
 
 /// Handle +kc <name> <amount> — Give/take Knight Cash.
-///
-/// C++ Reference: `GMCommandsHandler.cpp:2260-2312` — `HandleKcChangeCommand`
 /// Calls GiveBalance(KC) and sends KCUPDATE packet.
 fn handle_kc_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 2 {
@@ -2585,7 +2450,6 @@ fn handle_kc_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Resul
     };
 
     // Update KC balance
-    // C++ Reference: GiveBalance(KC) sends KCUPDATE packet
     let pool = session.pool().clone();
     if amount > 0 {
         super::knight_cash::cash_gain(&world, &pool, target_sid, amount as u32);
@@ -2603,8 +2467,6 @@ fn handle_kc_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Resul
 }
 
 /// Handle +countzone — Count players in GM's current zone.
-///
-/// C++ Reference: `GMCommandsHandler.cpp:2728-2751` — `HandleCountZoneCommand`
 /// Counts total, Karus, and El Morad players in the GM's zone.
 fn handle_count_zone(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -2622,8 +2484,6 @@ fn handle_count_zone(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle +countlevel <level> — Count online players at a specific level.
-///
-/// C++ Reference: `GMCommandsHandler.cpp:2755-2794` — `HandleCountLevelCommand`
 fn handle_count_level(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
         send_help(session, "Usage: +countlevel Level (1-83)");
@@ -2651,8 +2511,6 @@ fn handle_count_level(session: &mut ClientSession, args: &[&str]) -> anyhow::Res
 }
 
 /// Select war commanders from top-ranked clan leaders.
-///
-/// C++ Reference: `BattleSystem.cpp:386-411` — `BattleZoneSelectCommanders()`
 /// Picks up to 5 clan leaders per nation who are online and in a war zone.
 /// Each selected commander gets COMMAND_CAPTAIN fame (100) + WIZ_AUTHORITY_CHANGE broadcast.
 /// Commander names are announced via WAR_SYSTEM_CHAT to their respective nation.
@@ -2682,7 +2540,6 @@ pub(crate) async fn select_war_commanders(world: &crate::world::WorldState) {
                 Some(s) => s,
                 None => continue,
             };
-            // C++ Reference: KnightsRankSet.h — chief must be in a war zone
             let zone_id = world
                 .with_session(chief_sid, |h| h.position.zone_id)
                 .unwrap_or(0);
@@ -2729,7 +2586,6 @@ pub(crate) async fn select_war_commanders(world: &crate::world::WorldState) {
     }
 
     // Broadcast commander names per nation (WAR_SYSTEM_CHAT)
-    // C++ Reference: LoadServerData.cpp:813-843 — captain name announcement
     if !karus_names.is_empty() {
         let text = karus_names
             .iter()
@@ -2758,8 +2614,6 @@ pub(crate) async fn select_war_commanders(world: &crate::world::WorldState) {
 }
 
 /// Demote all war commanders back to their clan role fame.
-///
-/// C++ Reference: `BattleSystem.cpp:417-466` — `BattleZoneResetCommanders()`
 /// For each commander: if online and fame==COMMAND_CAPTAIN, demote based on clan role:
 /// - King clan leader → CHIEF(1), vice chief → VICECHIEF(2), other → TRAINEE(5)
 /// - Non-king → CHIEF(1), no clan → fame 0
@@ -2820,10 +2674,7 @@ pub(crate) async fn reset_war_commanders(world: &crate::world::WorldState) {
 }
 
 /// Broadcast GOLDSHELL (coin-mining) activation/deactivation to all online players.
-///
-/// C++ Reference: `BattleSystem.cpp:318-342` — `BattleEventGiveItem()`
 /// Packet: `WIZ_MAP_EVENT(0x53)` + `u8(GOLDSHELL=9)` + `u8(flag)` + `u32(socket_id)`
-///
 /// Each player receives a personalized packet containing their own socket ID.
 const GOLDSHELL: u8 = 9;
 
@@ -2841,9 +2692,6 @@ pub(crate) fn broadcast_goldshell(world: &crate::world::WorldState, enable: bool
 }
 
 /// Kick all users from a zone to their nation home zone.
-///
-/// C++ Reference: `CGameServerDlg::KickOutZoneUsers(ZoneID)` in `GameServerDlg.cpp:2103-2136`
-///
 /// Players in the given zone are teleported to their nation home zone
 /// (Karus → zone 1, El Morad → zone 2) at the zone's spawn position.
 fn kick_out_zone_users(world: &std::sync::Arc<crate::world::WorldState>, zone_id: u16) {
@@ -2873,8 +2721,6 @@ fn kick_out_zone_users(world: &std::sync::Arc<crate::world::WorldState>, zone_id
 }
 
 /// Handle +open1..+open6 — Open a nation battle war zone.
-///
-/// C++ Reference: `ChatHandler.cpp:885-1013` — `HandleWar1..6OpenCommand`
 /// calls `BattleZoneOpen(BATTLEZONE_OPEN, zone_index)`.
 fn handle_nation_war_open(session: &mut ClientSession, zone_index: u8) -> anyhow::Result<()> {
     use crate::systems::war;
@@ -2892,14 +2738,13 @@ fn handle_nation_war_open(session: &mut ClientSession, zone_index: u8) -> anyhow
     if opened {
         broadcast_goldshell(&world, true);
 
-        // Apply NPC war buffs — C++ Reference: BattleSystem.cpp:312
+        // Apply NPC war buffs
         world.change_ability_all_npcs(true);
 
-        // War open announcement — C++ Reference: GameServerDlg.cpp:1734+
+        // War open announcement
         war::broadcast_war_announcement(&world, "The war zone has opened!", None);
 
         // Kick users from conflicting zones to their home zones
-        // C++ Reference: BattleSystem.cpp:552-560 — KickOutZoneUsers()
         let battle_zone_type = world.get_battle_state().battle_zone_type;
         if battle_zone_type == 0 {
             // Standard war — kick from Ronark Land Base, Ronark Land, Bifrost, Krowaz Dominion
@@ -2920,8 +2765,6 @@ fn handle_nation_war_open(session: &mut ClientSession, zone_index: u8) -> anyhow
 }
 
 /// Handle +snow — Open a snow battle war zone.
-///
-/// C++ Reference: `ChatHandler.cpp:1027-1031` — `HandleSnowWarOpenCommand`
 /// calls `BattleZoneOpen(SNOW_BATTLE)`.
 fn handle_snow_war_open(session: &mut ClientSession) -> anyhow::Result<()> {
     use crate::systems::war;
@@ -2949,8 +2792,6 @@ fn handle_snow_war_open(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle +close — Close the active nation/snow war.
-///
-/// C++ Reference: `ChatHandler.cpp:1096-1099` — `HandleWarCloseCommand`
 /// calls `BattleZoneClose()`.
 async fn handle_nation_war_close(session: &mut ClientSession) -> anyhow::Result<()> {
     use crate::systems::war;
@@ -2962,7 +2803,7 @@ async fn handle_nation_war_close(session: &mut ClientSession) -> anyhow::Result<
         broadcast_goldshell(&world, false);
         world.change_ability_all_npcs(false);
 
-        // War close announcement — C++ Reference: GameServerDlg.cpp:1734+
+        // War close announcement
         let close_msg = if prev_type == war::SNOW_BATTLE {
             "The snow war has ended!"
         } else {
@@ -2971,7 +2812,6 @@ async fn handle_nation_war_close(session: &mut ClientSession) -> anyhow::Result<
         war::broadcast_war_announcement(&world, close_msg, None);
 
         // Demote war commanders on close
-        // C++ Reference: BattleSystem.cpp:417-466 — BattleZoneResetCommanders
         reset_war_commanders(&world).await;
         let label = if prev_type == war::SNOW_BATTLE {
             "Snow war closed"
@@ -2987,8 +2827,6 @@ async fn handle_nation_war_close(session: &mut ClientSession) -> anyhow::Result<
 }
 
 /// Handle +captain GM command — select war commanders from top ranked clans.
-///
-/// C++ Reference: `ChatHandler.cpp:1345-1349` — `HandleCaptainCommand` calls
 /// `BattleZoneSelectCommanders()`. Delegates to `select_war_commanders()`.
 async fn handle_captain(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -2999,11 +2837,7 @@ async fn handle_captain(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle +nation_change <charname> — Swap target player's nation (1↔2).
-///
-/// C++ Reference: `GMCommandsHandler.cpp:1158-1185` — `HandleNationChangeCommand`
 /// Handle +discount / +alldiscount / +offdiscount — set gold cost discount.
-///
-/// C++ Reference: `ChatHandler.cpp:1325-1342`
 /// - `+discount`: `m_sDiscount = 1` — winning nation only
 /// - `+alldiscount`: `m_sDiscount = 2` — both nations
 /// - `+offdiscount`: `m_sDiscount = 0` — off
@@ -3069,7 +2903,6 @@ fn handle_nation_change(session: &mut ClientSession, args: &[&str]) -> anyhow::R
     });
 
     // Disconnect the target so they reconnect with updated nation/class
-    // C++ ref: DatabaseThread.cpp:799-806 does SendMyInfo+INOUT_OUT+INOUT_WARP;
     // simpler to just disconnect for a clean reload.
     let mut kick_pkt = Packet::new(Opcode::WizServerChange as u8);
     kick_pkt.write_u8(0); // disconnect reason
@@ -3086,8 +2919,6 @@ fn handle_nation_change(session: &mut ClientSession, args: &[&str]) -> anyhow::R
 }
 
 /// Handle +summonknights <clanname> — Teleport all online clan members to GM's location.
-///
-/// C++ Reference: `GMCommandsHandler.cpp:1513-1584` — `HandleKnightsSummonCommand`
 fn handle_summon_knights(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
         send_help(session, "Usage: +summonknights ClanName");
@@ -3158,8 +2989,6 @@ fn handle_summon_knights(session: &mut ClientSession, args: &[&str]) -> anyhow::
 }
 
 /// Handle +partytp <charname> — Teleport all party members of target to GM's location.
-///
-/// C++ Reference: `ChatHandler.cpp:2144-2166` — `HandlePartyTP`
 /// calls `pUser->ZoneChangeParty(GetZoneID(), GetX(), GetZ())`
 fn handle_party_tp(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -3237,10 +3066,7 @@ fn handle_party_tp(session: &mut ClientSession, args: &[&str]) -> anyhow::Result
 }
 
 /// Handle +job <charname> <1-5> — Change target player's class/job.
-///
-/// C++ Reference: `GMCommandsHandler.cpp:2054-2096` — `HandleJobChangeGM`
 /// 1=Warrior, 2=Rogue, 3=Mage, 4=Priest, 5=Kurian
-///
 /// Simplified: We update the class in-memory and send ALL_POINT_CHANGE to trigger
 /// a full stat recalc. The client reloads character appearance via SendMyInfo.
 fn handle_job_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -3317,10 +3143,7 @@ fn handle_job_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
 }
 
 /// Handle +gender <charname> <1-3> — Change target player's race/gender.
-///
-/// C++ Reference: `GMCommandsHandler.cpp:2098-2257` — `HandleGenderChangeGM`
 /// 1=Male, 2=Female, 3=Barbarian (Elmorad only)
-///
 /// Simplified: Update race in-memory and send a user-info update.
 fn handle_gender_change(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 2 {
@@ -3360,7 +3183,6 @@ fn handle_gender_change(session: &mut ClientSession, args: &[&str]) -> anyhow::R
     };
 
     // Map (nation, input) → actual race code
-    // C++ Reference: GMCommandsHandler.cpp:2098-2257
     // Karus races: 1=Karus Male Warrior, 2=Karus Priest Male, 3=Karus Mage Male, 4=Karus Female
     // Elmorad races: 11=Barbarian, 12=El Male, 13=El Female
     let new_race = if target_ch.nation == 2 {
@@ -3407,8 +3229,6 @@ fn handle_gender_change(session: &mut ClientSession, args: &[&str]) -> anyhow::R
 }
 
 /// Handle +warresult <1|2> — Manually set the war result winner.
-///
-/// C++ Reference: `ChatHandler.cpp:730-757` — `HandleWarResultCommand`
 /// Calls `BattleZoneResult(winner_nation)`.
 fn handle_war_result(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     use crate::systems::war;
@@ -3449,9 +3269,6 @@ fn handle_war_result(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
 }
 
 /// +tl <charname> <amount> — Transfer Knight Cash (KC/TL) to a target player.
-///
-/// C++ Reference: `CUser::HandleTLBalanceCommand` in `GMCommandsHandler.cpp:2316-2369`
-///
 /// This is the C++ "+tl" command which adds/removes KC from a target player.
 /// Functionally identical to our existing "+kc" command — delegates to the same
 /// cash_gain/cash_lose functions.
@@ -3501,9 +3318,6 @@ fn handle_tl_balance(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
 }
 
 /// +block <charname> [days] [reason...] — Ban an account by character name.
-///
-/// C++ Reference: `CUser::Handlebannedcommand` in `ChatHandler.cpp:2392-2428`
-///
 /// Sets the account's authority to -1 (banned) and records in check_account.
 /// If the player is online, disconnects them.
 async fn handle_block(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -3611,9 +3425,6 @@ async fn handle_block(session: &mut ClientSession, args: &[&str]) -> anyhow::Res
 }
 
 /// +unblock <charname> — Unban an account by character name.
-///
-/// C++ Reference: `CUser::HandleunbannedCommand` in `ChatHandler.cpp:2470-2493`
-///
 /// Restores the account's authority to 1 (normal user).
 async fn handle_unblock(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -3681,9 +3492,6 @@ async fn handle_unblock(session: &mut ClientSession, args: &[&str]) -> anyhow::R
 }
 
 /// +genie <charname> <1|2> — Start (1) or stop (2) genie for a target player.
-///
-/// C++ Reference: `CUser::HandleGenieStartStop` in `ChatHandler.cpp:2284-2316`
-///
 /// C++ uses GetTargetID() (click-selected target). Our version takes character name
 /// as argument for easier GM use (no target selection mechanism in chat commands).
 fn handle_genie_toggle(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -3791,9 +3599,6 @@ fn handle_genie_toggle(session: &mut ClientSession, args: &[&str]) -> anyhow::Re
 }
 
 /// +givegenietime <charname> <hours> — Give genie time to a target player.
-///
-/// C++ Reference: `CUser::HandleGiveGenieTime` in `GMCommandsHandler.cpp:2834-2869`
-///
 /// Adds hours to the target's genie time and sends update packet.
 fn handle_give_genie_time(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 2 {
@@ -3851,9 +3656,6 @@ fn handle_give_genie_time(session: &mut ClientSession, args: &[&str]) -> anyhow:
 }
 
 /// +pmall <title> <message...> — Send a private chat message to all online players.
-///
-/// C++ Reference: `CUser::HandlePrivateAllCommand` in `ChatHandler.cpp:1948-2007`
-///
 /// Constructs a PRIVATE_CHAT packet and sends it to every online player.
 fn handle_pmall(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 2 {
@@ -3908,10 +3710,6 @@ fn handle_pmall(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()
 }
 
 /// +clearinventory [charname] — Clear all inventory items (bag slots) for a target player.
-///
-/// C++ Reference: `CUser::HandleInventoryClear` in `GMCommandsHandler.cpp:1762-1796`
-/// C++ Reference: `CUser::InventoryClear` in `ItemHandler.cpp:558`
-///
 /// Clears all items in inventory bag slots (SLOT_MAX..SLOT_MAX+HAVE_MAX) and
 /// sends a WIZ_ITEM_MOVE update packet.
 fn handle_clear_inventory(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -3978,10 +3776,6 @@ fn handle_clear_inventory(session: &mut ClientSession, args: &[&str]) -> anyhow:
 }
 
 /// +resetranking — Reset PK zone daily loyalty rankings for all players and bots.
-///
-/// C++ Reference: `CUser::HandleResetPlayerRankingCommand` in `GMCommandsHandler.cpp:1586-1609`
-/// C++ Reference: `CGameServerDlg::ResetPlayerKillingRanking` in `NewRankingSystem.cpp:969-1025`
-///
 /// Zeroes pk_loyalty_daily and pk_loyalty_premium_bonus for all sessions and ranking arrays.
 fn handle_reset_ranking(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -3995,10 +3789,6 @@ fn handle_reset_ranking(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +zone_give_item <zone_id> <item_id> <count> <expiry_hours> — Give item to all players in a zone via letter.
-///
-/// C++ Reference: `CUser::HandleOnlineZoneGiveItemCommand` in `GMCommandsHandler.cpp:1008-1049`
-/// C++ Reference: `CGameServerDlg::ReqGmCommandLetterGiveItem` in `DatabaseThread.cpp:257-286`
-///
 /// Sends a letter with the item to each player in the specified zone.
 /// If zone_id is 0, sends to all online players (same as +online_give_item).
 async fn handle_zone_give_item(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -4120,9 +3910,6 @@ async fn handle_zone_give_item(session: &mut ClientSession, args: &[&str]) -> an
 }
 
 /// +online_give_item <item_id> <count> [expiry_hours] — Give item to all online players via letter.
-///
-/// C++ Reference: `CUser::HandleOnlineGiveItemCommand` in `GMCommandsHandler.cpp:1054-1098`
-///
 /// Same as +zone_give_item with zone_id=0 (all zones).
 async fn handle_online_give_item(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 2 {
@@ -4142,10 +3929,6 @@ async fn handle_online_give_item(session: &mut ClientSession, args: &[&str]) -> 
 }
 
 /// +noticeall <message> — Send a server-wide announcement to all players.
-///
-/// C++ Reference: `CGameServerDlg::HandleNoticeallCommand` in `ChatHandler.cpp:840-846`
-/// C++ Reference: `SendAnnouncement` → `SendChat<WAR_SYSTEM_CHAT>` in `GameServerDlg.h:726-729`
-///
 /// Broadcasts WAR_SYSTEM_CHAT (type 8) to all online sessions.
 /// Functionally identical to +notice but uses the C++ "noticeall" command name.
 async fn handle_noticeall(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -4159,8 +3942,6 @@ async fn handle_noticeall(session: &mut ClientSession, args: &[&str]) -> anyhow:
 }
 
 /// +open_skill <CharName> — promote beginner → novice (first job change).
-///
-/// C++ Reference: `CUser::HandleOpenSkill` in `GMCommandsHandler.cpp:2545-2580`
 /// Calls `PromoteUserNovice()` (QuestHandler.cpp:666-697).
 fn handle_open_skill(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -4183,7 +3964,6 @@ fn handle_open_skill(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
         None => return Ok(()),
     };
 
-    // C++ Reference: `if (pUser->isNovice()) return false;`
     // Target must be beginner (not already novice or mastered)
     if !super::class_change::is_beginner(target_ch.class) {
         send_help(session, "Target is not a beginner class.");
@@ -4191,7 +3971,6 @@ fn handle_open_skill(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
     }
 
     // Determine new class (beginner → novice).
-    // C++ Reference: QuestHandler.cpp:674-682
     let class_type = super::class_change::get_class_type(target_ch.class);
     let new_class_type: u16 = if super::class_change::is_portu_kurian(target_ch.class) {
         14 // KurianNovice
@@ -4210,7 +3989,6 @@ fn handle_open_skill(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
     let new_class = nation * 100 + new_class_type;
 
     // Send WIZ_CLASS_CHANGE sub=6 to region (broadcast the promotion).
-    // C++ Reference: QuestHandler.cpp:684-687
     let target_pos = world.get_position(target_sid);
     let mut region_pkt = Packet::new(Opcode::WizClassChange as u8);
     region_pkt.write_u8(6); // PROMOTE_NOVICE sub-opcode for broadcast
@@ -4256,8 +4034,6 @@ fn handle_open_skill(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
 }
 
 /// +open_master <CharName> — promote novice → master (second job change).
-///
-/// C++ Reference: `CUser::HandleOpenMaster` in `GMCommandsHandler.cpp:2508-2542`
 /// Calls `PromoteUser()` (QuestHandler.cpp:700-725).
 async fn handle_open_master(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -4280,7 +4056,6 @@ async fn handle_open_master(session: &mut ClientSession, args: &[&str]) -> anyho
         None => return Ok(()),
     };
 
-    // C++ Reference: `if (pUser->isMastered()) return false;`
     // Actually the C++ HandleOpenMaster checks `!isMastered()` — target must NOT already be mastered.
     // And PromoteUser() checks `if (!isNovice()) return false;` — must be novice.
     if !super::class_change::is_novice(target_ch.class) {
@@ -4289,7 +4064,6 @@ async fn handle_open_master(session: &mut ClientSession, args: &[&str]) -> anyho
     }
 
     // Determine new class (novice → master).
-    // C++ Reference: QuestHandler.cpp:710 — `sNewClass = (GetNation() * 100) + bOldClass + 1`
     let class_type = super::class_change::get_class_type(target_ch.class);
     let new_class_type = class_type + 1;
     let nation = target_ch.class / 100;
@@ -4321,7 +4095,6 @@ async fn handle_open_master(session: &mut ClientSession, args: &[&str]) -> anyho
     // Recalculate abilities.
     world.set_user_ability(target_sid);
 
-    // C++ Reference: SaveEvent(bBaseClass, 2) — marks class progression.
     // bBaseClass = (bOldClass / 2) - 1
     let base_class = (class_type / 2).saturating_sub(1) as u16;
 
@@ -4368,8 +4141,6 @@ async fn handle_open_master(session: &mut ClientSession, args: &[&str]) -> anyho
 }
 
 /// +open_questskill <CharName> — save class-specific quest skill events.
-///
-/// C++ Reference: `CUser::HandleOpenQuestSkill` in `GMCommandsHandler.cpp:2598-2668`
 /// Saves multiple quest event IDs (via SaveEvent) based on the target's class.
 async fn handle_open_questskill(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -4392,7 +4163,6 @@ async fn handle_open_questskill(session: &mut ClientSession, args: &[&str]) -> a
         None => return Ok(()),
     };
 
-    // C++ Reference: `if (pUser->isNovice()) return false;`
     // Target must NOT be novice (i.e. must be beginner — before novice quest skills)
     if super::class_change::is_novice(target_ch.class) {
         send_help(
@@ -4402,7 +4172,6 @@ async fn handle_open_questskill(session: &mut ClientSession, args: &[&str]) -> a
         return Ok(());
     }
 
-    // C++ Reference: GMCommandsHandler.cpp:2615-2641
     // Class-specific quest event IDs
     let quest_ids: &[u16] = if super::class_change::is_warrior(target_ch.class) {
         &[334, 359, 365, 273]
@@ -4477,9 +4246,6 @@ async fn handle_open_questskill(session: &mut ClientSession, args: &[&str]) -> a
 }
 
 /// +bowlevent <ZoneID> <Duration> — start/stop bowl event.
-///
-/// C++ Reference: `CUser::HandleBowlEvent` in `GMCommandsHandler.cpp:2797-2833`
-///
 /// Duration is in seconds. Duration=0 closes an active event.
 /// Timer ticks are handled by `VirtualEventTimer` (EventMainTimer.cpp).
 fn handle_bowlevent(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -4513,7 +4279,6 @@ fn handle_bowlevent(session: &mut ClientSession, args: &[&str]) -> anyhow::Resul
 
     if world.is_bowl_event_active() && duration == 0 {
         // Close the event
-        // C++ Reference: GMCommandsHandler.cpp:2808-2818
         world.close_bowl_event();
 
         let msg = format!("Bowl Event {} Bolgesinde sona erdi.", zone_name);
@@ -4528,7 +4293,6 @@ fn handle_bowlevent(session: &mut ClientSession, args: &[&str]) -> anyhow::Resul
     }
 
     // Open the event
-    // C++ Reference: GMCommandsHandler.cpp:2820-2833
     world.set_bowl_event_active(true);
     world.set_bowl_event_time(duration);
     world.set_bowl_event_zone(zone_id);
@@ -4552,9 +4316,6 @@ fn handle_bowlevent(session: &mut ClientSession, args: &[&str]) -> anyhow::Resul
 }
 
 /// +allow <CharName> — allow attack for a player.
-///
-/// C++ Reference: `CUser::HandleAllowAttackCommand` in `GMCommandsHandler.cpp:595-632`
-///
 /// Sets `BanTypes::ALLOW_ATTACK (5)` via `UserAuthorityUpdate`.
 /// In our simplified implementation, we set the player's `can_attack` flag to true.
 fn handle_allow_attack(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -4590,9 +4351,6 @@ fn handle_allow_attack(session: &mut ClientSession, args: &[&str]) -> anyhow::Re
 }
 
 /// +disable <CharName> — disable attack for a player.
-///
-/// C++ Reference: `CUser::HandleDisableCommand` in `GMCommandsHandler.cpp:635-672`
-///
 /// Sets `BanTypes::DIS_ATTACK (4)` via `UserAuthorityUpdate`.
 fn handle_disable_attack(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -4627,22 +4385,17 @@ fn handle_disable_attack(session: &mut ClientSession, args: &[&str]) -> anyhow::
 }
 
 /// Close all open windows/activities before GM toggle.
-///
-/// C++ Reference: `CUser::ResetWindows()` in `User.cpp:3948-3984`
-///
 /// Cancels: trade, challenge, merchant (sell/buy/browse), mining, fishing.
 async fn reset_windows_gm(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
 
     // 1. Cancel active trade
-    // C++ Reference: User.cpp:3950-3951
     if world.is_trading(sid) {
         super::trade::exchange_cancel(session).await?;
     }
 
     // 2. Cancel challenge (requesting side)
-    // C++ Reference: User.cpp:3953-3954
     let (requesting, challenged, _) = world.get_challenge_state(sid);
     if requesting != 0 {
         world.update_session(sid, |h| {
@@ -4651,7 +4404,6 @@ async fn reset_windows_gm(session: &mut ClientSession) -> anyhow::Result<()> {
         });
     }
     // 3. Cancel challenge (requested side)
-    // C++ Reference: User.cpp:3956-3957
     if challenged != 0 {
         world.update_session(sid, |h| {
             h.challenge_requested = 0;
@@ -4660,31 +4412,26 @@ async fn reset_windows_gm(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // 4. Close selling merchant stall
-    // C++ Reference: User.cpp:3960-3962
     if world.is_selling_merchant(sid) || world.is_selling_merchant_preparing(sid) {
         super::merchant::merchant_close(session).await?;
     }
 
     // 5. Close buying merchant stall
-    // C++ Reference: User.cpp:3964-3965
     if world.is_buying_merchant(sid) || world.is_buying_merchant_preparing(sid) {
         super::merchant::buying_merchant_close_internal(session).await?;
     }
 
     // 6. Stop browsing a merchant
-    // C++ Reference: User.cpp:3968-3969
     if world.get_browsing_merchant(sid).is_some() {
         super::merchant::merchant_trade_cancel(session).await?;
     }
 
     // 7. Stop mining
-    // C++ Reference: User.cpp:3971-3972
     if world.is_mining(sid) {
         super::mining::stop_mining_internal(&world, sid);
     }
 
     // 8. Stop fishing
-    // C++ Reference: User.cpp:3974-3975
     if world.is_fishing(sid) {
         super::mining::stop_fishing_internal(&world, sid);
     }
@@ -4693,12 +4440,8 @@ async fn reset_windows_gm(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +gm — toggle self between GM and GM_USER authority.
-///
-/// C++ Reference: `CUser::HandleAnindaGM` in `GMCommandsHandler.cpp:2009-2052`
-///
 /// Toggles between `AUTHORITY_GAME_MASTER (0)` and `AUTHORITY_GM_USER (2)`.
 /// GM mode grants invisibility + entity info overlay; user mode restores normal visibility.
-///
 /// C++ full refresh sequence:
 ///   1. m_bAbnormalType = ABNORMAL_INVISIBLE / ABNORMAL_NORMAL
 ///   2. SendMyInfo()
@@ -4716,7 +4459,6 @@ async fn handle_gm_toggle(session: &mut ClientSession) -> anyhow::Result<()> {
         None => return Ok(()),
     };
 
-    // C++ Reference: GMCommandsHandler.cpp:2017 — if (m_bResHpType == USER_STANDING)
     // Only standing players can toggle. Sitting players get a message, others silently ignored.
     if char_info.res_hp_type != 1 {
         if char_info.res_hp_type == 2 {
@@ -4753,22 +4495,18 @@ async fn handle_gm_toggle(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // ── ResetWindows: close open dialogs/activities ────────────────────
-    // C++ Reference: User.cpp:3948-3984 (CUser::ResetWindows)
     reset_windows_gm(session).await?;
 
     // ── SendMyInfo: full character refresh to self ──────────────────────
-    // C++ Reference: GMCommandsHandler.cpp:2029 — SendMyInfo()
     super::gamestart::send_myinfo_refresh(session).await?;
 
     // ── Broadcast visibility change ─────────────────────────────────────
-    // C++ Reference: GMCommandsHandler.cpp:2030-2046
     //   UserInOut(INOUT_OUT) → RegisterRegion / SetRegion →
     //   UserInOut(INOUT_WARP) → RegionNpcInfoForMe → RegionUserInOutForMe →
     //   ZoneChange(GetZoneID())
     if let Some((pos, event_room)) = world.with_session(sid, |h| (h.position, h.event_room)) {
 
         // 1. Broadcast StateChange(5, abnormal) — GM visibility toggle
-        // C++ Reference: User.cpp:2966-2972 (StateChangeServerDirect case 5)
         let mut vis_pkt = ko_protocol::Packet::new(ko_protocol::Opcode::WizStateChange as u8);
         vis_pkt.write_u32(sid as u32);
         vis_pkt.write_u8(5); // type = GM visibility toggle
@@ -4785,7 +4523,6 @@ async fn handle_gm_toggle(session: &mut ClientSession) -> anyhow::Result<()> {
         world.send_to_session(sid, &arc_vis_pkt);
 
         // 2. Broadcast UserInOut (INOUT_OUT to disappear, INOUT_IN to reappear)
-        // C++: UserInOut(INOUT_OUT) then UserInOut(INOUT_WARP) after region reset
         let ch_opt = world.get_character_info(sid);
         let clan = ch_opt.as_ref().and_then(|c| {
             if c.knights_id > 0 {
@@ -4848,7 +4585,6 @@ async fn handle_gm_toggle(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // ── Region refresh: resend nearby entities to GM ──────────────────
-    // C++ Reference: GMCommandsHandler.cpp:2035-2037
     //   RegionNpcInfoForMe();
     //   RegionUserInOutForMe();
     //   MerchantUserInOutForMe();
@@ -4857,21 +4593,17 @@ async fn handle_gm_toggle(session: &mut ClientSession) -> anyhow::Result<()> {
     super::region::send_merchant_user_in_out_for_me(session).await?;
 
     // ── InitType4: clear all buffs before recasting ─────────────────────
-    // C++ Reference: GMCommandsHandler.cpp:2040 — InitType4()
     world.clear_all_buffs(sid, false);
 
     // ── RecastSavedMagic: reapply persistent buffs ──────────────────────
-    // C++ Reference: GMCommandsHandler.cpp:2041
     world.recast_saved_magic(sid);
 
     // ── ZoneChange(GetZoneID()): full zone refresh ──────────────────────
-    // C++ Reference: GMCommandsHandler.cpp:2042 — ZoneChange(GetZoneID(), GetX(), GetZ())
     if let Some(pos) = world.get_position(sid) {
         super::zone_change::trigger_zone_change(session, pos.zone_id, pos.x, pos.z).await?;
     }
 
     // ── GenieStop: stop genie if active ─────────────────────────────────
-    // C++ Reference: GMCommandsHandler.cpp:2044-2045
     let genie_active = world.with_session(sid, |h| h.genie_active).unwrap_or(false);
     if genie_active {
         super::genie::handle_genie_stop(session).await?;
@@ -4911,9 +4643,6 @@ async fn handle_gm_toggle(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +pcblock <CharName> — permanently ban a player.
-///
-/// C++ Reference: `CUser::HandlePcBlock` in `ChatHandler.cpp:2432-2468`
-///
 /// Sends WIZ_EXT_HOOK BANSYSTEM packet to target before disconnecting,
 /// then delegates to +block for the actual ban logic.
 async fn handle_pcblock(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -4938,9 +4667,6 @@ async fn handle_pcblock(session: &mut ClientSession, args: &[&str]) -> anyhow::R
 }
 
 /// +changeroom <CharName> <ZoneID> <RoomID> — change player's event room.
-///
-/// C++ Reference: `CUser::HandleChangeRoom` in `GMCommandsHandler.cpp:1613-1681`
-///
 /// Only valid for Chaos zones (84, 85, 87) with room IDs 1-60.
 fn handle_change_room(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.len() < 3 {
@@ -4965,7 +4691,6 @@ fn handle_change_room(session: &mut ClientSession, args: &[&str]) -> anyhow::Res
         }
     };
 
-    // C++ Reference: Only zones 84, 85, 87 (Chaos dungeon variants)
     if zone_id != 84 && zone_id != 85 && zone_id != 87 {
         send_help(session, "Only Chaos zones (84, 85, 87) are valid.");
         return Ok(());
@@ -5014,8 +4739,6 @@ fn handle_change_room(session: &mut ClientSession, args: &[&str]) -> anyhow::Res
 }
 
 /// +beefopen — start the Beef/Monument event in Bifrost zone.
-///
-/// C++ Reference: `CGameServerDlg::BeefEventManuelOpening` in `EventMainTimer.cpp:107-138`
 fn handle_beef_open(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
 
@@ -5055,8 +4778,6 @@ fn handle_beef_open(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +beefclose — close the Beef/Monument event.
-///
-/// C++ Reference: `CGameServerDlg::BeefEventManuelClosed` in `EventMainTimer.cpp:175-179`
 fn handle_beef_close(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
 
@@ -5076,7 +4797,6 @@ fn handle_beef_close(session: &mut ClientSession) -> anyhow::Result<()> {
     broadcast_war_system_chat(&world, msg);
 
     // Kick players from Bifrost zone (zone 71) and Ronark Land (zone 21)
-    // C++ Reference: KickOutZoneUsers(ZONE_BIFROST, ZONE_RONARK_LAND)
     kick_out_zone_users(&world, 71); // ZONE_BIFROST
     kick_out_zone_users(&world, 21); // ZONE_RONARK_LAND
 
@@ -5101,9 +4821,6 @@ fn broadcast_war_system_chat(world: &crate::world::WorldState, message: &str) {
 }
 
 /// +mode_gamemaster — GM mode feedback via WIZ_CHAT.
-///
-/// C++ Reference: `CUser::HandleModeGameMaster` in `GMCommandsHandler.cpp:2583-2595`
-///
 /// NOTE: C++ sends WIZ_EXT_HOOK (0xE9) with WIZ_GAME_MASTER_MODE sub-opcode,
 /// but v2525 dispatch range is 0x06-0xD7 — 0xE9 is silently dropped by client.
 /// Instead we confirm via chat and list available GM commands.
@@ -5130,9 +4847,6 @@ fn handle_mode_gamemaster(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +ftopen [Type] — open Forgotten Temple event.
-///
-/// C++ Reference: `CGameServerDlg::HandleForgettenTempleEvent` in `ChatHandler.cpp:2549-2557`
-///
 /// Calls `ForgettenTempleManuelOpening(Type)` which validates ptimeopt,
 /// resets state, then calls `ForgettenTempleStart(1, MinLevel, MaxLevel)`.
 fn handle_ft_open(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -5156,7 +4870,6 @@ fn handle_ft_open(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<
     // Read timer options from event_room_manager
     let opts = world.event_room_manager.ft_opts.read().clone();
 
-    // C++ Reference: ForgettenTempleManuelOpening checks ptimeopt fields
     if opts.playing_time == 0 || opts.summon_time == 0 || opts.min_level == 0 || opts.max_level == 0
     {
         send_help(
@@ -5166,13 +4879,11 @@ fn handle_ft_open(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<
         return Ok(());
     }
 
-    // C++ Reference: ForgettenTempleStart() checks m_ForgettenTempleMonsterArray/StagesArray non-empty
     if world.ft_stages().is_empty() || world.ft_summons().is_empty() {
         send_help(session, "FT stage/summon data not loaded from DB.");
         return Ok(());
     }
 
-    // C++ Reference: ForgettenTempleStart() in FTHandler.cpp:50-62
     ft.reset();
     ft.is_active
         .store(true, std::sync::atomic::Ordering::Relaxed);
@@ -5211,9 +4922,6 @@ fn handle_ft_open(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<
 }
 
 /// +ftclose — close Forgotten Temple event.
-///
-/// C++ Reference: `CGameServerDlg::ForgettenTempleManuelClosed` in `EventMainSystem.cpp:14-23`
-///
 /// If active: kicks zone users, resets state, announces close.
 /// If not active: just resets state.
 fn handle_ft_close(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -5227,13 +4935,10 @@ fn handle_ft_close(session: &mut ClientSession) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // C++: KickOutZoneUsers(ZONE_FORGOTTEN_TEMPLE)
     kick_out_zone_users(&world, super::forgotten_temple::ZONE_FORGOTTEN_TEMPLE);
 
-    // C++: ForgettenTempleReset()
     ft.reset();
 
-    // C++: Announcement(IDS_MONSTER_CHALLENGE_CLOSE)
     broadcast_war_system_chat(&world, "Monster Challenge has been closed!");
 
     info!("[{}] +ftclose: FT event closed", session.addr());
@@ -5242,9 +4947,6 @@ fn handle_ft_close(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +lottery <ID> — start lottery event from DB settings.
-///
-/// C++ Reference: `CUser::HandleLotteryStart` in `GMCommandsHandler.cpp:1798-1824`
-///
 /// Loads lottery config from `lottery_event_settings` table by ID,
 /// then starts the lottery event.
 async fn handle_lottery_start(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -5326,10 +5028,6 @@ async fn handle_lottery_start(session: &mut ClientSession, args: &[&str]) -> any
 }
 
 /// +lotteryclose — close the running lottery event, refunding participants.
-///
-/// C++ Reference: `CUser::HandleLotteryClose` in `GMCommandsHandler.cpp:1896-1903`
-/// C++ Reference: `CGameServerDlg::LotteryClose` in `GMCommandsHandler.cpp:1826-1894`
-///
 /// If active: refunds all participants' required items, resets state, broadcasts end.
 /// If not active: sends error message.
 fn handle_lottery_close(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -5395,9 +5093,6 @@ fn handle_lottery_close(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +resetloyalty — reset monthly loyalty for all online players.
-///
-/// C++ Reference: `CGameServerDlg::HandleResetRLoyaltyCommand` in `ChatHandler.cpp:801-818`
-///
 /// Sets loyalty_monthly to 0 for every online player and sends LOYALTY_CHANGE packet.
 /// Also sends a DB request to persist the reset.
 async fn handle_reset_loyalty(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -5448,9 +5143,6 @@ async fn handle_reset_loyalty(session: &mut ClientSession) -> anyhow::Result<()>
 }
 
 /// +cropen <EventID> — start Collection Race event.
-///
-/// C++ Reference: `CUser::HandleCollectionRaceStart` in `CollectionRaceHandler.cpp:5-29`
-///
 /// Loads event definition from WorldState settings, then starts the event.
 fn handle_cr_open(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -5505,8 +5197,6 @@ fn handle_cr_open(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<
 }
 
 /// +crclose — close the active Collection Race event.
-///
-/// C++ Reference: `CUser::HandleCollectionRaceClose` in `CollectionRaceHandler.cpp:32-45`
 fn handle_cr_close(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let cr = world.collection_race_event();
@@ -5528,9 +5218,6 @@ fn handle_cr_close(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +npcinfo — display target NPC info to GM.
-///
-/// C++ Reference: `CUser::HandleNpcBilgi` in `ChatHandler.cpp:2169-2186`
-///
 /// GM must Z-target an NPC first. Shows NPC name, runtime ID, and proto ID.
 fn handle_npc_info(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -5576,9 +5263,6 @@ fn handle_npc_info(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// +bug <AccountID> — rescue a stuck character by removing their session names.
-///
-/// C++ Reference: `CGameServerDlg::HandleBugdanKurtarCommand` in `GMCommandsHandler.cpp:3015-3041`
-///
 /// Finds the user by account ID and unregisters them from the session,
 /// allowing them to re-login.
 fn handle_bug_rescue(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
@@ -5621,9 +5305,6 @@ fn handle_bug_rescue(session: &mut ClientSession, args: &[&str]) -> anyhow::Resu
 }
 
 /// +changegm <CharName> — promote a player to GM authority.
-///
-/// C++ Reference: `CUser::HandleChangeGM` in `ChatHandler.cpp:2242-2282`
-///
 /// Sets target's authority to GM (0 = AUTHORITY_GAME_MASTER).
 async fn handle_change_gm(session: &mut ClientSession, args: &[&str]) -> anyhow::Result<()> {
     if args.is_empty() {
@@ -5679,8 +5360,7 @@ async fn handle_change_gm(session: &mut ClientSession, args: &[&str]) -> anyhow:
 }
 
 /// Unified enum for the 3 temple events (Chaos, BDW, Juraid).
-///
-/// Maps to C++ `pvroomop[0..2]` indices and `TempleEventType` enum values.
+/// Maps to `pvroomop[0..2]` indices and `TempleEventType` enum values.
 enum TempleEventKind {
     Bdw,
     Chaos,
@@ -5722,10 +5402,7 @@ impl TempleEventKind {
 }
 
 /// +chaosopen / +borderopen / +juraidopen — manually start a temple event.
-///
-/// C++ Reference: `EventMainTimer.cpp:6-103` — `ChaosExpansionManuelOpening`,
 /// `BorderDefenceWarManuelOpening`, `JuraidMountainManuelOpening`.
-///
 /// Validates timer opts, resets state, sets fields, broadcasts sign-up packet.
 fn handle_temple_event_open(
     session: &mut ClientSession,
@@ -5802,10 +5479,7 @@ fn handle_temple_event_open(
 }
 
 /// +chaosclose / +borderclose / +juraidclose — manually close a temple event.
-///
-/// C++ Reference: `EventMainTimer.cpp:143-240` — `ChaosExpansionManuelClosed`,
 /// `BorderDefenceWarManuelClosed`, `JuraidMountainManuelClosed`.
-///
 /// Sets the manual close flag and timer finish control to trigger cleanup
 /// on the next event system tick.
 fn handle_temple_event_close(
@@ -5862,7 +5536,6 @@ fn handle_temple_event_close(
 }
 
 /// Handle `+season <action_type>` — broadcast a season system message.
-///
 /// Usage: `+season 5` → sends text_id 10714 to all online players.
 /// Action types: 2-4,7-9 (format string), 5 (notify), 6 (special), 10-11 (timed fail).
 fn handle_season(
@@ -5903,7 +5576,6 @@ fn handle_season(
 }
 
 /// Handle `+seasonitem <item_id> <count>` — broadcast a season item spawn effect.
-///
 /// Usage: `+seasonitem 370004000 5` → spawns 5 of item 370004000 visually.
 fn handle_season_item(
     session: &mut ClientSession,
@@ -5954,7 +5626,6 @@ fn handle_season_item(
 }
 
 /// Handle `+effect <effect_id> [scale]` — broadcast an awakening visual effect.
-///
 /// Usage: `+effect 100` (default scale 1.0), `+effect 100 2.5` (custom scale)
 fn handle_effect(
     session: &mut ClientSession,
@@ -6001,7 +5672,6 @@ fn handle_effect(
 }
 
 /// Handle `+collection <item_id> [current] [required]` — send collection notification.
-///
 /// Usage: `+collection 200001000 3 10` → item update: 3/10 collected.
 fn handle_collection_notify(
     session: &mut ClientSession,
@@ -6050,7 +5720,6 @@ fn handle_collection_notify(
 }
 
 /// Handle `+clannotify <sub>` — broadcast clan notification (0x91).
-///
 /// Sub-opcodes: 0-5 (different clan-related string displays).
 fn handle_clannotify(
     session: &mut ClientSession,
@@ -6253,7 +5922,6 @@ mod tests {
     }
 
     /// Test GM authority check values.
-    /// C++ ref: globals.h:713-715 — AUTHORITY_GAME_MASTER=0, AUTHORITY_GM_USER=2
     #[test]
     fn test_authority_check_values() {
         // Authority values that should have GM access
@@ -7223,7 +6891,6 @@ mod tests {
     // ── Sprint 675: GM Invisible + F7B Entity Info Overlay ───────────
 
     /// Test +gm visibility broadcast: StateChange type=5 packet format.
-    /// C++ Reference: User.cpp:2966-2972 (StateChangeServerDirect case 5)
     #[test]
     fn test_gm_toggle_visibility_state_change_packet() {
         // Going invisible (GM mode): type=5, state=0 (ABNORMAL_INVISIBLE)
@@ -7378,7 +7045,6 @@ mod tests {
     }
 
     /// Test GM login sets abnormal_type=0 (ABNORMAL_INVISIBLE).
-    /// C++ Reference: CharacterSelectionHandler.cpp:1033
     #[test]
     fn test_gm_login_invisible() {
         let world = crate::world::WorldState::new();

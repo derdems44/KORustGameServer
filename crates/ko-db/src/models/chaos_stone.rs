@@ -1,12 +1,7 @@
 //! Chaos Stone event models.
-//!
-//! C++ Reference: `_CHAOS_STONE_RESPAWN`, `_CHAOS_STONE_SUMMON_LIST`,
 //!                `_CHAOS_STONE_STAGE`, `EVENT_CHAOS_REWARDS` structs
-//!                in `GameDefine.h:3792-3857`
 
 /// A row from `chaos_stone_spawn` — defines a chaos stone spawn point.
-///
-/// C++ Reference: `_CHAOS_STONE_RESPAWN` in `GameDefine.h:3837-3850`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ChaosStoneSpawnRow {
     /// Primary key index (1-12).
@@ -34,8 +29,6 @@ pub struct ChaosStoneSpawnRow {
 }
 
 /// A row from `chaos_stone_summon_list` — monsters summoned on stone death.
-///
-/// C++ Reference: `_CHAOS_STONE_SUMMON_LIST` in `GameDefine.h:3829-3835`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ChaosStoneSummonListRow {
     /// Primary key index.
@@ -49,8 +42,6 @@ pub struct ChaosStoneSummonListRow {
 }
 
 /// A row from `chaos_stone_summon_stage` — stage/family definitions per zone.
-///
-/// C++ Reference: `_CHAOS_STONE_STAGE` in `GameDefine.h:3852-3857`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ChaosStoneSummonStageRow {
     /// Primary key index.
@@ -62,8 +53,6 @@ pub struct ChaosStoneSummonStageRow {
 }
 
 /// A row from `event_chaos_rewards` — rewards distributed by rank.
-///
-/// C++ Reference: `EVENT_CHAOS_REWARDS` table in MSSQL.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct EventChaosRewardRow {
     /// Rank tier (1=best, 18=worst).

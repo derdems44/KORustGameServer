@@ -1,23 +1,15 @@
 //! Tag Change handler — player name tag (title) system.
-//!
-//! C++ Reference: `TagChange.cpp` — `HandleTagChange()`, `TagChange()`,
 //! `UserInOutTag()`, `SendTagNameChangePanel()`
-//!
 //! ## Overview
-//!
 //! Players can set a custom tag (title) displayed above their character name.
 //! Requires consuming item `800099000` (tag change scroll). The tag includes
 //! a custom string and RGB colour.
-//!
 //! ## Wire Format
-//!
 //! All packets use `WIZ_EXT_HOOK (0xE9)` with sub-opcode `TagInfo = 0xD1`.
-//!
 //! **Client → Server (change tag request):**
 //! ```text
 //! [0xE9][0xD1][u8=2 (newtag)][string newtag][u8 r][u8 g][u8 b]
 //! ```
-//!
 //! **Server → Client responses:**
 //! ```text
 //! Open    = 0: [0xE9][0xD1][u8=0]
@@ -39,18 +31,13 @@ use crate::zone::SessionId;
 pub(crate) use super::ext_hook::EXT_SUB_TAG_INFO;
 
 /// Tag change scroll item ID.
-///
-/// C++ Reference: `TagChange.cpp:32` — `CheckExistItem(800099000, 1)`
 const TAG_SCROLL_ITEM_ID: u32 = 800_099_000;
 
 /// Maximum tag name length.
-///
-/// C++ Reference: `globals.h:29` — `MAX_ID_SIZE = 20`
 const MAX_TAG_LENGTH: usize = 20;
 
 // ── tagerror sub-opcodes ────────────────────────────────────────────────────
 
-/// C++ Reference: `GameDefine.h:1706` — `enum class tagerror`
 mod tagerror {
     /// Send the tag name change panel UI to client.
     pub const OPEN: u8 = 0;
@@ -73,8 +60,6 @@ mod tagerror {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build the tag name change panel open packet.
-///
-/// C++ Reference: `CUser::SendTagNameChangePanel()` — `TagChange.cpp:34-40`
 pub fn build_tag_panel_packet() -> Packet {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
     pkt.write_u8(EXT_SUB_TAG_INFO);
@@ -91,9 +76,6 @@ fn build_tag_error_packet(error_code: u8) -> Packet {
 }
 
 /// Build the tag success packet.
-///
-/// C++ Reference: `TagChange.cpp:49-53`
-///
 /// `who`: 0 = self, 1 = region broadcast
 fn build_tag_success_packet(
     who: u8,
@@ -116,9 +98,6 @@ fn build_tag_success_packet(
 }
 
 /// Build the tag list packet for region INOUT_IN.
-///
-/// C++ Reference: `CUser::UserInOutTag()` — `TagChange.cpp:11-31`
-///
 /// Each entry: `[string char_name][string tag_name][u8 r][u8 g][u8 b]`
 pub fn build_tag_list_packet(entries: &[(String, String, u8, u8, u8)]) -> Packet {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
@@ -157,8 +136,6 @@ pub fn unpack_rgb(rgb: i32) -> (u8, u8, u8) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle `WIZ_EXT_HOOK (0xE9)` sub-opcode `TagInfo (0xD1)` from client.
-///
-/// C++ Reference: `CUser::HandleTagChange()` — dispatches on tagerror sub-opcode.
 /// Only `tagerror::newtag (2)` is handled from client side.
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     // pkt.data has the sub-opcode byte already stripped by handle_ext_hook.
@@ -180,8 +157,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Process a tag name change request.
-///
-/// C++ Reference: `CUser::TagChange()` — `TagChange.cpp:33-59`
 async fn handle_tag_change(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -290,10 +265,7 @@ async fn handle_tag_change(
 }
 
 /// Collect tag entries for visible users in a region (for INOUT_IN).
-///
-/// C++ Reference: `CUser::UserInOutTag()` — sends tag list of nearby players
 /// who have non-empty, non-"-" tag names.
-///
 /// This function is called from req_userin after GetUserInfo to send tag data
 /// for nearby players. It uses `world.collect_session_tags()` which iterates
 /// sessions internally (since the sessions field is private).

@@ -1,32 +1,19 @@
 //! WIZ_POINT_CHANGE (0x28) and WIZ_SKILLPT_CHANGE (0x32) handlers.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/UserSkillStatPointSystem.cpp`
-//!
 //! ## WIZ_POINT_CHANGE — Stat Point Allocation
-//!
 //! ### Request (C->S)
-//!
 //! | Offset | Type | Description |
 //! |--------|------|-------------|
 //! | 0      | u8   | type: 1=STR, 2=STA, 3=DEX, 4=INT, 5=CHA |
-//!
 //! ### Response (S->C)
-//!
 //! `[u8 type] [u16 new_stat_value] [i16 max_hp] [i16 max_mp] [u16 total_hit]
 //!  [u32 max_weight] [u16 hp] [u16 mp]`
-//!
 //! ## WIZ_SKILLPT_CHANGE — Skill Point Allocation
-//!
 //! ### Request (C->S)
-//!
 //! | Offset | Type | Description |
 //! |--------|------|-------------|
 //! | 0      | u8   | type: 5=Cat1, 6=Cat2, 7=Cat3, 8=Master |
-//!
 //! ### Response (S->C) — failure only
-//!
 //! `[u8 type] [u8 current_skill_points]`
-//!
 //! On success, no additional data is appended; the client infers success from
 //! the absence of a failure byte.
 
@@ -37,21 +24,16 @@ use ko_protocol::{Opcode, Packet, PacketReader};
 use crate::session::{ClientSession, SessionState};
 use crate::world::CharacterInfo;
 
-/// Maximum stat value (C++ `STAT_MAX` from `globals.h:747`).
+/// Maximum stat value (`STAT_MAX` from `globals.h:747`).
 const STAT_MAX: u8 = 255;
 /// WIZ_POINT_CHANGE sub-opcode for stat increase response (v2600 sniff verified).
 const STAT_INCREASE: u8 = 3;
 
 /// Skill point category range — valid types for SkillPointChange.
-///
-/// C++ Reference: `GameDefine.h:1354-1361`
 const SKILLPT_CAT1: u8 = 5;
 const SKILLPT_MASTER: u8 = 8;
 
 /// Handle WIZ_POINT_CHANGE — allocate a single stat point.
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:1211-1229` (CUser::PointChange)
-///
 /// The client sends a 1-byte `type` (1=STR..5=CHA). The server validates the
 /// request, increments the stat, decrements free points, recalculates max HP/MP,
 /// and sends the updated values back.
@@ -72,7 +54,6 @@ pub async fn handle_point_change(session: &mut ClientSession, pkt: Packet) -> an
 
     // C++ converts: statType = (StatType)(type - 1)
     // Valid: type 1-5 → stat_index 0-4
-    // C++ Reference: UserSkillStatPointSystem.cpp:1213-1219
     if !(1..=5).contains(&stat_type) {
         return Ok(());
     }
@@ -101,7 +82,6 @@ pub async fn handle_point_change(session: &mut ClientSession, pkt: Packet) -> an
     });
 
     // Recalculate derived stats + max HP/MP (now includes item + buff bonuses)
-    // C++ Reference: UserSkillStatPointSystem.cpp:1225 — SetUserAbility() calls SetMaxHp/SetMaxMp
     world.set_user_ability(sid);
     let equipped = world.get_equipped_stats(sid);
 
@@ -123,7 +103,7 @@ pub async fn handle_point_change(session: &mut ClientSession, pkt: Packet) -> an
     resp.write_u32(equipped.max_weight);
     session.send_packet(&resp).await?;
 
-    // Send full stats refresh — C++ Reference: UserSkillStatPointSystem.cpp:1228
+    // Send full stats refresh
     // SendItemMove(1, 1) refreshes the client's equipment panel stats
     world.send_item_move_refresh(sid);
 
@@ -145,9 +125,6 @@ pub async fn handle_point_change(session: &mut ClientSession, pkt: Packet) -> an
 }
 
 /// Handle WIZ_SKILLPT_CHANGE — allocate a single skill point.
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:3-36` (CUser::SkillPointChange)
-///
 /// The client sends a 1-byte `type` (5=Cat1..8=Master). The server validates
 /// the request and either applies the change (silently) or sends back a failure
 /// packet with the current skill points for that category.
@@ -172,21 +149,18 @@ pub async fn handle_skillpt_change(session: &mut ClientSession, pkt: Packet) -> 
     };
 
     // Validate type range: 5..=8
-    // C++ Reference: UserSkillStatPointSystem.cpp:12
     if !(SKILLPT_CAT1..=SKILLPT_MASTER).contains(&skill_type) {
         send_skillpt_fail(session, skill_type, &char_info).await?;
         return Ok(());
     }
 
     // Validate: free skill points available (index 0)
-    // C++ Reference: UserSkillStatPointSystem.cpp:14
     if char_info.skill_points[0] < 1 {
         send_skillpt_fail(session, skill_type, &char_info).await?;
         return Ok(());
     }
 
     // Validate: skill points per category cannot exceed level
-    // C++ Reference: UserSkillStatPointSystem.cpp:16
     let idx = skill_type as usize;
     if idx >= char_info.skill_points.len() {
         send_skillpt_fail(session, skill_type, &char_info).await?;
@@ -199,17 +173,14 @@ pub async fn handle_skillpt_change(session: &mut ClientSession, pkt: Packet) -> 
     }
 
     // Validate: must have completed first job change (class % 100 > 4)
-    // C++ Reference: UserSkillStatPointSystem.cpp:18
     if (char_info.class % 100) <= 4 {
         send_skillpt_fail(session, skill_type, &char_info).await?;
         return Ok(());
     }
 
     // Validate master category (type 8) — extra constraints
-    // C++ Reference: UserSkillStatPointSystem.cpp:20-25
     if skill_type == SKILLPT_MASTER {
         let class_mod = char_info.class % 100;
-        // C++ Reference: User.h:972-979 — mastered classes: 6,8,10,12,15
         let is_mastered = matches!(class_mod, 6 | 8 | 10 | 12 | 15);
         let max_level: u8 = 83; // g_pMain->m_byMaxLevel
 
@@ -223,14 +194,12 @@ pub async fn handle_skillpt_change(session: &mut ClientSession, pkt: Packet) -> 
     }
 
     // Apply: decrement free, increment category
-    // C++ Reference: UserSkillStatPointSystem.cpp:33-34
     world.update_character_stats(sid, |ch| {
         ch.skill_points[0] = ch.skill_points[0].saturating_sub(1);
         ch.skill_points[idx] = ch.skill_points[idx].saturating_add(1);
     });
 
     // Recalculate derived stats after skill point change
-    // C++ Reference: UserSkillStatPointSystem.cpp:35 — SetUserAbility()
     world.set_user_ability(sid);
 
     // Fire-and-forget DB save
@@ -248,8 +217,6 @@ pub async fn handle_skillpt_change(session: &mut ClientSession, pkt: Packet) -> 
 }
 
 /// Send a skill point change failure packet.
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:28-30`
 /// Response: `[u8 type] [u8 current_skill_points_for_type]`
 async fn send_skillpt_fail(
     session: &mut ClientSession,
@@ -270,7 +237,6 @@ async fn send_skillpt_fail(
 }
 
 /// Get a stat value by type (1=STR..5=CHA).
-///
 /// C++ maps: type 1→STAT_STR(0), 2→STAT_STA(1), 3→STAT_DEX(2), 4→STAT_INT(3), 5→STAT_CHA(4)
 fn get_stat_by_type(ch: &CharacterInfo, stat_type: u8) -> u8 {
     match stat_type {
@@ -296,38 +262,27 @@ fn set_stat_by_type(ch: &mut CharacterInfo, stat_type: u8, value: u8) {
 }
 
 /// Results from recalculating user abilities.
-///
 /// Mirrors the derived stats computed by `CUser::SetUserAbility` in C++.
 pub struct AbilityResult {
     /// Maximum health points.
     pub max_hp: i16,
     /// Maximum mana points.
     pub max_mp: i16,
-    /// Maximum carry weight (C++ `uint32 m_sMaxWeight` in User.h:394).
+    /// Maximum carry weight (`uint32 m_sMaxWeight` in User.h:394).
     pub max_weight: u32,
 }
 
 /// Recalculate max HP, MP, and weight based on class coefficients and stats.
-///
-/// C++ Reference:
 /// - `UserHealtMagicSpSystem.cpp:224-304` (CUser::SetMaxHp)
 /// - `UserHealtMagicSpSystem.cpp:312-373` (CUser::SetMaxMp)
 /// - `UserAbilityHandler.cpp:147` (m_sMaxWeight)
-///
 /// ## HP Formula
-///
 /// `(HP_COEFF * level^2 * STA) + (0.1 * level * STA) + (STA / 5) + bonuses + 20`
-///
 /// ## MP Formula (magic classes: MP coefficient != 0)
-///
 /// `(MP_COEFF * level^2 * (INT+30)) + (0.1 * level * 2 * (INT+30)) + ((INT+30) / 5) + bonuses + 20`
-///
 /// ## MP Formula (kurian/melee: SP coefficient != 0, MP == 0)
-///
 /// `(SP_COEFF * level^2 * STA) + (0.1 * level * STA) + (STA / 5) + bonuses`
-///
 /// ## Weight Formula
-///
 /// `(STR + level) * 50`
 pub fn recalculate_abilities(ch: &CharacterInfo, coeff: Option<&CoefficientRow>) -> AbilityResult {
     let coeff = match coeff {
@@ -342,12 +297,10 @@ pub fn recalculate_abilities(ch: &CharacterInfo, coeff: Option<&CoefficientRow>)
     };
 
     let level = ch.level as f64;
-    // C++ Reference: GetStatBonusTotal() includes rebirth stats in HP/MP formulas
     let sta = ch.sta as f64 + ch.reb_sta as f64;
     let intel = ch.intel as f64 + ch.reb_intel as f64;
 
     // HP: (HP_COEFF * level^2 * STA) + (0.1 * level * STA) + (STA / 5) + 20
-    // C++ Reference: UserHealtMagicSpSystem.cpp:246-247
     // Note: item + buff bonuses are added in set_user_ability(), not here.
     let max_hp = (coeff.hp * level * level * sta) + (0.1 * level * sta) + (sta / 5.0) + 20.0;
     let max_hp = (max_hp as i16).max(20); // minimum 20 HP
@@ -355,7 +308,6 @@ pub fn recalculate_abilities(ch: &CharacterInfo, coeff: Option<&CoefficientRow>)
     // MP: depends on whether MP or SP coefficient is nonzero
     let max_mp = if coeff.mp != 0.0 {
         // Magic class: uses INT+30
-        // C++ Reference: UserHealtMagicSpSystem.cpp:326-327
         let temp_intel = intel + 30.0;
         let mp = (coeff.mp * level * level * temp_intel)
             + (0.1 * level * 2.0 * temp_intel)
@@ -364,7 +316,6 @@ pub fn recalculate_abilities(ch: &CharacterInfo, coeff: Option<&CoefficientRow>)
         (mp as i16).max(0)
     } else if coeff.sp != 0.0 {
         // Kurian/melee: uses STA
-        // C++ Reference: UserHealtMagicSpSystem.cpp:338-339
         let mp = (coeff.sp * level * level * sta) + (0.1 * level * sta) + (sta / 5.0);
         (mp as i16).max(0)
     } else {
@@ -379,13 +330,10 @@ pub fn recalculate_abilities(ch: &CharacterInfo, coeff: Option<&CoefficientRow>)
 }
 
 /// Calculate maximum SP (Kurian stamina points) based on class type and master skill points.
-///
-/// C++ Reference: `CUser::SetMaxSp()` in `UserHealtMagicSpSystem.cpp:1087-1103`
 /// - Class type 13 (Beginner Kurian): 100
 /// - Class type 14 (Novice Kurian): 150
 /// - Class type 15 (Master Kurian): 200, or 250 if PRO_SKILL4 (skill_points[8]) is in 3..=23
 /// - All other classes: 0 (non-Kurian)
-///
 /// The `pro_skill4` parameter is `skill_points[8]` (PRO_SKILL4 = 0x08 in C++).
 /// C++ logic: `CheckSkillPoint(PRO_SKILL4, 3, 23)` → m_MaxSp = 250, else 200.
 pub(crate) fn calculate_max_sp(class: u16, pro_skill4: u8) -> i16 {
@@ -404,24 +352,18 @@ pub(crate) fn calculate_max_sp(class: u16, pro_skill4: u8) -> i16 {
 }
 
 /// Check if a class is a Kurian/Portu class.
-///
-/// C++ Reference: Kurian classes have base class type 13, 14, or 15.
 pub(crate) fn is_kurian_class(class: u16) -> bool {
     matches!(class % 100, 13..=15)
 }
 
 /// Calculate maximum carry weight.
-///
-/// C++ Reference: `UserAbilityHandler.cpp:147`
 /// `m_sMaxWeight = (((GetStatWithItemBonus(STAT_STR) + GetLevel()) * 50) + maxweightbonus)`
-///
 /// Without item bonuses, this simplifies to `(STR + level) * 50`.
 pub fn calculate_max_weight(ch: &CharacterInfo) -> u32 {
     (ch.str as u32 + ch.level as u32) * 50
 }
 
 /// Backward-compatible wrapper returning only (max_hp, max_mp).
-///
 /// Used by callers that don't need max_weight.
 pub fn recalculate_max_hp_mp(ch: &CharacterInfo, coeff: Option<&CoefficientRow>) -> (i16, i16) {
     let result = recalculate_abilities(ch, coeff);
@@ -429,7 +371,6 @@ pub fn recalculate_max_hp_mp(ch: &CharacterInfo, coeff: Option<&CoefficientRow>)
 }
 
 /// Save stat and skill points to DB asynchronously (fire-and-forget).
-///
 /// Follows the same pattern as `zone_change::save_position_async`.
 fn save_stat_points_async(session: &ClientSession) {
     let pool = session.pool().clone();
@@ -699,7 +640,6 @@ mod tests {
 
     #[test]
     fn test_max_weight_formula() {
-        // C++ Reference: m_sMaxWeight = (STR + level) * 50
         let ch = test_character(); // STR=65, level=60
         let weight = calculate_max_weight(&ch);
         // (65 + 60) * 50 = 125 * 50 = 6250
@@ -848,7 +788,6 @@ mod tests {
 
     #[test]
     fn test_max_sp_master_kurian_250() {
-        // C++ Reference: CheckSkillPoint(PRO_SKILL4, 3, 23) → m_MaxSp = 250
         // PRO_SKILL4 in range 3..=23 → 250 max SP
         assert_eq!(calculate_max_sp(115, 3), 250); // min boundary
         assert_eq!(calculate_max_sp(215, 3), 250); // El Morad

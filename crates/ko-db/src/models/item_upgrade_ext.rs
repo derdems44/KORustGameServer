@@ -1,14 +1,10 @@
 //! Extended item upgrade models — maps to PostgreSQL tables.
-//!
-//! C++ Reference:
 //! - `shared/database/ItemUpgradeSet.h` — `_ITEMUP_PROBABILITY`
 //! - `GameServer/LoadServerData.cpp` — `LoadItemUpProbability()`
 
 /// Item upgrade probability configuration from the `itemup_probability` table.
-///
 /// Controls upgrade success/fail streak-based probability modifiers.
 /// MSSQL source: `ITEMUP_PROBABILITY` (1 row).
-/// C++ equivalent: `_ITEMUP_PROBABILITY`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ItemUpProbabilityRow {
     /// Probability configuration type.

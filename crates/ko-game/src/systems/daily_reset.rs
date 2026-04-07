@@ -1,25 +1,16 @@
 //! Daily / hourly / monthly reset system.
-//!
-//! C++ Reference: `ServerStartStopHandler.cpp:43-172` — `UpdateGameTime()`
-//!
 //! The C++ server detects calendar boundary crossings (hour, day, month) each
 //! second and fires the appropriate resets.  We replicate this with a 60-second
 //! tick that tracks the last-seen hour/day/month and fires on change.
-//!
 //! ## Hourly
 //! - **Daily PK loyalty reset**: Uses an hour counter that resets daily loyalty
-//!   when it reaches 24 (matching C++ `m_nPlayerRankingResetTime`).
-//!   C++ Reference: `NewRankingSystem.cpp:955-1025` — `ResetPlayerRankings()`
-//!
+//!   when it reaches 24 (matching `m_nPlayerRankingResetTime`).
 //! ## Daily
 //! - **UpdateFlagAndCape**: Recalculates clan grade from points; demotes
 //!   `ClanTypePromoted` clans whose grade dropped > 3 back to Training with
 //!   cape = -1.
-//!   C++ Reference: `Knights.cpp:900-922`
-//!
 //! ## Monthly
 //! - **ResetLoyaltyMonthly**: Zeroes `loyalty_monthly` in DB for all users.
-//!   C++ Reference: `DBAgent.cpp:2455-2463` — `RESET_LOYALTY_MONTHLY` stored proc.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -32,21 +23,21 @@ use crate::world::WorldState;
 /// Tick interval for calendar boundary detection (60 seconds).
 const RESET_CHECK_INTERVAL_SECS: u64 = 60;
 
-/// Hours between daily PK loyalty resets (C++ `m_nPlayerRankingResetTime` = 24).
+/// Hours between daily PK loyalty resets (`m_nPlayerRankingResetTime` = 24).
 const RANKING_RESET_HOURS: u8 = 24;
 
-/// Minutes between knight/user rank reloads (C++ `RELOAD_KNIGHTS_AND_USER_RATING` = 15).
+/// Minutes between knight/user rank reloads (`RELOAD_KNIGHTS_AND_USER_RATING` = 15).
 pub(crate) const RELOAD_RANK_INTERVAL_MINUTES: u8 = 15;
 
-/// GameInfo notice 1 interval in minutes (C++ `m_GameInfo1Time` = 1800 seconds = 30 min).
+/// GameInfo notice 1 interval in minutes (`m_GameInfo1Time` = 1800 seconds = 30 min).
 const GAME_INFO1_INTERVAL_MINUTES: u16 = 30;
 
-/// GameInfo notice 2 interval in minutes (C++ `m_GameInfo2Time` = 3600 seconds = 60 min).
+/// GameInfo notice 2 interval in minutes (`m_GameInfo2Time` = 3600 seconds = 60 min).
 const GAME_INFO2_INTERVAL_MINUTES: u16 = 60;
 
 use crate::clan_constants::{CLAN_TYPE_ACCREDITED5, CLAN_TYPE_PROMOTED, CLAN_TYPE_TRAINING};
 
-// ── Clan grade thresholds (C++ `GameServerDlg.cpp:678-681`) ──
+// ── Clan grade thresholds (`GameServerDlg.cpp:678-681`) ──
 
 /// Grade 1 threshold (720,000 points).
 pub(crate) const GRADE1_POINTS: u32 = 720_000;
@@ -58,8 +49,6 @@ pub(crate) const GRADE3_POINTS: u32 = 144_000;
 pub(crate) const GRADE4_POINTS: u32 = 72_000;
 
 /// Compute clan grade from points.
-///
-/// C++ Reference: `GameServerDlg.cpp:2022-2036` — `GetKnightsGrade(nPoints)`
 pub(crate) fn get_knights_grade(points: u32) -> u8 {
     if points >= GRADE1_POINTS {
         1
@@ -115,13 +104,11 @@ pub fn start_daily_reset_task(world: Arc<WorldState>, pool: DbPool) -> tokio::ta
             }
 
             // ── Minute change — automatic commands ─────────────────────
-            // C++ Reference: ServerStartStopHandler.cpp:64-84
             // Check on every tick (60s) — execute commands matching current H:M.
             // C++ iDay = day-of-month (m_sDate), sentinel 7 = every day
             execute_automatic_commands(&world, cur_hour, cur_min, cur_day as i32);
 
             // ── Minute change — reload knight and user ranks ─────────
-            // C++ Reference: ServerStartStopHandler.cpp:89-93
             // Every 15 minutes (RELOAD_KNIGHTS_AND_USER_RATING), reload rankings.
             rank_reload_minute_counter += 1;
             if rank_reload_minute_counter >= RELOAD_RANK_INTERVAL_MINUTES {
@@ -130,12 +117,10 @@ pub fn start_daily_reset_task(world: Arc<WorldState>, pool: DbPool) -> tokio::ta
             }
 
             // ── Minute change — player ranking rewards ───────────────
-            // C++ Reference: ServerStartStopHandler.cpp:96-108
             // Every minute, reward top-10 PK zone ranked players.
             set_player_ranking_rewards(&world);
 
             // ── GameInfoNoticeTimer ────────────────────────────────────
-            // C++ Reference: InfoNotice.cpp — broadcasts notice every 30/60 min
             game_info_notice_tick(&world, &mut game_info1_counter, &mut game_info2_counter);
 
             // ── Hour change ─────────────────────────────────────────────
@@ -151,7 +136,6 @@ pub fn start_daily_reset_task(world: Arc<WorldState>, pool: DbPool) -> tokio::ta
                 }
 
                 // Broadcast flying Santa/Angel if active.
-                // C++ Reference: ServerStartStopHandler.cpp:117-118
                 broadcast_flying_santa_or_angel(&world);
 
                 last_hour = cur_hour;
@@ -161,8 +145,6 @@ pub fn start_daily_reset_task(world: Arc<WorldState>, pool: DbPool) -> tokio::ta
 }
 
 /// Broadcast WIZ_SANTA if the flying Santa/Angel event is active.
-///
-/// C++ Reference: `CGameServerDlg::SendFlyingSantaOrAngel()` — `GameServerDlg.cpp:2320-2324`
 /// Called every hour from `UpdateGameTime()` if `m_bSantaOrAngel != FLYING_NONE`.
 fn broadcast_flying_santa_or_angel(world: &WorldState) {
     let santa_type = world
@@ -178,9 +160,6 @@ fn broadcast_flying_santa_or_angel(world: &WorldState) {
 }
 
 /// Periodic server info notice broadcasts.
-///
-/// C++ Reference: `CGameServerDlg::GameInfoNoticeTimer()` in `InfoNotice.cpp`
-///
 /// Broadcasts configurable notice messages at fixed intervals:
 /// - Notice 1: every 30 minutes (`m_GameInfo1Time` = 1800s)
 /// - Notice 2: every 60 minutes (`m_GameInfo2Time` = 3600s)
@@ -211,8 +190,6 @@ fn game_info_notice_tick(world: &WorldState, counter1: &mut u16, counter2: &mut 
 }
 
 /// Broadcast a public chat notice to all connected players.
-///
-/// C++ Reference: `CGameServerDlg::GameInfo1Packet()` / `GameInfo2Packet()`
 fn broadcast_public_chat_notice(world: &WorldState, message: &str) {
     let pkt = crate::handler::chat::build_chat_packet(
         1,      // PUBLIC_CHAT
@@ -225,10 +202,6 @@ fn broadcast_public_chat_notice(world: &WorldState, message: &str) {
 }
 
 /// Distribute NP/KC rewards to top-10 PK-zone ranked players in each configured zone.
-///
-/// C++ Reference: `CGameServerDlg::SetPlayerRankingRewards(uint16 ZoneID)` in
-/// `GameServerDlg.cpp:2411-2433`. Called every minute from `UpdateGameTime()`.
-///
 /// Rewards are configurable via `player_ranking_loyalty_reward` and
 /// `player_ranking_kc_reward` on `WorldState`. Default is 0 (disabled).
 fn set_player_ranking_rewards(world: &WorldState) {
@@ -252,7 +225,6 @@ fn set_player_ranking_rewards(world: &WorldState) {
                 None => continue,
             };
 
-            // C++ Reference: skip GMs
             if is_gm {
                 continue;
             }
@@ -278,9 +250,6 @@ fn set_player_ranking_rewards(world: &WorldState) {
 }
 
 /// Reset daily PK loyalty for all online players.
-///
-/// C++ Reference: `NewRankingSystem.cpp:968-1025` — `ResetPlayerKillingRanking()`
-///
 /// Zeroes `pk_loyalty_daily` and `pk_loyalty_premium_bonus` in memory.
 fn reset_daily_pk_loyalty(world: &WorldState) {
     let session_ids = world.get_in_game_session_ids();
@@ -299,8 +268,6 @@ fn reset_daily_pk_loyalty(world: &WorldState) {
 }
 
 /// Reset loyalty_monthly to 0 in DB for all users.
-///
-/// C++ Reference: `DBAgent.cpp:2455-2463` — `RESET_LOYALTY_MONTHLY` stored proc.
 async fn reset_loyalty_monthly(pool: &DbPool) {
     let repo = ko_db::repositories::character::CharacterRepository::new(pool);
     match repo.reset_loyalty_monthly().await {
@@ -335,9 +302,6 @@ fn reset_loyalty_monthly_in_memory(world: &WorldState) {
 }
 
 /// Recalculate clan grades and demote promoted clans whose grade dropped.
-///
-/// C++ Reference: `Knights.cpp:900-922` — `UpdateFlagAndCape()`
-///
 /// Logic:
 /// 1. If flag >= Accredited5 (3): grade = 1 (top tier regardless of points).
 /// 2. Else: grade = `GetKnightsGrade(points)`.
@@ -374,7 +338,7 @@ fn update_flag_and_cape(world: &WorldState, pool: &DbPool) {
             k.grade = new_grade;
             if needs_demote {
                 k.flag = CLAN_TYPE_TRAINING;
-                k.cape = 0xFFFF; // -1 as u16 (C++ `m_sCape = -1`)
+                k.cape = 0xFFFF; // -1 as u16
             }
         });
 
@@ -410,15 +374,11 @@ fn update_flag_and_cape(world: &WorldState, pool: &DbPool) {
 }
 
 /// Execute automatic commands that match the current hour, minute, and day-of-month.
-///
-/// C++ Reference: `ServerStartStopHandler.cpp:64-84`
-///
 /// For each active `AutomaticCommand` row:
 /// - `hour` and `minute` must match exactly
 /// - `day_of_week == 7` means every day (sentinel), otherwise must match `m_sDate`
 ///   (day-of-month 1-31). C++ field name is `iDay`, DB column is `day_of_week`
 ///   but it actually stores day-of-month.
-///
 /// Commands are logged. Actual GM dispatch is not wired here (would require a
 /// synthetic ClientSession); instead we process known server-side commands directly.
 fn execute_automatic_commands(world: &WorldState, hour: u8, minute: u8, day_of_month: i32) {
@@ -427,7 +387,6 @@ fn execute_automatic_commands(world: &WorldState, hour: u8, minute: u8, day_of_m
         if cmd.hour != hour as i32 || cmd.minute != minute as i32 {
             continue;
         }
-        // C++: iDay == 7 means every day, else must match m_sDate (day-of-month)
         if cmd.day_of_week != 7 && cmd.day_of_week != day_of_month {
             continue;
         }
@@ -940,7 +899,6 @@ mod tests {
     #[test]
     fn test_knights_rating_ranking_sent_in_user_inout() {
         // Verify ranking field is u8 and can represent ranks 0-255
-        // C++ m_byRanking is uint8 (0 = unranked, 1 = top rank)
         let info = crate::world::types::KnightsInfo {
             ranking: 1,
             ..Default::default()

@@ -1,6 +1,4 @@
 //! Server list repository — loads game server entries from PostgreSQL.
-//!
-//! C++ Reference: `KOOriginalGameServer/LoginServer/DBProcess.cpp` (LoadServerList)
 
 use crate::models::ServerInfo;
 use crate::DbPool;
@@ -18,7 +16,6 @@ impl<'a> ServerListRepository<'a> {
 
     /// Load all game server entries from the database.
     ///
-    /// C++ Reference: `DBProcess::LoadServerList()` — `SELECT * FROM GAME_SERVER_LIST`
     pub async fn load_all(&self) -> Result<Vec<ServerInfo>, sqlx::Error> {
         sqlx::query_as::<_, ServerInfo>(
             "SELECT server_id, group_id, screen_type, server_name, server_ip, lan_ip, \
@@ -36,7 +33,6 @@ impl<'a> ServerListRepository<'a> {
 
     /// Update the concurrent user count for a specific server.
     ///
-    /// C++ Reference: `CDBAgent::UpdateConCurrentUserCount()` —
     /// `UPDATE CONCURRENT SET zone1_count = ? WHERE serverid = ?`
     pub async fn update_concurrent_users(
         &self,

@@ -1,7 +1,4 @@
 //! Extended hook (WIZ_EXT_HOOK 0xE9) sub-opcode handlers.
-//!
-//! C++ Reference: `XGuard.cpp:2013-2143` — sub-opcode dispatch.
-//!
 //! These are sub-opcodes of WIZ_EXT_HOOK (0xE9).  They include both
 //! anti-cheat and extended gameplay features.
 
@@ -15,256 +12,193 @@ use crate::session::ClientSession;
 use crate::world::types::MERCHANT_STATE_NONE;
 
 // ── Sub-opcode constants ─────────────────────────────────────────────────────
-// C++ Reference: `XGuard.cpp` — `ExtHookSubOpcodes` enum
 
 /// Anti-cheat: client reports its detected authority level.
-/// C++ Reference: `ExtHook_AuthInfo()` — disconnects if non-GM claims GM.
 pub const EXT_SUB_AUTHINFO: u8 = 0xA2;
 
 /// Anti-cheat: client sends heartbeat with MD5 validation.
-/// C++ Reference: `ExtHook_StayAlive()` — validates clock + MD5 hash.
 pub const EXT_SUB_XALIVE: u8 = 0xA6;
 
 /// Client requests full UI info dump (KC/TL/stats/XP/skills/tag).
-/// C++ Reference: `ExtHook_UIRequest()` — sends character snapshot.
 pub const EXT_SUB_UIINFO: u8 = 0xA7;
 
 /// Client requests KC/TL/weapon skills summary.
-/// C++ Reference: `ExtHook_ReqUserInfo()` — lighter version of UIRequest.
 pub const EXT_SUB_USERINFO: u8 = 0xB1;
 
 /// Client saves auto-loot filter preferences.
-/// C++ Reference: `ExtHook_SaveLootSettings()` — 10 item type bools + price.
 pub const EXT_SUB_LOOT_SETTINGS: u8 = 0xB3;
 
 /// Client sends GM support ticket.
-/// C++ Reference: `ExtHook_Support()` — rate limited, saved to DB.
 pub const EXT_SUB_SUPPORT: u8 = 0xBB;
 
 /// Chat last seen timestamp update.
-/// C++ Reference: `ExtHook_LastSeenProcess()` — stores hour:minute in memory.
 pub const EXT_SUB_CHAT_LASTSEEN: u8 = 0xCD;
 
 /// Skill & stat reset via item 1299.
-/// C++ Reference: `ExtHook_Send1299SkillAndStatReset()` — AllPointChange/AllSkillPointChange.
 pub const EXT_SUB_SKILL_STAT_RESET: u8 = 0xCF;
 
 /// GM process list inspection (anti-cheat).
-/// C++ Reference: `ExtHook_ProcInfo()` — receives running processes, forwards to GM.
 pub const EXT_SUB_PROCINFO: u8 = 0xA3;
 
 /// Anti-cheat log (disabled in C++).
-/// C++ Reference: `ExtHook_Log()` — disabled with `return;`.
 pub const EXT_SUB_LOG: u8 = 0xA5;
 
 /// Cash shop purchase via ext hook path.
-/// C++ Reference: `ExtHook_PusRequest()`.
 pub const EXT_SUB_PUS: u8 = 0xA8;
 
 /// Cash change notification (KC/TL balance update).
-/// C++ Reference: `HSACSXOpCodes::CASHCHANGE = 0xA9`.
 pub const EXT_SUB_CASHCHANGE: u8 = 0xA9;
 
 /// Drop list query.
-/// C++ Reference: `ExtHook_DropRequest()` — returns NPC/monster drop table.
 pub const EXT_SUB_DROP_LIST: u8 = 0xAB;
 
 /// Anti-cheat reset.
-/// C++ Reference: `ExtHook_Reset()`.
 pub const EXT_SUB_RESET: u8 = 0xAD;
 
 /// Drop request (same handler as DROP_LIST).
-/// C++ Reference: `ExtHook_DropRequest()`.
 pub const EXT_SUB_DROP_REQUEST: u8 = 0xAE;
 
 /// Clan bank open (disabled in C++ — function starts with `return;`).
-/// C++ Reference: `ExtHook_ClanBank()`.
 pub const EXT_SUB_CLANBANK: u8 = 0xB0;
 
 /// Chaotic item exchange via Bifrost generator.
-/// C++ Reference: `ExtHook_ChaoticExchange()`.
 pub const EXT_SUB_CHAOTIC_EXCHANGE: u8 = 0xB4;
 
 /// Merchant item add via ext hook path.
-/// C++ Reference: `ExtHook_Merchant()`.
 pub const EXT_SUB_MERCHANT: u8 = 0xB5;
 
 /// Temporary (expiring) items list.
-/// C++ Reference: `ExtHook_SendTempItems()`.
 pub const EXT_SUB_TEMPITEMS: u8 = 0xB8;
 
 /// Merchant list request.
-/// C++ Reference: `ExtHook_ReqMerchantSystem()` — C++ `MERCHANTLIST = 0xBD`.
 pub const EXT_SUB_MERCHANTLIST: u8 = 0xBD;
 
 /// Rebirth stat reset (NPC dialog).
-/// C++ Reference: `HSACSXOpCodes::RESETREBSTAT = 0xCA`.
 pub const EXT_SUB_RESETREBSTAT: u8 = 0xCA;
 
 /// Account info save (email, phone, seal, OTP).
-/// C++ Reference: `ExtHook_AccountInfoSave()`.
 pub const EXT_SUB_ACCOUNT_INFO_SAVE: u8 = 0xCC;
 
 /// Buyback (repurchase) list.
-/// C++ Reference: `ExtHook_SendRepurchaseMsg()`.
 pub const EXT_SUB_REPURCHASE: u8 = 0xCE;
 
 /// PUS category list.
-/// C++ Reference: `HSACSXOpCodes::PusCat = 0xD6`.
 const EXT_SUB_PUS_CAT: u8 = 0xD6;
 
 /// Chest item blocking list.
-/// C++ Reference: `HandleChestBlock()`.
 pub const EXT_SUB_CHEST_BLOCKITEM: u8 = 0xE5;
 
 /// Right-click item exchange info/execute.
-/// C++ Reference: `HandleRightClickExchange()`.
 pub const EXT_SUB_ITEM_EXCHANGE_INFO: u8 = 0xE6;
 
 /// Daily login reward claim.
-/// C++ Reference: `HandleDailyRewardProcess()`.
 pub const EXT_SUB_DAILY_REWARD: u8 = 0xF7;
 
 /// Castle Siege Warfare timer/finish.
-/// C++ Reference: `HSACSXOpCodes::CSW = 0xE1`.
 pub const EXT_SUB_CSW: u8 = 0xE1;
 
 /// Zindan War score tracking.
-/// C++ Reference: `HSACSXOpCodes::ZindanWar = 0xD2`.
 pub const EXT_SUB_ZINDAN_WAR: u8 = 0xD2;
 
 // ── Additional sub-opcode constants (C++ HSACSXOpCodes enum completeness) ────
 
 /// Anti-cheat: client open notification.
-/// C++ Reference: `HSACSXOpCodes::OPEN = 0xA4`.
 pub const EXT_SUB_OPEN: u8 = 0xA4;
 
 /// Key exchange serial number.
-/// C++ Reference: `HSACSXOpCodes::KESN = 0xAA`.
 pub const EXT_SUB_KESN: u8 = 0xAA;
 
 /// Item process via ext hook path.
-/// C++ Reference: `HSACSXOpCodes::ITEM_PROCESS = 0xAC`.
 pub const EXT_SUB_ITEM_PROCESS: u8 = 0xAC;
 
 /// Collection Race sub-opcode.
-/// C++ Reference: `HSACSXOpCodes::CR = 0xAF`.
 pub const EXT_SUB_COLLECTION_RACE: u8 = 0xAF;
 
 /// KC marketplace (premium shop).
-/// C++ Reference: `HSACSXOpCodes::KCPAZAR = 0xB2`.
 pub const EXT_SUB_KCPAZAR: u8 = 0xB2;
 
 /// Extended user data query.
-/// C++ Reference: `HSACSXOpCodes::USERDATA = 0xB7`.
 pub const EXT_SUB_USERDATA: u8 = 0xB7;
 
 /// Knight Cash update notification.
-/// C++ Reference: `HSACSXOpCodes::KCUPDATE = 0xB9`.
 pub const EXT_SUB_KCUPDATE: u8 = 0xB9;
 
 /// Auto-drop settings.
-/// C++ Reference: `HSACSXOpCodes::AUTODROP = 0xBA`.
 pub const EXT_SUB_AUTODROP: u8 = 0xBA;
 
 /// Information message to client.
-/// C++ Reference: `HSACSXOpCodes::INFOMESSAGE = 0xBC`.
 pub const EXT_SUB_INFOMESSAGE: u8 = 0xBC;
 
 /// General message to client.
-/// C++ Reference: `HSACSXOpCodes::MESSAGE = 0xBE`.
 pub const EXT_SUB_MESSAGE: u8 = 0xBE;
 
 /// Ban system administration.
-/// C++ Reference: `HSACSXOpCodes::BANSYSTEM = 0xBF`.
 pub const EXT_SUB_BANSYSTEM: u8 = 0xBF;
 
 /// Mercenary viewer info.
-/// C++ Reference: `HSACSXOpCodes::MERC_WIEWER_INFO = 0xC3`.
 pub const EXT_SUB_MERC_VIEWER_INFO: u8 = 0xC3;
 
 /// Item upgrade rate display.
-/// C++ Reference: `HSACSXOpCodes::UPGRADE_RATE = 0xC4`.
 pub const EXT_SUB_UPGRADE_RATE: u8 = 0xC4;
 
 /// Castle siege timer (dead opcode — C++ 0xC5 unused).
-/// C++ Reference: `HSACSXOpCodes::CASTLE_SIEGE_TIMER = 0xC5`.
 pub const EXT_SUB_CASTLE_SIEGE_TIMER: u8 = 0xC5;
 
 /// Voice chat control.
-/// C++ Reference: `HSACSXOpCodes::VOICE = 0xC6`.
 pub const EXT_SUB_VOICE: u8 = 0xC6;
 
 /// Lottery sub-opcode.
-/// C++ Reference: `HSACSXOpCodes::LOTTERY = 0xC7`.
 pub const EXT_SUB_LOTTERY: u8 = 0xC7;
 
 /// Top-left UI message display.
-/// C++ Reference: `HSACSXOpCodes::TOPLEFT = 0xC8`.
 pub const EXT_SUB_TOPLEFT: u8 = 0xC8;
 
 /// Error message to client.
-/// C++ Reference: `HSACSXOpCodes::ERRORMSG = 0xC9`.
 pub const EXT_SUB_ERRORMSG: u8 = 0xC9;
 
 /// Unknown / reserved (unused in C++).
-/// C++ Reference: `HSACSXOpCodes::UNKNOWN1 = 0xCB`.
 pub const EXT_SUB_UNKNOWN1: u8 = 0xCB;
 
 /// Name tag change.
-/// C++ Reference: `HSACSXOpCodes::TagInfo = 0xD1`.
 pub const EXT_SUB_TAG_INFO: u8 = 0xD1;
 
 /// Daily quest sub-opcode.
-/// C++ Reference: `HSACSXOpCodes::DailyQuest = 0xD3`.
 pub const EXT_SUB_DAILY_QUEST: u8 = 0xD3;
 
 /// Cash refund (PUS refund).
-/// C++ Reference: `HSACSXOpCodes::PusRefund = 0xD4`.
 pub const EXT_SUB_PUS_REFUND: u8 = 0xD4;
 
 /// Player ranking sub-opcode.
-/// C++ Reference: `HSACSXOpCodes::PlayerRank = 0xD5`.
 pub const EXT_SUB_PLAYER_RANK: u8 = 0xD5;
 
 /// Death notice broadcast.
-/// C++ Reference: `HSACSXOpCodes::DeathNotice = 0xD7`.
 pub const EXT_SUB_DEATH_NOTICE: u8 = 0xD7;
 
 /// Quest list display.
-/// C++ Reference: `HSACSXOpCodes::ShowQuestList = 0xD9`.
 pub const EXT_SUB_SHOW_QUEST_LIST: u8 = 0xD9;
 
 /// Wheel of Fun gacha.
-/// C++ Reference: `HSACSXOpCodes::WheelData = 0xDA`.
 pub const EXT_SUB_WHEEL_DATA: u8 = 0xDA;
 
 /// Genie info / time display.
-/// C++ Reference: `HSACSXOpCodes::GenieInfo = 0xDB`.
 pub const EXT_SUB_GENIE_INFO: u8 = 0xDB;
 
 /// Cinderella War event.
-/// C++ Reference: `HSACSXOpCodes::CINDIRELLA = 0xE0`.
 pub const EXT_SUB_CINDERELLA: u8 = 0xE0;
 
 /// Juraid Mountain event.
-/// C++ Reference: `HSACSXOpCodes::JURAID = 0xE2`.
 pub const EXT_SUB_JURAID: u8 = 0xE2;
 
 /// Perks system.
-/// C++ Reference: `HSACSXOpCodes::PERKS = 0xE3`.
 pub const EXT_SUB_PERKS: u8 = 0xE3;
 
 /// Secondary message to client.
-/// C++ Reference: `HSACSXOpCodes::MESSAGE2 = 0xE4`.
 pub const EXT_SUB_MESSAGE2: u8 = 0xE4;
 
 /// Hook visibility toggle.
-/// C++ Reference: `HSACSXOpCodes::WIZ_HOOK_VISIBLE = 0xE7`.
 pub const EXT_SUB_HOOK_VISIBLE: u8 = 0xE7;
 
 /// Game master mode UI toggle (server → client only).
-/// C++ Reference: `HSACSXOpCodes::WIZ_GAME_MASTER_MODE` (enum auto-increment after 0xE8).
 pub const EXT_SUB_GAME_MASTER_MODE: u8 = 0xE9;
 
 // ── Opcode used for building S2C response packets ────────────────────────────
@@ -285,9 +219,6 @@ const SUPPORT_COOLDOWN_SECS: u64 = 3600;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle AUTHINFO (0xA2) — detect memory-editing cheats.
-///
-/// C++ Reference: `XGuard.cpp:783-806` — `ExtHook_AuthInfo()`
-///
 /// Client sends its detected authority value.  If the client claims GM
 /// authority but the player is NOT a GM, this is evidence of memory editing.
 /// The server disconnects the cheater immediately.
@@ -336,13 +267,9 @@ pub fn handle_authinfo(session: &mut ClientSession, data: &[u8]) -> anyhow::Resu
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle xALIVE (0xA6) — heartbeat / keep-alive from client.
-///
-/// C++ Reference: `XGuard.cpp:604-657` — `ExtHook_StayAlive()`
-///
 /// The client periodically sends a heartbeat packet with clock values and an
 /// MD5 signature.  The server validates the signature and detects clock replay
 /// attacks.  **No response is sent** — this is one-way validation.
-///
 /// For now we accept and track the last heartbeat timestamp.  Full MD5
 /// validation requires knowing the exact client version string which varies
 /// per deployment.
@@ -374,9 +301,6 @@ pub fn handle_xalive(session: &mut ClientSession, data: &[u8]) -> anyhow::Result
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle UIINFO (0xA7) — send full character snapshot to client.
-///
-/// C++ Reference: `XGuard.cpp:904-936` — `ExtHook_UIRequest()`
-///
 /// Response includes: KC, TL, weapon skills, money requirement, XP, max XP,
 /// session socket ID, character name, class, race, level, 5 stats, tag name
 /// + RGB, zone ID, and flame level.
@@ -410,7 +334,7 @@ pub async fn handle_ui_request(session: &mut ClientSession) -> anyhow::Result<()
 
     // Calculate money requirement — C++ formula: pow(level * 2.0, 3.4)
     let mut money_req = compute_money_req(info.level, premium);
-    // Apply discount if active — C++ Reference: XGuard.cpp:917-918
+    // Apply discount if active
     if world.is_discount_active(info.nation) {
         money_req /= 2;
     }
@@ -464,9 +388,6 @@ pub async fn handle_ui_request(session: &mut ClientSession) -> anyhow::Result<()
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle USERINFO (0xB1) — send KC/TL and weapon skill summary.
-///
-/// C++ Reference: `XGuard.cpp:659-683` — `ExtHook_ReqUserInfo()`
-///
 /// Response is a lighter version of UIRequest: KC, TL, 7 weapon skills,
 /// money requirement, and flame level.
 pub async fn handle_req_userinfo(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -490,7 +411,7 @@ pub async fn handle_req_userinfo(session: &mut ClientSession) -> anyhow::Result<
     let eq = world.get_equipped_stats(sid);
 
     let mut money_req = compute_money_req(info.level, premium);
-    // Apply discount if active — C++ Reference: XGuard.cpp:672-674
+    // Apply discount if active
     if world.is_discount_active(info.nation) {
         money_req /= 2;
     }
@@ -518,9 +439,6 @@ pub async fn handle_req_userinfo(session: &mut ClientSession) -> anyhow::Result<
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle LOOT_SETTINGS (0xB3) — save auto-loot filter preferences.
-///
-/// C++ Reference: `XGuard.cpp:1048-1081` — `ExtHook_SaveLootSettings()`
-///
 /// Client sends 10 boolean item-type filters + 1 price threshold.
 /// Stored in DB via `save_loot_settings()` repository method.
 pub async fn handle_loot_settings(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
@@ -598,9 +516,6 @@ pub async fn handle_loot_settings(session: &mut ClientSession, data: &[u8]) -> a
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle SUPPORT (0xBB) — player submits a support ticket.
-///
-/// C++ Reference: `XGuard.cpp:882-902` — `ExtHook_Support()`
-///
 /// Rate limited to 1 report per `SUPPORT_COOLDOWN_SECS` (3600s = 1 hour).
 /// Two report types: Bug (0x00) or Koxp (0x01).
 pub fn handle_support(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
@@ -668,9 +583,6 @@ pub fn handle_support(session: &mut ClientSession, data: &[u8]) -> anyhow::Resul
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle CHAT_LASTSEEN (0xCD) — update chat last seen timestamp.
-///
-/// C++ Reference: `XGuard.cpp:3420-3454` — `ExtHook_LastSeenProcess()`
-///
 /// Sub-opcode 1: Client updates its own last-seen time (hour + minute).
 /// Sub-opcode 2: Query another player's last seen — **disabled in C++** (returns early).
 pub fn handle_chat_lastseen(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
@@ -706,12 +618,8 @@ pub fn handle_chat_lastseen(session: &mut ClientSession, data: &[u8]) -> anyhow:
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle SKILL_STAT_RESET (0xCF) — stat/skill point reset via item scroll.
-///
-/// C++ Reference: `XGuard.cpp:3461-3479` — `ExtHook_Send1299SkillAndStatReset()`
-///
 /// Sub-opcode 1: Reset all stat points → `AllPointChange()`
 /// Sub-opcode 2: Reset all skill points → `AllSkillPointChange()`
-///
 /// These delegate to the existing handlers in class_change.rs.
 pub async fn handle_skill_stat_reset(
     session: &mut ClientSession,
@@ -741,9 +649,6 @@ pub async fn handle_skill_stat_reset(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle PROCINFO (0xA3) — receive client's running process list.
-///
-/// C++ Reference: `XGuard.cpp:808-851` — `ExtHook_ProcInfo()`
-///
 /// Client sends its process list + window titles targeted at a specific GM.
 /// If the target is a GM, the server forwards the list as help descriptions.
 pub fn handle_procinfo(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
@@ -818,9 +723,6 @@ pub fn handle_procinfo(session: &mut ClientSession, data: &[u8]) -> anyhow::Resu
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle TEMPITEMS (0xB8) — send list of expiring items to client.
-///
-/// C++ Reference: `XGuard.cpp:938-1046` — `ExtHook_SendTempItems()`
-///
 /// Scans inventory, costume, magic bag, warehouse, VIP warehouse for items
 /// with nExpirationTime > 0 and sends the list.  Only fires once per session.
 pub async fn handle_temp_items(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -918,9 +820,6 @@ pub async fn handle_temp_items(session: &mut ClientSession) -> anyhow::Result<()
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle CHEST_BLOCKITEM (0xE5) — update chest item block list.
-///
-/// C++ Reference: `XGuard.cpp:3205-3237` — `HandleChestBlock()`
-///
 /// Sub-opcode 0: Client sends a list of item IDs (max 100) to block from
 ///               chest loot.  Stored in per-session memory.
 /// Sub-opcode 1: Client requests confirmation; server sends empty ack packet.
@@ -970,9 +869,6 @@ pub async fn handle_chest_block(session: &mut ClientSession, data: &[u8]) -> any
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle ACCOUNT_INFO_SAVE (0xCC) — validate and save account security info.
-///
-/// C++ Reference: `XGuard.cpp:3272-3334` — `ExtHook_AccountInfoSave()`
-///
 /// Validates email (max 250 chars), phone (exactly 11 digits), seal code
 /// (exactly 8 digits), and OTP (exactly 6 digits).
 pub async fn handle_account_info_save(
@@ -1029,7 +925,6 @@ pub async fn handle_account_info_save(
     }
 
     // Persist to DB (tb_user: email, user_phone_number, str_seal_passwd, otp_password).
-    // C++ Reference: DatabaseThread.cpp:541-564 — `ACCOUNT_INFO_SAVE` stored proc
     let account_id = match session.account_id() {
         Some(id) => id.to_string(),
         None => {
@@ -1070,26 +965,21 @@ pub async fn handle_account_info_save(
 
 /// Handle LOG (0xA5) — anti-cheat log, disabled in C++ (returns early).
 pub fn handle_log(_session: &mut ClientSession, _data: &[u8]) -> anyhow::Result<()> {
-    // C++ Reference: ExtHook_Log() — disabled, immediate return
     Ok(())
 }
 
 /// Handle RESET (0xAD) — anti-cheat system reset.
 pub fn handle_reset(_session: &mut ClientSession, _data: &[u8]) -> anyhow::Result<()> {
-    // C++ Reference: ExtHook_Reset() — client anti-cheat state reset
     debug!("ext_hook reset received");
     Ok(())
 }
 
 /// Handle CLANBANK (0xB0) — clan bank open, disabled in C++ (starts with `return;`).
 pub fn handle_clanbank(_session: &mut ClientSession, _data: &[u8]) -> anyhow::Result<()> {
-    // C++ Reference: ExtHook_ClanBank() — entire function disabled with `return;` at top
     Ok(())
 }
 
 /// Handle PUS (0xA8) — cash shop purchase/catalog via ext hook.
-///
-/// C++ Reference: `HSACSX_PusRequest()` — `XGuard.cpp:1409-1445`
 /// Sub-opcodes:
 ///   0 = SendPUS (catalog + categories)
 ///   1 = PUSPurchase (KC/TL buy)
@@ -1112,8 +1002,6 @@ pub async fn handle_pus(session: &mut ClientSession, data: &[u8]) -> anyhow::Res
 }
 
 /// PUS sub 0: Send full catalog + categories to client.
-///
-/// C++ Reference: `HSACSX_SendPUS()` — `XGuard.cpp:1574-1638`
 /// Wire format (items): `[0xE9][0xA8][u32 count]([u32 id][u32 item_id][u32 price][i16 cat][i32 buy_count][i16 price_type]) × N`
 /// Wire format (cats):  `[0xE9][0xA9][u32 count]([u32 id][string name][i16 status]) × N`
 async fn handle_pus_send_catalog(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -1148,8 +1036,6 @@ async fn handle_pus_send_catalog(session: &mut ClientSession) -> anyhow::Result<
 }
 
 /// PUS sub 1: Purchase item with KC or TL.
-///
-/// C++ Reference: `HSACSX_PUSPurchase()` — `XGuard.cpp:1447-1572`
 async fn handle_pus_purchase(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
     if data.len() < 5 {
         return Ok(());
@@ -1240,8 +1126,6 @@ async fn handle_pus_purchase(session: &mut ClientSession, data: &[u8]) -> anyhow
 }
 
 /// PUS sub 3: Gift purchase — buy item for another player.
-///
-/// C++ Reference: `PUSGiftPurchase()` — `PusRefund.cpp:167-242`
 async fn handle_pus_gift(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
     if data.is_empty() {
         return Ok(());
@@ -1310,9 +1194,6 @@ async fn handle_pus_gift(session: &mut ClientSession, data: &[u8]) -> anyhow::Re
 }
 
 /// Send CASHCHANGE (0xB9) update to client with current KC and TL balances.
-///
-/// C++ Reference: `HSACSXOpCodes::CASHCHANGE` — `XGuard.cpp:1511-1513`
-///
 /// Sends ext_hook packet (0xE9) + WIZ_CHAT fallback for v2525 vanilla clients
 /// that silently drop 0xE9 (outside dispatch range 0x06-0xD7).
 async fn send_cash_change(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -1332,8 +1213,6 @@ async fn send_cash_change(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle DROP_LIST/DROP_REQUEST (0xAB/0xAE) — NPC/monster drop table query.
-///
-/// C++ Reference: `HSACSX_DropRequest()` — `XGuard.cpp:1658-1841`
 /// Commands:
 ///   1 = Look up target NPC/monster drop table
 ///   2 = Expand item group into individual items
@@ -1356,8 +1235,6 @@ pub async fn handle_drop_request(session: &mut ClientSession, data: &[u8]) -> an
 }
 
 /// Drop command 1: Look up target NPC's drop items.
-///
-/// C++ Reference: `HSACSX_DropRequest command=1` — `XGuard.cpp:1678-1723`
 /// Wire format: `[0xE9][EXT_SUB_DROP_REQUEST][u8(1)][u16 proto_id]([u32 item_id][u16 percent] × 12)[u8 is_monster]`
 async fn handle_drop_cmd1(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
     if data.len() < 4 {
@@ -1416,8 +1293,6 @@ async fn handle_drop_cmd1(session: &mut ClientSession, data: &[u8]) -> anyhow::R
 }
 
 /// Drop command 2: Expand item group ID into individual items.
-///
-/// C++ Reference: `HSACSX_DropRequest command=2` — `XGuard.cpp:1724-1743`
 /// Wire format: `[0xE9][EXT_SUB_DROP_LIST][u8(2)][u8 count]([u32 item_id] × count)`
 async fn handle_drop_cmd2(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
     if data.len() < 4 {
@@ -1442,8 +1317,6 @@ async fn handle_drop_cmd2(session: &mut ClientSession, data: &[u8]) -> anyhow::R
 }
 
 /// Drop command 3: Look up monster proto ID with group expansion.
-///
-/// C++ Reference: `HSACSX_DropRequest command=3` — `XGuard.cpp:1744-1807`
 /// For each drop slot, if item_id < MIN_ITEM_ID, expands via MakeItemGroup.
 /// Also checks MakeItemGroupRandom for random loot indicator (900004000).
 async fn handle_drop_cmd3(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
@@ -1506,8 +1379,6 @@ async fn handle_drop_cmd3(session: &mut ClientSession, data: &[u8]) -> anyhow::R
 }
 
 /// Drop command 4: Collection Race reward items.
-///
-/// C++ Reference: `HSACSX_DropRequest command=4` — `XGuard.cpp:1808-1841`
 async fn handle_drop_cmd4(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
     if data.is_empty() {
         return Ok(());
@@ -1562,8 +1433,6 @@ fn npc_item_pairs(ni: &ko_db::models::item_tables::NpcItemRow) -> [(i32, i16); 1
 }
 
 /// Handle CHAOTIC_EXCHANGE (0xB4) — random item exchange via Bifrost generator.
-///
-/// C++ Reference: `HSACSX_ChaoticExchange()` — `XGuard.cpp:1198-1407`
 /// Client sends: `[u16 npc_id][u32 item_id][u8 src_pos][u8 bank][u8 sell][u8 count]`
 pub async fn handle_chaotic_exchange(
     session: &mut ClientSession,
@@ -1588,7 +1457,7 @@ pub async fn handle_chaotic_exchange(
         return send_bifrost_fail(session, error_code).await;
     }
 
-    // Chaotic coins gate — C++ Reference: XGuard.cpp:1203-1208
+    // Chaotic coins gate
     //   uint32 coinsreq = g_pMain->pServerSetting.chaoticcoins;
     //   if (coinsreq && !hasCoins(coinsreq)) { SendHelpDescription(...); return fail; }
     let chaotic_coins = world
@@ -1784,8 +1653,6 @@ pub async fn handle_chaotic_exchange(
 }
 
 /// Send chaotic exchange result notification.
-///
-/// C++ Reference: `SendChaoticResult()` — `XGuard.cpp:1189-1196`
 async fn send_chaotic_result(session: &mut ClientSession, result: u8) -> anyhow::Result<()> {
     let mut pkt = Packet::new(WIZ_EXT_HOOK);
     pkt.write_u8(EXT_SUB_CHAOTIC_EXCHANGE);
@@ -1794,8 +1661,6 @@ async fn send_chaotic_result(session: &mut ClientSession, result: u8) -> anyhow:
 }
 
 /// Send Bifrost exchange failure packet.
-///
-/// C++ Reference: `BifrostPieceSendFail()` — `XGuard.cpp:1120-1133`
 async fn send_bifrost_fail(session: &mut ClientSession, error_code: u8) -> anyhow::Result<()> {
     let mut pkt = Packet::new(ko_protocol::Opcode::WizItemUpgrade as u8);
     pkt.write_u8(5); // ITEM_BIFROST_EXCHANGE
@@ -1804,8 +1669,6 @@ async fn send_bifrost_fail(session: &mut ClientSession, error_code: u8) -> anyho
 }
 
 /// Handle MERCHANT (0xB5) — merchant item add via ext hook path.
-///
-/// C++ Reference: `HSACSX_Merchant()` — `XGuard.cpp:1092-1187`
 /// Delegates to the standard WIZ_MERCHANT handler by constructing a synthetic packet.
 /// The ext_hook data format is: `[u8 sub_code][...merchant_data]` — identical to WIZ_MERCHANT.
 pub async fn handle_merchant(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
@@ -1820,8 +1683,6 @@ pub async fn handle_merchant(session: &mut ClientSession, data: &[u8]) -> anyhow
 }
 
 /// Handle MERCHANTLIST (0xCA) — Menissiah merchant list system.
-///
-/// C++ Reference: `HSACSX_ReqMerchantSystem()` — `XGuard.cpp:108-147`
 /// Sub-opcodes:
 ///   0 = ReqMerchantListSend — list all merchant items
 ///   1 = ReqMerchantListGo — teleport to merchant
@@ -1842,8 +1703,6 @@ pub async fn handle_merchantlist(session: &mut ClientSession, data: &[u8]) -> an
 }
 
 /// MerchantList sub 0: Send full merchant item list.
-///
-/// C++ Reference: `HSACSX_ReqMerchantListSend()` — `XGuard.cpp:215-334`
 /// Wire format per item: `[u16 sid][u32 sid][string name][u8 sell_buy][u32 item_id][u16 count][u32 price][u8 is_kc][f32 x][f32 y][f32 z]`
 async fn handle_merchantlist_send(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -1873,8 +1732,6 @@ async fn handle_merchantlist_send(session: &mut ClientSession) -> anyhow::Result
 }
 
 /// MerchantList sub 1: Teleport to merchant.
-///
-/// C++ Reference: `HSACSX_ReqMerchantListGo()` — `XGuard.cpp:184-213`
 async fn handle_merchantlist_go(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
     let mut reader = ko_protocol::PacketReader::new(data);
     let target_name = reader.read_string().unwrap_or_default();
@@ -1909,8 +1766,6 @@ async fn handle_merchantlist_go(session: &mut ClientSession, data: &[u8]) -> any
 }
 
 /// MerchantList sub 2: Open whisper chat to merchant.
-///
-/// C++ Reference: `HSACSX_ReqMerchantListMessage()` — `XGuard.cpp:149-182`
 async fn handle_merchantlist_message(
     session: &mut ClientSession,
     data: &[u8],
@@ -1949,8 +1804,6 @@ async fn handle_merchantlist_message(
 }
 
 /// Handle REPURCHASE (0xCE) — buyback list request.
-///
-/// C++ Reference: `ExtHook_SendRepurchaseMsg()` — delegates to `SendRepurchaseMsg()`.
 /// The ext_hook path simply triggers the same repurchase list send that
 /// NPC trade type 5 sub-opcode 4 uses (refreshed=false).
 pub async fn handle_repurchase(session: &mut ClientSession, _data: &[u8]) -> anyhow::Result<()> {
@@ -1960,9 +1813,6 @@ pub async fn handle_repurchase(session: &mut ClientSession, _data: &[u8]) -> any
 }
 
 /// Handle ITEM_EXCHANGE_INFO (0xE6) — right-click item exchange.
-///
-/// C++ Reference: `HandleRightClickExchange()` — `XGuard.cpp:2259-2283`
-///
 /// Sub-opcodes:
 /// - 1: RightClickExchangeSend (old UI, sends item_id)
 /// - 2: NewRightClickExchangeSend (new UI, sends slot + item_id)
@@ -1993,8 +1843,6 @@ pub async fn handle_item_exchange_info(
 }
 
 /// Sub 1: Old right-click exchange send — client clicks item, server sends item_id.
-///
-/// C++ Reference: `HandleRightClickExchangeSend()` — `XGuard.cpp:2315-2327`
 async fn handle_right_click_exchange_send(
     session: &mut ClientSession,
     data: &[u8],
@@ -2029,8 +1877,6 @@ async fn handle_right_click_exchange_send(
 }
 
 /// Sub 2: New right-click exchange send — server sends slot + item_id.
-///
-/// C++ Reference: `HandleNewRightClickExchangeSend()` — `XGuard.cpp:2301-2313`
 async fn handle_new_right_click_exchange_send(
     session: &mut ClientSession,
     data: &[u8],
@@ -2066,8 +1912,6 @@ async fn handle_new_right_click_exchange_send(
 }
 
 /// Sub 3: Execute exchange — dispatches on exchange type.
-///
-/// C++ Reference: `HandleNewRightClickExchange()` — `XGuard.cpp:2329-2361`
 async fn handle_new_right_click_exchange(
     session: &mut ClientSession,
     data: &[u8],
@@ -2093,8 +1937,6 @@ async fn handle_new_right_click_exchange(
 }
 
 /// Exchange type 1: Reward exchange — exchange for specific reward item.
-///
-/// C++ Reference: `HandleNewRightClickExchangeReward()` — sends response sub=3, type=1.
 async fn handle_exchange_reward(session: &mut ClientSession, _data: &[u8]) -> anyhow::Result<()> {
     // Send exchange type response
     let mut pkt = Packet::new(WIZ_EXT_HOOK);
@@ -2105,8 +1947,6 @@ async fn handle_exchange_reward(session: &mut ClientSession, _data: &[u8]) -> an
 }
 
 /// Exchange type 2: Exchange all — exchange all matching items.
-///
-/// C++ Reference: `HandleNewRightClickExchangeAll()`
 async fn handle_exchange_all(session: &mut ClientSession, _data: &[u8]) -> anyhow::Result<()> {
     let mut pkt = Packet::new(WIZ_EXT_HOOK);
     pkt.write_u8(EXT_SUB_ITEM_EXCHANGE_INFO);
@@ -2116,8 +1956,6 @@ async fn handle_exchange_all(session: &mut ClientSession, _data: &[u8]) -> anyho
 }
 
 /// Exchange type 3: Premium exchange.
-///
-/// C++ Reference: `HandleNewRightClickExchangePremium()`
 async fn handle_exchange_premium(session: &mut ClientSession, _data: &[u8]) -> anyhow::Result<()> {
     let mut pkt = Packet::new(WIZ_EXT_HOOK);
     pkt.write_u8(EXT_SUB_ITEM_EXCHANGE_INFO);
@@ -2127,8 +1965,6 @@ async fn handle_exchange_premium(session: &mut ClientSession, _data: &[u8]) -> a
 }
 
 /// Exchange type 4: Knight Cash exchange.
-///
-/// C++ Reference: `HandleNewRightClickExchangeKnightCash()`
 async fn handle_exchange_knight_cash(
     session: &mut ClientSession,
     _data: &[u8],
@@ -2141,8 +1977,6 @@ async fn handle_exchange_knight_cash(
 }
 
 /// Exchange type 6: Genie exchange.
-///
-/// C++ Reference: `HandleNewRightClickExchangeGenie()`
 async fn handle_exchange_genie(session: &mut ClientSession, _data: &[u8]) -> anyhow::Result<()> {
     let mut pkt = Packet::new(WIZ_EXT_HOOK);
     pkt.write_u8(EXT_SUB_ITEM_EXCHANGE_INFO);
@@ -2152,8 +1986,6 @@ async fn handle_exchange_genie(session: &mut ClientSession, _data: &[u8]) -> any
 }
 
 /// Exchange type 7: Knight TL exchange.
-///
-/// C++ Reference: `HandleNewRightClickExchangeKnightTL()`
 async fn handle_exchange_knight_tl(
     session: &mut ClientSession,
     _data: &[u8],
@@ -2166,9 +1998,6 @@ async fn handle_exchange_knight_tl(
 }
 
 /// Sub 4: Give exchange — selectable item exchange from ITEM_RIGHT_EXCHANGE.
-///
-/// C++ Reference: `HandleNewRightClickGiveExchange()` — `XGuard.cpp:2593-2728`
-///
 /// Two types:
 /// - sType=1: Player selects specific reward from list, consume source item
 /// - sType=2: Give all reward items from the exchange entry
@@ -2264,9 +2093,6 @@ async fn handle_new_right_click_give_exchange(
 }
 
 /// Sub 5: Generator exchange — random item from ITEM_EXCHANGE table.
-///
-/// C++ Reference: `HandleNewRightClickGeneratorExchange()` — `XGuard.cpp:2362-2575`
-///
 /// Uses weighted random selection from m_ItemExchangeArray where
 /// `bRandomFlag IN (1,2,3,101)` and `nOriginItemNum[0] == item_id`.
 fn handle_new_right_click_generator_exchange(
@@ -2285,7 +2111,7 @@ fn handle_new_right_click_generator_exchange(
     let sid = session.session_id();
     let world = session.world().clone();
 
-    // Chaotic coins gate — C++ Reference: XGuard.cpp:2367-2372
+    // Chaotic coins gate
     //   uint32 coinsreq = g_pMain->pServerSetting.chaoticcoins;
     //   if (coinsreq && !hasCoins(coinsreq)) { SendHelpDescription(...); return; }
     let chaotic_coins = world
@@ -2381,8 +2207,6 @@ fn handle_new_right_click_generator_exchange(
 }
 
 /// Handle DAILY_REWARD (0xF7) — daily login reward claim.
-///
-/// C++ Reference: `HandleDailyRewardProcess()` — dispatches on sub-opcode.
 /// Sub-opcode 1 = claim request (HandleDailyRewardGive).
 pub async fn handle_daily_reward(session: &mut ClientSession, data: &[u8]) -> anyhow::Result<()> {
     if data.is_empty() {
@@ -2399,9 +2223,6 @@ pub async fn handle_daily_reward(session: &mut ClientSession, data: &[u8]) -> an
 }
 
 /// Handle daily reward claim request (subcode 1).
-///
-/// C++ Reference: `HandleDailyRewardGive()` — `XGuard.cpp:2160-2257`
-///
 /// Flow:
 /// 1. Client sends item_id it wants to claim
 /// 2. Server loads 25-item config, 3 cumulative items, user progress
@@ -2550,8 +2371,6 @@ async fn handle_daily_reward_give(session: &mut ClientSession, data: &[u8]) -> a
 }
 
 /// Send daily reward error response (can't claim yet).
-///
-/// C++ Reference: `result << uint8(3)` — error sub-opcode.
 async fn send_daily_reward_error(session: &mut ClientSession) -> anyhow::Result<()> {
     let mut pkt = Packet::new(WIZ_EXT_HOOK);
     pkt.write_u8(EXT_SUB_DAILY_REWARD);
@@ -2560,10 +2379,7 @@ async fn send_daily_reward_error(session: &mut ClientSession) -> anyhow::Result<
 }
 
 /// Send daily reward state to client.
-///
-/// C++ Reference: `HandleHShieldSoftwareDailyReward()` (sub=0) or
 /// `HandleDailyRewardGive()` (sub=2).
-///
 /// Wire: `[0xE9][0xF7][u8 sub]([u32 item_id][u8 type][u8 day] × 25)([u32 cumulative] × 3)`
 pub async fn send_daily_reward_state(
     session: &mut ClientSession,
@@ -2588,8 +2404,6 @@ pub async fn send_daily_reward_state(
 }
 
 /// Send daily reward data on game entry.
-///
-/// C++ Reference: `HandleHShieldSoftwareDailyReward()` — `XGuard.cpp:3149-3192`
 pub async fn send_daily_reward_on_login(session: &mut ClientSession) -> anyhow::Result<()> {
     let pool = session.pool().clone();
     let repo = ko_db::repositories::daily_reward::DailyRewardRepository::new(&pool);
@@ -2673,9 +2487,6 @@ pub async fn send_daily_reward_on_login(session: &mut ClientSession) -> anyhow::
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Compute level-based money requirement for stat/skill reset.
-///
-/// C++ Reference: `XGuard.cpp:662-676` — `moneyReq` formula.
-///
 /// Formula: `(level * 2.0) ^ 3.4`, with level-based scaling:
 /// - Level < 30: multiply by 0.4
 /// - Level >= 60: multiply by 1.5
@@ -2698,9 +2509,6 @@ fn compute_money_req(level: u8, premium: u8) -> u32 {
 }
 
 /// Build and return the preset reset-cost packet sent on login and after level-up.
-///
-/// C++ Reference: `UserSkillStatPointSystem.cpp:61-67` — `SendPresetReqMoney()`
-///
 /// Packet: `[0xE9][0xAD][u32 gold_cost]`
 pub(crate) fn build_preset_req_money(level: u8, premium: u8, discount_active: bool) -> Packet {
     let mut cost = compute_money_req(level, premium);
@@ -2718,9 +2526,6 @@ pub(crate) fn build_preset_req_money(level: u8, premium: u8, discount_active: bo
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build an ext_hook MESSAGE packet (title + message popup).
-///
-/// C++ Reference: `XGuard.cpp:103-110` — `HSACSX_SendMessageBox()`
-///
 /// Packet: `[0xE9][0xBE][string title][string message]`
 pub(crate) fn build_ext_message_box(title: &str, message: &str) -> Packet {
     let mut pkt = Packet::new(WIZ_EXT_HOOK);
@@ -2735,9 +2540,6 @@ pub(crate) fn build_ext_message_box(title: &str, message: &str) -> Packet {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Handle RESETREBSTAT (0xCA) — opens the rebirth stat/skill reset NPC dialog.
-///
-/// C++ Reference: `XGuard.cpp:2086-2103`
-///
 /// Sets event NPC ID = 14446, event SID = 18004, quest helper = 4324, then
 /// opens `SelectMsg(52, ...)` with all button texts/events set to -1.
 pub fn handle_resetrebstat(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -2773,17 +2575,12 @@ pub fn handle_resetrebstat(session: &mut ClientSession) -> anyhow::Result<()> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Sub-opcode for anti-AFK NPC list.
-/// C++ Reference: `HSACSXOpCodes::SendAntiAfk = 0xD0`
 const EXT_SUB_ANTI_AFK: u8 = 0xD0;
 
 /// Sub-opcode for event timer show list.
-/// C++ Reference: `HSACSXOpCodes::EventShowList = 0xD8`
 const EXT_SUB_EVENT_SHOW_LIST: u8 = 0xD8;
 
 /// Send the anti-AFK NPC ID list to the client.
-///
-/// C++ Reference: `CUser::SendAntiAfkList()` — `CharacterSelectionHandler.cpp:1208-1228`
-///
 /// Packet: `[0xE9, 0xD0, u16(count), u16(npc_id)...]`
 pub async fn send_anti_afk_list(session: &mut ClientSession) -> anyhow::Result<()> {
     let ids = session.world().get_anti_afk_npc_ids();
@@ -2802,9 +2599,6 @@ pub async fn send_anti_afk_list(session: &mut ClientSession) -> anyhow::Result<(
 }
 
 /// Send right-click exchange item lists grouped by type on game entry.
-///
-/// C++ Reference: `CUser::HandleHShieldSoftwareRightExchangeLoadderHandler()` — `XGuard.cpp:3052-3147`
-///
 /// Sends 6 packets (one per exchange type 1,2,3,4,6,7).
 /// Packet: `[0xE9, 0xE6, u8(2), u8(type), u16(count), u32(item_id)...]`
 pub async fn send_right_exchange_list(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -2828,11 +2622,7 @@ pub async fn send_right_exchange_list(session: &mut ClientSession) -> anyhow::Re
 }
 
 /// Send the event timer schedule list to the client.
-///
-/// C++ Reference: `CUser::SendEventTimerList()` — `CharacterSelectionHandler.cpp:917-931`
-///
 /// Packet: `[0xE9, 0xD8, u32(hour), u32(minute), u32(second), u16(count), (string+u32+u32)...]`
-///
 /// Sends current server time + scheduled events for today (from event schedules + timer show list).
 pub async fn send_event_timer_list(session: &mut ClientSession) -> anyhow::Result<()> {
     use chrono::{Datelike, Timelike};
@@ -2860,8 +2650,6 @@ pub async fn send_event_timer_list(session: &mut ClientSession) -> anyhow::Resul
 }
 
 /// Build the combined event timer list for a given weekday.
-///
-/// C++ Reference: `CGameServerDlg::EventTimerSet()` — merges event_schedule_main_list
 /// (filtered by status + day + active time slots) with event_timer_show_list (filtered by day).
 pub(crate) fn build_event_timer_entries(
     world: &crate::world::WorldState,
@@ -2928,11 +2716,7 @@ pub(crate) fn build_event_timer_entries(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a CASHCHANGE (0xA9) packet with current KC and TL balances.
-///
-/// C++ Reference: `XGuard.cpp:1511-1513` — KC/TL balance push after purchase.
-///
 /// Packet: `[0xE9][0xA9][u32 kc][u32 tl]`
-///
 /// This is the public builder version. The internal `send_cash_change()` also
 /// sends a WIZ_CHAT fallback for v2525 clients.
 #[allow(dead_code)]
@@ -2945,9 +2729,6 @@ pub(crate) fn build_cash_change_packet(kc: u32, tl: u32) -> Packet {
 }
 
 /// Build an INFOMESSAGE (0xBC) packet — info popup displayed to the client.
-///
-/// C++ Reference: `XGuard.cpp:3481-3489` — `CUser::SendAcsMessage()`
-///
 /// Packet: `[0xE9][0xBC][string message]`
 #[allow(dead_code)]
 pub(crate) fn build_info_message(message: &str) -> Packet {
@@ -2958,11 +2739,7 @@ pub(crate) fn build_info_message(message: &str) -> Packet {
 }
 
 /// Build an ERRORMSG (0xC9) packet — error popup with title and message.
-///
-/// C++ Reference: `ItemUpgradeSystem.cpp:154-155` — rate-limit error popup.
-///
 /// Packet: `[0xE9][0xC9][u8 show][u8 sub][string title][string message]`
-///
 /// - `show`: 1 = display popup, 0 = hide
 /// - `sub`: sub-type for categorisation (client UI routing)
 #[allow(dead_code)]
@@ -2977,12 +2754,8 @@ pub(crate) fn build_error_message(show: u8, sub: u8, title: &str, message: &str)
 }
 
 /// Build a DEATH_NOTICE (0xD7) packet — kill/death broadcast via ext_hook path.
-///
-/// C++ Reference: `ChatHandler.cpp:636-699` — `CUser::SendDeathNotice()`
-///
 /// The standard death notice goes via WIZ_CHAT type=26. This ext_hook version
 /// provides an alternative S2C path for extended clients.
-///
 /// Packet: `[0xE9][0xD7][u8 victim_nation][u8 killer_nation][u8 notice_type][u32 killer_id][SByte killer_name][u32 victim_id][SByte victim_name][u16 victim_x][u16 victim_z]`
 #[allow(clippy::too_many_arguments)]
 #[allow(dead_code)]
@@ -3012,11 +2785,7 @@ pub(crate) fn build_death_notice(
 }
 
 /// Build a PLAYER_RANK (0xD5) update packet — ranking badge push to client.
-///
-/// C++ Reference: `NewRankingSystem.cpp` — `PlayerKillingAddPlayerRank()`
-///
 /// Packet: `[0xE9][0xD5][u8 rank_type][u16 session_id][u32 kills][u32 deaths][u32 loyalty]`
-///
 /// - `rank_type`: 0=PK Zone, 1=BDW, 2=Chaos Dungeon, etc.
 #[allow(dead_code)]
 pub(crate) fn build_player_rank_update(
@@ -3041,9 +2810,6 @@ pub(crate) fn build_player_rank_update(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a JURAID (0xE2) score packet — scoreboard on zone entry.
-///
-/// C++ Reference: `JuraidBdwFragSystem.cpp` — Juraid Mountain event score.
-///
 /// Packet: `[0xE9][0xE2][u8 sub=0][u32 karus_score][u32 elmo_score][u32 remaining_secs]`
 #[allow(dead_code)]
 pub(crate) fn build_juraid_score(
@@ -3061,7 +2827,6 @@ pub(crate) fn build_juraid_score(
 }
 
 /// Build a JURAID (0xE2) update score packet — broadcast on kill.
-///
 /// Packet: `[0xE9][0xE2][u8 sub=1][u8 nation][u32 new_score]`
 #[allow(dead_code)]
 pub(crate) fn build_juraid_updatescore(nation: u8, new_score: u32) -> Packet {
@@ -3074,7 +2839,6 @@ pub(crate) fn build_juraid_updatescore(nation: u8, new_score: u32) -> Packet {
 }
 
 /// Build a JURAID (0xE2) result packet — event ended, show results.
-///
 /// Packet: `[0xE9][0xE2][u8 sub=2][u8 winner_nation][u32 karus_score][u32 elmo_score]`
 #[allow(dead_code)]
 pub(crate) fn build_juraid_result(
@@ -3092,7 +2856,6 @@ pub(crate) fn build_juraid_result(
 }
 
 /// Build a JURAID (0xE2) logout packet — sent when player leaves Juraid zone.
-///
 /// Packet: `[0xE9][0xE2][u8 sub=3]`
 #[allow(dead_code)]
 pub(crate) fn build_juraid_logout() -> Packet {
@@ -3103,11 +2866,7 @@ pub(crate) fn build_juraid_logout() -> Packet {
 }
 
 /// Build a CASTLE_SIEGE_TIMER (0xC5) packet — CSW UI timer display.
-///
-/// C++ Reference: `HSACSXOpCodes::CASTLE_SIEGE_TIMER = 0xC5`
-///
 /// Packet: `[0xE9][0xC5][u8 sub][u32 remaining_secs][u8 status]`
-///
 /// - `sub`: 0 = start/update timer, 1 = stop timer
 /// - `status`: 0 = Preparation, 1 = War, 2 = Ended
 #[allow(dead_code)]
@@ -3121,7 +2880,6 @@ pub(crate) fn build_castle_siege_timer(sub: u8, remaining_secs: u32, status: u8)
 }
 
 /// Build a ZindanWar result packet — event ended, show final result.
-///
 /// Packet: `[0xE9][0xD2][u8 sub=3][u8 winner_nation][u32 elmo_kills][u32 karus_kills]`
 #[allow(dead_code)]
 pub(crate) fn build_zindan_result(
@@ -3143,11 +2901,7 @@ pub(crate) fn build_zindan_result(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a BANSYSTEM (0xBF) ban notification packet — sent before disconnect.
-///
-/// C++ Reference: `ChatHandler.cpp:2463-2465`, `XGuard.cpp:797-799`
-///
 /// Packet: `[0xE9][0xBF][u8 result]`
-///
 /// - `result`: 1 = banned/kicked
 #[allow(dead_code)]
 pub(crate) fn build_ban_notification(result: u8) -> Packet {
@@ -3158,13 +2912,9 @@ pub(crate) fn build_ban_notification(result: u8) -> Packet {
 }
 
 /// Handle BANSYSTEM (0xBF) — Life skill data query (C2S).
-///
-/// C++ Reference: `XGuard.cpp:64-92` — `HSACSX_SendLifeSkills()` / `HSACSX_HandleLifeSkill()`
-///
 /// Despite the name, in C++ this sub-opcode is used for life skill data, not banning.
 /// The server responds with life skill levels and XP for 4 categories:
 /// War, Hunting, Smithery, Karma.
-///
 /// Response: `[0xE9][0xBF][u8 war_level][u32 war_exp][u32 war_target][u8 hunt_level][u32 hunt_exp][u32 hunt_target][u8 smith_level][u32 smith_exp][u32 smith_target][u8 karma_level][u32 karma_exp][u32 karma_target]`
 pub async fn handle_bansystem(session: &mut ClientSession, _data: &[u8]) -> anyhow::Result<()> {
     // C++ sends life skill data in response to this sub-opcode.
@@ -3181,11 +2931,7 @@ pub async fn handle_bansystem(session: &mut ClientSession, _data: &[u8]) -> anyh
 }
 
 /// Build a GAME_MASTER_MODE (0xE9) toggle packet — GM UI mode switch.
-///
-/// C++ Reference: `HSACSXOpCodes::WIZ_GAME_MASTER_MODE` (auto-increment after 0xE8)
-///
 /// Packet: `[0xE9][0xE9][u8 enabled]`
-///
 /// - `enabled`: 1 = GM mode active (UI shows GM tools), 0 = normal mode
 pub(crate) fn build_gm_mode_toggle(enabled: u8) -> Packet {
     let mut pkt = Packet::new(WIZ_EXT_HOOK);
@@ -3195,7 +2941,6 @@ pub(crate) fn build_gm_mode_toggle(enabled: u8) -> Packet {
 }
 
 /// Handle GAME_MASTER_MODE (0xE9) — client requests GM mode toggle (C2S).
-///
 /// Only processes the request if the player is a GM (authority == 0).
 /// Sends back the toggle confirmation.
 pub async fn handle_game_master_mode(
@@ -3237,9 +2982,6 @@ pub async fn handle_game_master_mode(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a CSW timer packet sent when a player enters Delos during active siege.
-///
-/// C++ Reference: `CUser::CastleSiegeWarfareFlag()` in `thyke_csw.cpp:214-235`
-///
 /// Packet: `[0xE9][0xE1][0x00][u32 remaining_secs][SByte owner_name][u8 status][u32 phase_minutes]`
 pub(crate) fn build_csw_timer_packet(
     remaining_secs: u32,
@@ -3260,9 +3002,6 @@ pub(crate) fn build_csw_timer_packet(
 }
 
 /// Build a CSW finish packet sent when the siege ends.
-///
-/// C++ Reference: `CUser::CastleSiegeWarfareFlag(pKnights, true)` in `thyke_csw.cpp:237-240`
-///
 /// Packet: `[0xE9][0xE1][0x01]`
 #[allow(dead_code)]
 pub(crate) fn build_csw_finish_packet() -> Packet {
@@ -3277,9 +3016,6 @@ pub(crate) fn build_csw_finish_packet() -> Packet {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a ZindanWar flagsend packet (initial scoreboard on zone entry).
-///
-/// C++ Reference: `CGameServerDlg::ZindanWarSendScore()` in `GameServerDlg.cpp:2567-2579`
-///
 /// Packet: `[0xE9][0xD2][0x00][SByte elmo_name][u32 elmo_kills][SByte karus_name][u32 karus_kills][u32 remaining_secs]`
 pub(crate) fn build_zindan_flagsend(
     elmo_name: &str,
@@ -3304,9 +3040,6 @@ pub(crate) fn build_zindan_flagsend(
 }
 
 /// Build a ZindanWar score update packet (broadcast on kill).
-///
-/// C++ Reference: `CGameServerDlg::ZindanWarUpdateScore()` in `GameServerDlg.cpp:2581-2590`
-///
 /// Packet: `[0xE9][0xD2][0x01][u8 nation][u32 new_kill_count]`
 pub(crate) fn build_zindan_updatescore(nation: u8, new_count: u32) -> Packet {
     let mut pkt = Packet::new(WIZ_EXT_HOOK);
@@ -3318,9 +3051,6 @@ pub(crate) fn build_zindan_updatescore(nation: u8, new_count: u32) -> Packet {
 }
 
 /// Build a ZindanWar logout packet (sent to departing player).
-///
-/// C++ Reference: `CGameServerDlg::ZindanWarLogOut()` in `GameServerDlg.cpp:2592-2600`
-///
 /// Packet: `[0xE9][0xD2][0x02]`
 pub(crate) fn build_zindan_logout() -> Packet {
     let mut pkt = Packet::new(WIZ_EXT_HOOK);
@@ -3860,11 +3590,8 @@ mod tests {
     fn test_resetrebstat_constants() {
         // Verify the NPC/event IDs match C++ XGuard.cpp:2088-2091
         assert_eq!(EXT_SUB_RESETREBSTAT, 0xCA);
-        // C++ m_sEventNid = 14446
         assert_eq!(14446i16, 14446);
-        // C++ m_sEventSid = 18004
         assert_eq!(18004i16, 18004);
-        // C++ m_nQuestHelperID = 4324
         assert_eq!(4324u32, 4324);
     }
 

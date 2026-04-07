@@ -1,24 +1,18 @@
 //! Soccer Event handler — Temple Soccer system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/SoccerSystem.cpp` (404 lines)
-//!
 //! The soccer event is a per-zone in-memory event in Moradon zones (21-25).
 //! Two teams (Red, Blue) of up to 11 players each compete on a field.
 //! A ball NPC is tracked for goal detection via geometric collision.
-//!
 //! ## Flow
 //! 1. Players join via `isEventSoccerMember` (team selection + zone check)
 //! 2. Any member can start the match via `isEventSoccerStard` (both teams need 1+)
 //! 3. Timer ticks once per second for 600s; ball NPC checked for goals
 //! 4. At time=1, match ends, players teleported out, results sent
 //! 5. 10s cooldown, then room resets
-//!
 //! ## Packet Format
 //! Soccer event packets use `WIZ_MINING` opcode with first byte `0x10` (16):
 //! - `0x10 0x01 socket_id(u32) team(i8) team(i8) blue_goals(u8) red_goals(u8)` — goal scored
 //! - `0x10 0x02 timer(u16)` — timer update / join confirmation
 //! - `0x10 0x04 winner(u8) blue_goals(u8) red_goals(u8)` — match end result
-//!
 //! The client kick action uses `WIZ_MINING` sub-opcode `MiningSoccer(10)`.
 
 use std::collections::HashMap;
@@ -29,7 +23,6 @@ use ko_protocol::{Opcode, Packet};
 use crate::world::{ZONE_MORADON, ZONE_MORADON2, ZONE_MORADON3, ZONE_MORADON4, ZONE_MORADON5};
 
 // ── Team Colour Constants ──────────────────────────────────────────────
-// C++ Reference: `User.h:103-109` — `enum TeamColour`
 
 /// No team assigned.
 pub const TEAM_COLOUR_NONE: u8 = 0;
@@ -43,7 +36,6 @@ pub const TEAM_COLOUR_OUTSIDE: u8 = 3;
 pub const TEAM_COLOUR_MAP: u8 = 4;
 
 // ── Geometry Constants ─────────────────────────────────────────────────
-// C++ Reference: `SoccerSystem.cpp:166-178`
 
 /// Soccer field boundary (X axis).
 const FIELD_X_MIN: f32 = 644.0;
@@ -53,61 +45,50 @@ const FIELD_Z_MIN: f32 = 120.0;
 const FIELD_Z_MAX: f32 = 200.0;
 
 /// Red goal zone (ball entering here = Blue team scores).
-/// C++ Reference: `SoccerSystem.cpp:176`
 const RED_GOAL_X_MIN: f32 = 661.0;
 const RED_GOAL_X_MAX: f32 = 681.0;
 const RED_GOAL_Z_MIN: f32 = 108.0;
 const RED_GOAL_Z_MAX: f32 = 120.0;
 
 /// Blue goal zone (ball entering here = Red team scores).
-/// C++ Reference: `SoccerSystem.cpp:178`
 const BLUE_GOAL_X_MIN: f32 = 661.0;
 const BLUE_GOAL_X_MAX: f32 = 681.0;
 const BLUE_GOAL_Z_MIN: f32 = 199.0;
 const BLUE_GOAL_Z_MAX: f32 = 208.0;
 
 /// Ball reset position (center of the field).
-/// C++ Reference: `SoccerSystem.cpp:255`
 pub const BALL_CENTER_X: f32 = 672.0;
 pub const BALL_CENTER_Z: f32 = 160.0;
 
 /// Default spawn positions for players joining with (0,0).
-/// C++ Reference: `SoccerSystem.cpp:57-60`
 const BLUE_SPAWN_X: f32 = 672.0;
 const BLUE_SPAWN_Z: f32 = 166.0;
 const RED_SPAWN_X: f32 = 672.0;
 const RED_SPAWN_Z: f32 = 154.0;
 
 /// End-of-match teleport positions.
-/// C++ Reference: `SoccerSystem.cpp:281-289`
 const BLUE_END_X: f32 = 639.0;
 const BLUE_END_Z: f32 = 194.0;
 const RED_END_X: f32 = 703.0;
 const RED_END_Z: f32 = 127.0;
 
 /// Maximum players per team.
-/// C++ Reference: `SoccerSystem.cpp:11-16`
 const MAX_TEAM_SIZE: u8 = 11;
 /// Maximum total players (both teams).
 const MAX_TOTAL_PLAYERS: u8 = 22;
 
 /// Match duration in seconds.
-/// C++ Reference: `SoccerSystem.cpp:90`
 const MATCH_DURATION: u16 = 600;
 
 /// Cooldown ticks after match ends before room resets.
-/// C++ Reference: `SoccerSystem.cpp:308`
 const COOLDOWN_TICKS: u16 = 10;
 
 /// Soccer event sub-opcode prefix byte in WIZ_MINING packets.
-/// C++ Reference: `SoccerSystem.cpp:51` — `Packet result(WIZ_MINING); result << uint8(16)`
 const SOCCER_EVENT_SUB: u8 = 0x10;
 
 // ── Per-User Tracking ──────────────────────────────────────────────────
 
 /// Per-user soccer event state.
-///
-/// C++ Reference: `_SOCCER_STARTED_EVENT_USER` in `GameDefine.h:3495`
 #[derive(Debug, Clone)]
 pub struct SoccerUser {
     /// Character name.
@@ -123,8 +104,6 @@ pub struct SoccerUser {
 // ── Per-Zone Room State ────────────────────────────────────────────────
 
 /// Per-zone soccer event room state.
-///
-/// C++ Reference: `_SOCCER_STATUS_INFO` in `GameDefine.h:3513`
 #[derive(Debug, Clone)]
 pub struct SoccerRoom {
     /// Whether the match is currently active.
@@ -172,28 +151,24 @@ impl Default for SoccerRoom {
 impl SoccerRoom {
     /// Total number of registered users.
     ///
-    /// C++ Reference: `_SOCCER_STATUS_INFO::GetRoomTotalUserCount()`
     pub fn total_user_count(&self) -> u8 {
         self.users.len() as u8
     }
 
     /// Whether the match is currently active.
     ///
-    /// C++ Reference: `_SOCCER_STATUS_INFO::isSoccerAktive()`
     pub fn is_active(&self) -> bool {
         self.active
     }
 
     /// Whether the cooldown timer is running.
     ///
-    /// C++ Reference: `_SOCCER_STATUS_INFO::isSoccerTime()`
     pub fn is_cooldown(&self) -> bool {
         self.timer_flag
     }
 
     /// Reset the room to its initial state.
     ///
-    /// C++ Reference: `_SOCCER_STATUS_INFO::Clean()`
     pub fn clean(&mut self) {
         self.users.clear();
         self.active = false;
@@ -211,8 +186,6 @@ impl SoccerRoom {
 // ── Global Soccer State ────────────────────────────────────────────────
 
 /// Global soccer event state holding per-zone rooms.
-///
-/// C++ Reference: `CGameServerDlg::m_TempleSoccerEventRoomList`
 #[derive(Debug, Clone)]
 pub struct SoccerState {
     /// Per-zone soccer rooms keyed by zone ID (21-25).
@@ -258,8 +231,6 @@ pub fn new_soccer_state() -> SharedSoccerState {
 // ── Zone Helpers ───────────────────────────────────────────────────────
 
 /// Check whether a zone is a Moradon zone (neutral zone for soccer).
-///
-/// C++ Reference: `SoccerSystem.cpp:5` — `GetZoneID() >= ZONE_MORADON && GetZoneID() <= ZONE_MORADON5`
 pub fn is_moradon_zone(zone_id: u16) -> bool {
     (ZONE_MORADON..=ZONE_MORADON5).contains(&zone_id)
 }
@@ -267,16 +238,11 @@ pub fn is_moradon_zone(zone_id: u16) -> bool {
 // ── Geometry Helpers ───────────────────────────────────────────────────
 
 /// Check whether a position is inside the soccer field.
-///
-/// C++ Reference: `CUser::isInSoccerEvent()` in `SoccerSystem.cpp:166-168`
 pub fn is_in_field(x: f32, z: f32) -> bool {
     x > FIELD_X_MIN && x < FIELD_X_MAX && z > FIELD_Z_MIN && z < FIELD_Z_MAX
 }
 
 /// Check the ball NPC's position and return which zone it is in.
-///
-/// C++ Reference: `CNpc::isInSoccerEvent()` in `SoccerSystem.cpp:170-193`
-///
 /// Returns:
 /// - `TEAM_COLOUR_BLUE` if ball is in blue goal zone (red team scores)
 /// - `TEAM_COLOUR_RED` if ball is in red goal zone (blue team scores)
@@ -336,9 +302,6 @@ pub enum JoinResult {
 }
 
 /// Attempt to register a user into the soccer event for a zone.
-///
-/// C++ Reference: `CUser::isEventSoccerMember()` in `SoccerSystem.cpp:3-67`
-///
 /// Returns a `JoinResult` indicating success or failure.
 pub fn join_event(
     state: &mut SoccerState,
@@ -353,7 +316,6 @@ pub fn join_event(
     }
 
     // Team must be Blue(1) or Red(2).
-    // C++ Reference: `SoccerSystem.cpp:19-21`
     if !(TEAM_COLOUR_BLUE..=TEAM_COLOUR_RED).contains(&team) {
         return JoinResult::InvalidTeam;
     }
@@ -400,7 +362,6 @@ pub fn join_event(
     }
 
     // Determine spawn position: use defaults if (0,0) was passed.
-    // C++ Reference: `SoccerSystem.cpp:55-61`
     let (spawn_x, spawn_z) = if x == 0.0 && z == 0.0 {
         if team == TEAM_COLOUR_BLUE {
             (BLUE_SPAWN_X, BLUE_SPAWN_Z)
@@ -421,9 +382,6 @@ pub fn join_event(
 // ── Start Match ────────────────────────────────────────────────────────
 
 /// Attempt to start the soccer match in a zone.
-///
-/// C++ Reference: `CUser::isEventSoccerStard()` in `SoccerSystem.cpp:69-93`
-///
 /// Returns `true` if the match was started, `false` if conditions not met.
 pub fn start_match(state: &mut SoccerState, zone_id: u16, player_name: &str) -> bool {
     let room = match state.get_room_mut(zone_id) {
@@ -482,9 +440,6 @@ pub enum TickResult {
 }
 
 /// Process a single timer tick for a soccer room in a given zone.
-///
-/// C++ Reference: `CGameServerDlg::TempleSoccerEventTimer()` in `SoccerSystem.cpp:197-327`
-///
 /// This should be called once per second for each Moradon zone.
 pub fn timer_tick(room: &mut SoccerRoom) -> TickResult {
     if room.is_active() {
@@ -502,7 +457,6 @@ pub fn timer_tick(room: &mut SoccerRoom) -> TickResult {
             };
 
             // Transition to cooldown.
-            // C++ Reference: `SoccerSystem.cpp:304-309`
             room.timer_flag = true;
             room.active = false;
             room.cooldown_ticks = COOLDOWN_TICKS;
@@ -511,7 +465,6 @@ pub fn timer_tick(room: &mut SoccerRoom) -> TickResult {
         };
 
         // Decrement the match timer.
-        // C++ Reference: `SoccerSystem.cpp:312-313`
         if room.match_time > 0 {
             room.match_time -= 1;
         }
@@ -519,7 +472,6 @@ pub fn timer_tick(room: &mut SoccerRoom) -> TickResult {
         result
     } else if room.is_cooldown() {
         // In cooldown phase.
-        // C++ Reference: `SoccerSystem.cpp:315-325`
         if room.cooldown_ticks == 1 {
             room.cooldown_ticks = 0;
             TickResult::CooldownDone
@@ -538,16 +490,11 @@ pub fn timer_tick(room: &mut SoccerRoom) -> TickResult {
 // ── Goal Scored ────────────────────────────────────────────────────────
 
 /// Record a goal scored and return the updated goal counts.
-///
-/// C++ Reference: `SoccerSystem.cpp:244-256`
-///
 /// When the ball enters a goal zone:
 /// - Ball in Red goal zone (`TEAM_COLOUR_RED`) → Blue team scores
 /// - Ball in Blue goal zone (`TEAM_COLOUR_BLUE`) → Red team scores
-///
 /// Returns `(blue_goals, red_goals)` after the update.
 pub fn record_goal(room: &mut SoccerRoom, goal_zone: u8) -> (u8, u8) {
-    // C++ Reference: `SoccerSystem.cpp:244-249`
     // Note: C++ logic is counterintuitive — if ball is in RED zone, BLUE scored
     if goal_zone == TEAM_COLOUR_RED {
         room.blue_goals += 1;
@@ -560,9 +507,6 @@ pub fn record_goal(room: &mut SoccerRoom, goal_zone: u8) -> (u8, u8) {
 // ── End Match ──────────────────────────────────────────────────────────
 
 /// Determine the winning team from goal counts.
-///
-/// C++ Reference: `CUser::isEventSoccerEnd()` in `SoccerSystem.cpp:95-126`
-///
 /// Returns the winning team colour, or `TEAM_COLOUR_NONE` for a draw.
 pub fn determine_winner(blue_goals: u8, red_goals: u8) -> u8 {
     if red_goals > blue_goals {
@@ -575,8 +519,6 @@ pub fn determine_winner(blue_goals: u8, red_goals: u8) -> u8 {
 }
 
 /// Get end-of-match teleport position for a given team.
-///
-/// C++ Reference: `SoccerSystem.cpp:279-289`
 pub fn end_teleport_position(team: u8) -> (f32, f32) {
     match team {
         TEAM_COLOUR_BLUE => (BLUE_END_X, BLUE_END_Z),
@@ -586,9 +528,6 @@ pub fn end_teleport_position(team: u8) -> (f32, f32) {
 }
 
 /// Remove a user from the soccer event and decrement team counts.
-///
-/// C++ Reference: `CUser::isEventSoccerEnd()` lines 116-122 +
-///                `CUser::isEventSoccerUserRemoved()` in `SoccerSystem.cpp:145-154`
 pub fn remove_user(room: &mut SoccerRoom, player_name: &str) {
     if let Some(user) = room.users.remove(player_name) {
         if user.team == TEAM_COLOUR_BLUE && room.blue_count > 0 {
@@ -600,8 +539,6 @@ pub fn remove_user(room: &mut SoccerRoom, player_name: &str) {
 }
 
 /// Check if a player is registered in the soccer event for a given zone.
-///
-/// C++ Reference: `CUser::isSoccerEventUser()` in `SoccerSystem.cpp:128-143`
 pub fn is_soccer_user(state: &SoccerState, zone_id: u16, player_name: &str) -> bool {
     state
         .get_room(zone_id)
@@ -609,8 +546,6 @@ pub fn is_soccer_user(state: &SoccerState, zone_id: u16, player_name: &str) -> b
 }
 
 /// Check if a player is in the soccer event and on the field.
-///
-/// C++ Reference: `CUser::isInSoccerEvent()` in `SoccerSystem.cpp:156-168`
 pub fn is_player_in_soccer(
     state: &SoccerState,
     zone_id: u16,
@@ -630,8 +565,6 @@ pub fn is_player_in_soccer(
 // ── Packet Builders ────────────────────────────────────────────────────
 
 /// Build the timer/join confirmation packet.
-///
-/// C++ Reference: `SoccerSystem.cpp:51-53`
 /// Format: `WIZ_MINING(0x10, 0x02, timer(u16))`
 pub fn build_timer_packet(timer: u16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizMining as u8);
@@ -642,8 +575,6 @@ pub fn build_timer_packet(timer: u16) -> Packet {
 }
 
 /// Build the goal scored notification packet.
-///
-/// C++ Reference: `SoccerSystem.cpp:369-374`
 /// Format: `WIZ_MINING(0x10, 0x01, socket_id(u32), goal_zone(i8), goal_zone(i8), blue_goals(u8), red_goals(u8))`
 pub fn build_goal_packet(socket_id: i16, goal_zone: u8, blue_goals: u8, red_goals: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizMining as u8);
@@ -658,8 +589,6 @@ pub fn build_goal_packet(socket_id: i16, goal_zone: u8, blue_goals: u8, red_goal
 }
 
 /// Build the match end result packet.
-///
-/// C++ Reference: `SoccerSystem.cpp:114`
 /// Format: `WIZ_MINING(0x10, 0x04, winner(u8), blue_goals(u8), red_goals(u8))`
 pub fn build_end_packet(winner: u8, blue_goals: u8, red_goals: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizMining as u8);
@@ -674,12 +603,8 @@ pub fn build_end_packet(winner: u8, blue_goals: u8, red_goals: u8) -> Packet {
 // ── Handle Soccer Kick (MiningSoccer=10) ───────────────────────────────
 
 /// Handle the soccer kick action (client sends WIZ_MINING sub-opcode 10).
-///
-/// C++ Reference: `CUser::HandleSoccer()` in `SoccerSystem.cpp:381-404`
-///
 /// This sets the player as "mining" (which in this context means kicking
 /// the ball) and broadcasts the action to the region.
-///
 /// Returns the packet to send (either success broadcast or error to self).
 pub fn build_kick_response(session_id: u16, already_mining: bool) -> (Packet, bool) {
     let mut pkt = Packet::new(Opcode::WizMining as u8);

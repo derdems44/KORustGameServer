@@ -1,16 +1,10 @@
 //! Perk system models — maps to `perks` and `user_perks` tables.
-//!
-//! C++ Reference: `_PERKS` struct (GameDefine.h:551) and `_PERKS_DATA` struct (GameDefine.h:559).
 //! MSSQL Reference: PERKS (13 definitions), USER_PERKS (per-character allocations).
 
 /// Total number of perk types.
-///
-/// C++ Reference: `#define PERK_COUNT 13` in `GameDefine.h:4`
 pub const PERK_COUNT: usize = 13;
 
 /// A perk definition row (static data loaded at startup).
-///
-/// C++ Reference: `_PERKS` struct
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PerkRow {
     /// Perk index (0-12).
@@ -28,8 +22,6 @@ pub struct PerkRow {
 }
 
 /// Per-character perk point allocations.
-///
-/// C++ Reference: `_PERKS_DATA` struct — `uint16 perkType[PERK_COUNT], remPerk`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserPerkRow {
     /// Character name (primary key).

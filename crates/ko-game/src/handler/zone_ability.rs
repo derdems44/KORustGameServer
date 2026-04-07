@@ -1,14 +1,9 @@
 //! WIZ_ZONEABILITY (0x5E) sub-opcode 1 — zone ability packet builder.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:1839-1918`
 //!     — `CUser::SetZoneAbilityChange(uint16 sNewZone)`
-//!
 //! Tells the client the zone's rules: PvP type, cross-nation trade/talk, tariff rate.
 //! Called after game start (UserInfoSystem.cpp:246) and after zone change
 //! (ZoneChangeWarpHandler.cpp:287).
-//!
 //! ## Packet Format (sub-opcode 1)
-//!
 //! ```text
 //! WIZ_ZONEABILITY (0x5E)
 //!   u8(1)              — sub-opcode (zone ability info)
@@ -17,11 +12,7 @@
 //!   u8(can_talk)       — canTalkToOtherNation (bool as u8)
 //!   u16(tariff)        — tariff rate
 //! ```
-//!
 //! ## Tariff Calculation
-//!
-//! C++ Reference: `User.cpp:1847-1910` — switch(sNewZone)
-//!
 //! - Territory zones (Karus, Elmorad, battles, etc.): 10 + king_system.territory_tariff
 //! - Moradon zones (21-25, 48/Arena): siege_war.moradon_tariff
 //! - Delos zones (30, 32, 33, 35): siege_war.delos_tariff
@@ -44,10 +35,7 @@ use crate::world::{
 };
 
 /// Send WIZ_ZONEABILITY sub-opcode 1 to the client.
-///
 /// Informs the client about the zone's PvP rules, cross-nation trade/talk, and tariff rate.
-///
-/// C++ Reference: `User.cpp:1839-1918` — `CUser::SetZoneAbilityChange(uint16 sNewZone)`
 pub async fn send_zone_ability(session: &mut ClientSession, zone_id: u16) -> anyhow::Result<()> {
     let world = session.world().clone();
 
@@ -64,7 +52,6 @@ pub async fn send_zone_ability(session: &mut ClientSession, zone_id: u16) -> any
 
     let tariff = compute_tariff(&world, zone_id, nation);
 
-    // C++ Reference: User.cpp:1912-1916
     // Packet result(WIZ_ZONEABILITY, uint8(1));
     // result << pMap->canTradeWithOtherNation()
     //        << pMap->GetZoneType()
@@ -93,10 +80,8 @@ pub async fn send_zone_ability(session: &mut ClientSession, zone_id: u16) -> any
 }
 
 /// Send WIZ_ZONEABILITY sub-opcode 2 (SetZoneFlag) to the client.
-///
 /// v2600 sniff verified: sent after zone transitions to update the client's
 /// dynamic zone war/flag status. Format: `[u8(2)] [u16 zone_flag]`.
-///
 /// The zone_flag value encodes the current war/event status of the zone.
 pub async fn send_zone_flag(session: &mut ClientSession, zone_id: u16) -> anyhow::Result<()> {
     let world = session.world().clone();
@@ -113,7 +98,6 @@ pub async fn send_zone_flag(session: &mut ClientSession, zone_id: u16) -> anyhow
 }
 
 /// Build a WIZ_ZONEABILITY sub-opcode 1 packet without sending it.
-///
 /// Useful for testing the packet format.
 pub fn build_zone_ability_packet(
     can_trade: bool,
@@ -131,9 +115,6 @@ pub fn build_zone_ability_packet(
 }
 
 /// Compute the tariff rate for a given zone.
-///
-/// C++ Reference: `User.cpp:1847-1910` — switch(sNewZone) tariff assignment
-///
 /// Three groups:
 /// 1. Territory zones: `10 + king_system.territory_tariff`
 /// 2. Moradon zones: `siege_war.moradon_tariff`
@@ -142,7 +123,6 @@ pub fn build_zone_ability_packet(
 fn compute_tariff(world: &WorldState, zone_id: u16, nation: u8) -> u16 {
     match zone_id {
         // Territory zones — king tariff
-        // C++ Reference: User.cpp:1849-1891
         ZONE_KARUS
         | ZONE_KARUS2
         | ZONE_KARUS3
@@ -181,7 +161,6 @@ fn compute_tariff(world: &WorldState, zone_id: u16, nation: u8) -> u16 {
         | ZONE_CLAN_WAR_RONARK
         | ZONE_KNIGHT_ROYALE
         | ZONE_CHAOS_DUNGEON => {
-            // C++: if (pKingSystem != nullptr)
             //          pMap->SetTariff(10 + pKingSystem->m_nTerritoryTariff);
             //      else pMap->SetTariff(10);
             let king_tariff = world
@@ -192,10 +171,8 @@ fn compute_tariff(world: &WorldState, zone_id: u16, nation: u8) -> u16 {
         }
 
         // Moradon zones — siege moradon tariff
-        // C++ Reference: User.cpp:1892-1898
         ZONE_MORADON | ZONE_MORADON2 | ZONE_MORADON3 | ZONE_MORADON4 | ZONE_MORADON5
         | ZONE_ARENA => {
-            // C++: pMap->SetTariff((uint8)g_pMain->pSiegeWar.sMoradonTariff);
             // C++ truncates u16 → u8 via (uint8) cast, m_byTariff is uint8 (Map.h:126)
             let sw = world.siege_war().try_read();
             match sw {
@@ -205,9 +182,7 @@ fn compute_tariff(world: &WorldState, zone_id: u16, nation: u8) -> u16 {
         }
 
         // Delos zones — siege delos tariff
-        // C++ Reference: User.cpp:1900-1905
         ZONE_DELOS | ZONE_DESPERATION_ABYSS | ZONE_HELL_ABYSS | ZONE_DELOS_CASTELLAN => {
-            // C++: pMap->SetTariff((uint8)g_pMain->pSiegeWar.sDellosTariff);
             // C++ truncates u16 → u8 via (uint8) cast, m_byTariff is uint8 (Map.h:126)
             let sw = world.siege_war().try_read();
             match sw {
@@ -498,8 +473,6 @@ mod tests {
     /// Verify that Moradon/Delos tariff is truncated from u16 to u8 before being
     /// sent in the packet, matching C++ behavior where `SetTariff((uint8)sMoradonTariff)`.
     ///
-    /// C++ Reference: `User.cpp:1898` — `pMap->SetTariff((uint8)g_pMain->pSiegeWar.sMoradonTariff)`
-    /// C++ Reference: `Map.h:126` — `uint8 m_byTariff`
     #[test]
     fn test_compute_tariff_moradon_u8_truncation() {
         let world = WorldState::new();
@@ -562,7 +535,6 @@ mod tests {
 
     #[test]
     fn test_zone_knight_royale_matches_cpp_define() {
-        // C++ Reference: Define.h:214 — `#define ZONE_KNIGHT_ROYALE 76`
         // Previously was incorrectly set to 88 in this file.
         assert_eq!(ZONE_KNIGHT_ROYALE, 76);
     }

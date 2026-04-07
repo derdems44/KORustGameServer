@@ -1,21 +1,14 @@
 //! WIZ_GENIE (0x97) handler — genie (lamp) system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/GenieHandler.cpp`
-//!
 //! The genie system provides automated play assistance (auto-loot, auto-potion).
 //! Genie time is consumed from a per-character allowance, activated via spirit
 //! potion items.
-//!
-//! ## Top-level commands (C++ `HandleGenie`)
-//!
+//! ## Top-level commands
 //! | Value | Name               | Description                          |
 //! |-------|--------------------|--------------------------------------|
 //! | 1     | GenieInfoRequest   | Non-attack sub-commands              |
 //! | 2     | GenieUpdateRequest | Attack-mode sub-commands (proxied)   |
 //! | 25    | GenieNotice        | Walking function toggle notice       |
-//!
-//! ## GenieInfoRequest sub-commands (C++ GameDefine.h:4592-4600)
-//!
+//! ## GenieInfoRequest sub-commands
 //! | Value | Name                  | Description                      |
 //! |-------|-----------------------|----------------------------------|
 //! | 1     | GenieUseSpiringPotion | Consume genie spirit potion      |
@@ -41,15 +34,11 @@ pub fn now_secs() -> u32 {
 }
 
 /// Compute remaining genie seconds from absolute UNIX timestamp.
-///
-/// C++ equivalent: `m_1098GenieTime > UNIXTIME ? m_1098GenieTime - UNIXTIME : 0`
 pub fn genie_remaining_from_abs(abs: u32) -> u32 {
     abs.saturating_sub(now_secs())
 }
 
 /// Convert remaining genie seconds to display hours.
-///
-/// C++ Reference: `User.h` — `GetGenieTime()`
 /// ```text
 /// int hour = int(m_1098GenieTime > UNIXTIME ? m_1098GenieTime - UNIXTIME : 0);
 /// if (hour <= 0)   return 0;
@@ -81,14 +70,12 @@ const GENIE_UPDATE_REQUEST: u8 = 2;
 const GENIE_NOTICE: u8 = 25;
 
 // ── GenieAttackHandle sub-commands ──────────────────────────────────────
-// C++ Reference: `GameDefine.h:4603-4609` — GenieAttackHandle enum
 const GENIE_MOVE: u8 = 1;
 const GENIE_ROTATE: u8 = 2;
 const GENIE_MAIN_ATTACK: u8 = 3;
 const GENIE_MAGIC: u8 = 4;
 
 // ── GenieInfoRequest sub-commands ───────────────────────────────────────
-// C++ Reference: `GameDefine.h:4592-4600` — GenieNonAttackType enum
 
 /// Consume genie spirit potion item.
 const GENIE_USE_SPIRING_POTION: u8 = 1;
@@ -108,16 +95,13 @@ const GENIE_ACTIVATED: u8 = 7;
 // ── Genie status constants ──────────────────────────────────────────────
 
 /// Status: genie active.
-/// C++ Reference: `GameDefine.h:4583` — `GenieStatusActive = 1`
 const GENIE_STATUS_ACTIVE: u8 = 1;
 
 /// Size of genie options blob (bytes).
-///
-/// v2600 sniff verified: 46 bytes (was 256 in older C++ reference).
+/// v2600 sniff verified: 46 bytes (was 256 in older protocol versions).
 const GENIE_OPTIONS_SIZE: usize = 46;
 
 /// Convert absolute genie timestamp to DB i32 for storage.
-///
 /// C++ and in-memory both use absolute UNIX timestamp (`uint32`).
 /// DB column is INTEGER (i32). If expired (abs <= now), stores 0.
 pub fn genie_abs_to_db(abs: u32) -> i32 {
@@ -132,8 +116,6 @@ pub fn genie_abs_to_db(abs: u32) -> i32 {
 }
 
 /// Handle WIZ_GENIE from the client.
-///
-/// C++ Reference: `CUser::HandleGenie(Packet & pkt)`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -155,7 +137,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             // through the genie system. The inner packet must be extracted
             // and dispatched to the appropriate handler.
             //
-            // C++ Reference: `GenieHandler.cpp:91-115`
             // ```c++
             // uint8 command = pkt.read<uint8>();
             // if (UNIXTIME > m_1098GenieTime) return SendGenieStop(true);
@@ -227,8 +208,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle GenieInfoRequest sub-commands.
-///
-/// C++ Reference: `CUser::GenieNonAttackProgress(Packet & pkt)`
 async fn handle_info_request(
     session: &mut ClientSession,
     r: &mut PacketReader<'_>,
@@ -256,19 +235,12 @@ async fn handle_info_request(
 }
 
 /// Valid genie spirit potion item IDs.
-///
-/// C++ Reference: `GenieHandler.cpp:213-215`
 const GENIE_ITEM_IDS: [u32; 3] = [810305000, 810378000, 900772000];
 
 /// Default genie duration (hours) granted per spirit potion.
-///
-/// C++ Reference: `GenieHandler.cpp:230` — `GenieExchange(0, 360, true)`
 const GENIE_HOURS_PER_POTION: u32 = 360;
 
 /// Handle genie spirit potion consumption.
-///
-/// C++ Reference: `CUser::GenieUseGenieSpirint(Packet & pkt)` in `GenieHandler.cpp:200-234`
-///
 /// 1. Read item_id from packet
 /// 2. Validate it's a valid genie item
 /// 3. Remove from inventory
@@ -291,7 +263,6 @@ async fn handle_genie_use_spirit(
     let sid = session.session_id();
     let world = session.world().clone();
 
-    // C++ Reference: GenieHandler.cpp:205 — state guards
     // if (isTrading() || isMerchanting() || isMining() || isFishing()) return;
     if world.is_trading(sid)
         || world.is_merchanting(sid)
@@ -310,7 +281,6 @@ async fn handle_genie_use_spirit(
     world.rob_item(sid, item_id, 1);
 
     // Extend genie time by 360 hours (= 360 * 3600 seconds)
-    // C++ Reference: GenieHandler.cpp:230 — GenieExchange(0, 360, true)
     // Absolute timestamp: if expired, start from now; if active, extend deadline.
     let duration_secs = GENIE_HOURS_PER_POTION * 3600;
     let now = now_secs();
@@ -319,7 +289,6 @@ async fn handle_genie_use_spirit(
     });
 
     // Send response:
-    // C++ Reference: GenieHandler.cpp:229-231
     //   Packet result(WIZ_GENIE, uint8(GenieUseSpiringPotion));
     //   result << uint8(GenieUseSpiringPotion) << GetGenieTime();
     // Wire: [u8(1)] [u8(1)] [u16 hours]
@@ -367,9 +336,6 @@ async fn handle_genie_use_spirit(
 }
 
 /// Load and send genie options to the client.
-///
-/// C++ Reference: `CUser::HandleGenieLoadOptions()`
-///
 /// Sends a blob of saved genie configuration bytes.
 async fn handle_load_options(session: &mut ClientSession) -> anyhow::Result<()> {
     let sid = session.session_id();
@@ -380,7 +346,6 @@ async fn handle_load_options(session: &mut ClientSession) -> anyhow::Result<()> 
         .with_session(sid, |h| h.genie_options.clone())
         .unwrap_or_else(|| vec![0u8; GENIE_OPTIONS_SIZE]);
 
-    // C++: WIZ_GENIE << u8(GenieInfoRequest) << u8(GenieLoadOptions) << [options bytes]
     let mut resp = Packet::new(Opcode::WizGenie as u8);
     resp.write_u8(GENIE_INFO_REQUEST);
     resp.write_u8(GENIE_LOAD_OPTIONS);
@@ -396,9 +361,6 @@ async fn handle_load_options(session: &mut ClientSession) -> anyhow::Result<()> 
 }
 
 /// Save genie options from the client.
-///
-/// C++ Reference: `CUser::HandleGenieSaveOptions(Packet & pkt)`
-///
 /// Reads the options blob from the packet and stores it in the session.
 fn handle_save_options(
     session: &mut ClientSession,
@@ -429,16 +391,12 @@ fn handle_save_options(
 }
 
 /// Activate the genie.
-///
-/// C++ Reference: `CUser::GenieStart()` in `GenieHandler.cpp:117-155`
-///
 /// Sends the genie activation packet with remaining time.
 async fn handle_genie_start(session: &mut ClientSession) -> anyhow::Result<()> {
     let sid = session.session_id();
     let world = session.world().clone();
 
     // Premium requirement check — server setting `LootandGeniePremium`.
-    // C++ Reference: GenieHandler.cpp:121 — if (pServerSetting.LootandGeniePremium && GetPremium()==0) return;
     let requires_premium = world
         .get_server_settings()
         .map(|s| s.loot_genie_premium != 0)
@@ -451,7 +409,6 @@ async fn handle_genie_start(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // Time check — genie must have remaining time.
-    // C++ Reference: GenieHandler.cpp:121 — if (UNIXTIME > m_1098GenieTime) return;
     let remaining = genie_remaining_from_abs(abs);
     if remaining == 0 {
         return Ok(());
@@ -464,7 +421,6 @@ async fn handle_genie_start(session: &mut ClientSession) -> anyhow::Result<()> {
 
     let hours = get_genie_hours(remaining);
 
-    // C++: WIZ_GENIE << u8(GenieStatusActive) << u8(4) << u16(1) << GetGenieTime()
     let mut resp = Packet::new(Opcode::WizGenie as u8);
     resp.write_u8(GENIE_STATUS_ACTIVE);
     resp.write_u8(4);
@@ -473,7 +429,6 @@ async fn handle_genie_start(session: &mut ClientSession) -> anyhow::Result<()> {
     session.send_packet(&resp).await?;
 
     // Also send the start confirmation
-    // C++: WIZ_GENIE << u8(GenieInfoRequest) << u8(GenieStartHandle) << u16(1) << GetGenieTime()
     let mut start_pkt = Packet::new(Opcode::WizGenie as u8);
     start_pkt.write_u8(GENIE_INFO_REQUEST);
     start_pkt.write_u8(GENIE_START_HANDLE);
@@ -482,7 +437,6 @@ async fn handle_genie_start(session: &mut ClientSession) -> anyhow::Result<()> {
     session.send_packet(&start_pkt).await?;
 
     // Broadcast genie activated to region
-    // C++: WIZ_GENIE << u8(GenieInfoRequest) << u8(GenieActivated) << u32(GetID()) << u8(1)
     let mut region_pkt = Packet::new(Opcode::WizGenie as u8);
     region_pkt.write_u8(GENIE_INFO_REQUEST);
     region_pkt.write_u8(GENIE_ACTIVATED);
@@ -509,8 +463,6 @@ async fn handle_genie_start(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Deactivate the genie.
-///
-/// C++ Reference: `CUser::GenieStop()`
 pub(crate) async fn handle_genie_stop(session: &mut ClientSession) -> anyhow::Result<()> {
     let sid = session.session_id();
     let world = session.world().clone();
@@ -529,7 +481,6 @@ pub(crate) async fn handle_genie_stop(session: &mut ClientSession) -> anyhow::Re
     let remaining = genie_remaining_from_abs(abs);
     let hours = get_genie_hours(remaining);
 
-    // C++: WIZ_GENIE << u8(1) << u8(5) << u16(1) << GetGenieTime()
     let mut resp = Packet::new(Opcode::WizGenie as u8);
     resp.write_u8(GENIE_INFO_REQUEST);
     resp.write_u8(GENIE_STOP_HANDLE);
@@ -556,7 +507,6 @@ pub(crate) async fn handle_genie_stop(session: &mut ClientSession) -> anyhow::Re
     }
 
     // Persist genie time to DB on stop to prevent data loss on crash.
-    // C++ Reference: DatabaseThread.cpp:1529 — UpdateGenieData on zone change/logout
     {
         let pool = session.pool().clone();
         let char_name = world
@@ -589,22 +539,16 @@ pub(crate) async fn handle_genie_stop(session: &mut ClientSession) -> anyhow::Re
 }
 
 /// Genie time check interval in seconds (1 minute).
-///
-/// C++ Reference: `User.h:48` — `#define PLAYER_GENIE_INTERVAL (1 * MINUTE)`
 const PLAYER_GENIE_INTERVAL: u64 = 60;
 
 /// Periodic genie time check — called from the expiry tick loop.
-///
-/// C++ Reference: `User.cpp:1008-1012` — `CUser::UpdateCheckTime()`
 /// ```c++
 /// if (GetGenieTime() > 0 && m_tGenieTimeNormal + PLAYER_GENIE_INTERVAL < UNIXTIME) {
 ///     m_tGenieTimeNormal = UNIXTIME;
 ///     CheckGenieTime();
 /// }
 /// ```
-///
 /// `CheckGenieTime()` sends remaining hours to client and stops genie if expired.
-/// C++ Reference: `GenieHandler.cpp:307-312`
 pub fn check_genie_time_tick(
     world: &crate::world::WorldState,
     sid: crate::zone::SessionId,
@@ -658,7 +602,6 @@ pub fn check_genie_time_tick(
     });
 
     // Send remaining time to client
-    // C++ Reference: GenieHandler.cpp:308-310
     let hours = get_genie_hours(remaining);
     let mut pkt = Packet::new(Opcode::WizGenie as u8);
     pkt.write_u8(GENIE_INFO_REQUEST);
@@ -674,7 +617,6 @@ mod tests {
 
     #[test]
     fn test_genie_constants() {
-        // C++ Reference: GameDefine.h:4592-4600 — GenieNonAttackType enum
         assert_eq!(GENIE_INFO_REQUEST, 1);
         assert_eq!(GENIE_UPDATE_REQUEST, 2);
         assert_eq!(GENIE_NOTICE, 25);
@@ -788,7 +730,6 @@ mod tests {
 
     #[test]
     fn test_get_genie_hours() {
-        // C++ Reference: GetGenieTime() in User.h
         assert_eq!(get_genie_hours(0), 0); // 0 seconds → 0 hours
         assert_eq!(get_genie_hours(100), 1); // < 3600 → 1
         assert_eq!(get_genie_hours(3599), 1); // < 3600 → 1
@@ -800,7 +741,6 @@ mod tests {
 
     #[test]
     fn test_genie_use_spirit_response_format() {
-        // C++ Reference: GenieHandler.cpp:229-231
         //   Packet result(WIZ_GENIE, uint8(GenieUseSpiringPotion));
         //   result << uint8(GenieUseSpiringPotion) << GetGenieTime();
         // Wire: [u8(1)] [u8(1)] [u16 hours]

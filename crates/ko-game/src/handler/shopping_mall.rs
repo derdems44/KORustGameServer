@@ -1,7 +1,4 @@
 //! WIZ_SHOPPING_MALL (0x6A) handler — premium cash shop (PUS).
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/ShoppingMallHandler.cpp`
-//!
 //! Sub-opcodes:
 //! - 1 = STORE_OPEN: Client opens shop UI
 //! - 2 = STORE_CLOSE: Client closes shop / load web items
@@ -9,11 +6,9 @@
 //! - 4 = STORE_MINI (unused)
 //! - 5 = STORE_PROCESS (unused)
 //! - 6 = STORE_LETTER: Routes to letter system
-//!
 //! The PUS (Premium User Store) is a web-based cash shop. Items are
 //! purchased externally and delivered to the player's inventory via
 //! the STORE_CLOSE flow (WEB_ITEMMALL table).
-//!
 //! Price types:
 //! - 0 = Knight Cash (KC) — premium currency
 //! - 1 = TL (Turkish Lira) — real money balance
@@ -32,9 +27,9 @@ const STORE_OPEN: u8 = 1;
 const STORE_CLOSE: u8 = 2;
 use super::letter::STORE_LETTER;
 
-/// Error code: player is dead/trading/merchanting (C++ `-9` as u16).
+/// Error code: player is dead/trading/merchanting (`-9` as u16).
 const ERR_INVALID_STATE: u16 = 0xFFF7;
-/// Error code: no free inventory slots (C++ `-8` as u16).
+/// Error code: no free inventory slots (`-8` as u16).
 const ERR_NO_FREE_SLOTS: u16 = 0xFFF8;
 
 /// Price type: Knight Cash (KC).
@@ -70,7 +65,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         }
         STORE_LETTER => {
             // STORE_LETTER — route to letter system
-            // C++ Reference: DatabaseThread.cpp:1315 — case STORE_LETTER: ReqLetterSystem(pkt)
             super::letter::handle(session, &mut reader).await?;
         }
         _ => {
@@ -86,16 +80,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle STORE_OPEN — respond with free slot count.
-///
-/// C++ Reference: `CUser::HandleStoreOpen()` — `ShoppingMallHandler.cpp:35-76`
-///
 /// Wire response: `WIZ_SHOPPING_MALL << u8(1) << u16(result) << i16(free_slots)`
 async fn handle_store_open(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
 
     // Check dead/trading/merchanting/genie state
-    // C++ Reference: ShoppingMallHandler.cpp:40-48, WareHouse.cpp:49-55 (genie check)
     let is_genie = world.with_session(sid, |h| h.genie_active).unwrap_or(false);
     if world.is_player_dead(sid) || world.is_trading(sid) || world.is_merchanting(sid) || is_genie {
         session
@@ -105,7 +95,6 @@ async fn handle_store_open(session: &mut ClientSession) -> anyhow::Result<()> {
     }
 
     // Not allowed in private arenas (zones 40-45)
-    // C++ Reference: ShoppingMallHandler.cpp:51-56
     if let Some(pos) = world.get_position(sid) {
         if (40..=45).contains(&pos.zone_id) {
             session
@@ -133,7 +122,6 @@ async fn handle_store_open(session: &mut ClientSession) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // C++ Reference: ShoppingMallHandler.cpp:71 — m_bStoreOpen = true
     world.set_store_open(sid, true);
 
     session
@@ -143,10 +131,6 @@ async fn handle_store_open(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle STORE_CLOSE — load web item mall and send inventory refresh.
-///
-/// C++ Reference: `CUser::HandleStoreClose()` — `ShoppingMallHandler.cpp:79-84`
-/// C++ Reference: `CUser::ReqLoadWebItemMall()` — `ShoppingMallHandler.cpp:102-130`
-///
 /// Sniffer verified (session 3, seq 13): response is exactly 422 bytes =
 /// 2 header (opcode+sub) + 28 bag slots * 15 bytes each = 420.
 /// All 28 slots are sent including empty ones (zero-filled).
@@ -154,7 +138,6 @@ async fn handle_store_close(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
 
-    // C++ Reference: ShoppingMallHandler.cpp:80 — m_bStoreOpen = false
     world.set_store_open(sid, false);
 
     let inv = world.get_inventory(sid);
@@ -179,9 +162,7 @@ async fn handle_store_close(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Validate a PUS purchase request server-side.
-///
 /// Returns `Ok((item_id, buy_count, price))` if valid, `Err(reason)` otherwise.
-///
 /// Checks:
 /// 1. Item listing exists in the loaded PUS catalog
 /// 2. Price is positive
@@ -527,7 +508,6 @@ mod tests {
 
     // ── Sprint 313: STORE_CLOSE skips empty slots ────────────────────
 
-    /// C++ Reference: ShoppingMallHandler.cpp:117-129
     /// `if (pItem == nullptr) continue;` — empty slots are skipped.
     /// Packet size is variable (only non-empty items), NOT fixed 63*15 bytes.
     #[test]
@@ -574,7 +554,6 @@ mod tests {
 
     // ── Sprint 323: Genie state check ───────────────────────────────
 
-    /// C++ Reference: WareHouse.cpp:49-55 — Genie active blocks store operations.
     #[test]
     fn test_genie_blocks_store_open() {
         use crate::world::WorldState;
@@ -597,7 +576,6 @@ mod tests {
     // ── Sprint 329: Store open state tracking ──────────────────────
 
     /// Test that store_open flag is tracked and defaults to false.
-    /// C++ Reference: m_bStoreOpen in User.h
     #[test]
     fn test_store_open_flag_tracking() {
         use crate::world::WorldState;
@@ -620,7 +598,6 @@ mod tests {
     }
 
     /// Test that warehouse is blocked when store is open.
-    /// C++ Reference: WareHouse.cpp:40 — isStoreOpen() guard
     #[test]
     fn test_store_open_blocks_warehouse() {
         use crate::world::WorldState;

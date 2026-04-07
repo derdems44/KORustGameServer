@@ -1,19 +1,14 @@
 //! Quest-related reference table models — maps to PostgreSQL tables.
-//!
-//! C++ Reference:
 //! - `GameDefine.h:3051` — `_QUEST_HELPER`
 //! - `GameDefine.h:3154` — `_QUEST_MONSTER`
 //! - `GameDefine.h:103`  — `_USER_QUEST_INFO`
 //! - `shared/database/QuestHelperSet.h`
 //! - `shared/database/QuestMonsterSet.h`
-//!
 //! These tables are bulk-loaded at startup and cached in WorldState.
 
 /// Quest helper entry from the `quest_helper` table.
-///
 /// Defines quest prerequisites, NPC associations, and event triggers.
 /// MSSQL source: `QUEST_HELPER` (7,085 rows).
-/// C++ equivalent: `_QUEST_HELPER` (GameDefine.h:3051).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct QuestHelperRow {
     /// Unique quest helper index (primary key).
@@ -26,11 +21,9 @@ pub struct QuestHelperRow {
     pub n_exp: i32,
     /// Required class (5 = any class).
     ///
-    /// C++ Reference: `bClass != 5 && !JobGroupCheck(bClass)`
     pub b_class: i16,
     /// Required nation (3 = any nation, 1 = Karus, 2 = El Morad).
     ///
-    /// C++ Reference: `bNation != 3 && bNation != GetNation()`
     pub b_nation: i16,
     /// Quest type (1 = normal, 4 = special, etc.).
     pub b_quest_type: i16,
@@ -40,11 +33,9 @@ pub struct QuestHelperRow {
     pub s_npc_id: i16,
     /// Event data index — the quest ID used in player quest maps.
     ///
-    /// C++ Reference: `sEventDataIndex` — key into `m_sQuestMap`
     pub s_event_data_index: i16,
     /// Required quest state to show this quest step.
     ///
-    /// C++ Reference: `bEventStatus` — checked via `CheckExistEvent()`
     pub b_event_status: i16,
     /// Lua event trigger index (for quest accept/start).
     pub n_event_trigger_index: i32,
@@ -65,11 +56,8 @@ pub struct QuestHelperRow {
 }
 
 /// Quest monster entry from the `quest_monster` table.
-///
 /// Defines which monsters must be killed for a quest and their required counts.
 /// MSSQL source: `QUEST_MONSTER` (606 rows).
-/// C++ equivalent: `_QUEST_MONSTER` (GameDefine.h:3154).
-///
 /// Structure: 4 groups, each with 4 monster IDs and 1 required count.
 /// C++ constants: `QUEST_MOB_GROUPS = 4`, `QUEST_MOBS_PER_GROUP = 4`
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -103,8 +91,6 @@ pub struct QuestMonsterRow {
 }
 
 /// Per-player quest progress row from the `user_quest` table.
-///
-/// C++ equivalent: `_USER_QUEST_INFO` (GameDefine.h:103).
 /// Storage: quest_id (u16) + state (u8) + 4 kill counts (u8 each) = 7 bytes per quest in C++.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserQuestRow {

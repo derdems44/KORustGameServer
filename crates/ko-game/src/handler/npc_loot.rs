@@ -1,7 +1,4 @@
 //! NPC loot drop generation -- creates ground bundles when monsters die.
-//!
-//! C++ Reference: `Npc.cpp:7403-7994` -- isShowBox() + GiveNpcHaveItem()
-//!
 //! When a monster dies, the server:
 //! 1. Checks `is_show_box()` to see if this NPC type drops loot
 //! 2. Looks up the drop table (monster_item or npc_item) by template.item_table
@@ -37,11 +34,9 @@ const LOOT_DROP_ITEMS: usize = 12;
 const _ARROW_STACK: u16 = 20;
 
 /// Guard summon NPC proto ID -- siege-related guard, no loot.
-/// C++ Reference: `Define.h:481` -- `#define GUARD_SUMMON 8850`
 const GUARD_SUMMON: u16 = 8850;
 
 /// Monster proto IDs that never drop loot in Juraid Mountain.
-/// C++ Reference: `Npc.cpp:7429-7433`
 const JURAID_NO_LOOT_PROTOS: &[u16] = &[
     2152, // MONSTER_APOSTLE_SSID
     8007, // MONSTER_DOOM_SOLDIER_SSID
@@ -49,8 +44,6 @@ const JURAID_NO_LOOT_PROTOS: &[u16] = &[
 ];
 
 /// Check if an NPC type should drop loot.
-///
-/// C++ Reference: `Npc.cpp:7403-7436` -- CNpc::isShowBox()
 /// Returns false for non-lootable NPC types, event zones, guard summons,
 /// and specific Juraid Mountain monsters.
 pub fn is_show_box(npc_type: u8, zone_id: u16, proto_id: u16) -> bool {
@@ -87,11 +80,11 @@ pub fn is_show_box(npc_type: u8, zone_id: u16, proto_id: u16) -> bool {
     if NO_LOOT_ZONES.contains(&zone_id) {
         return false;
     }
-    // Guard summon NPCs never drop loot (C++ Npc.cpp:7423)
+    // Guard summon NPCs never drop loot
     if proto_id == GUARD_SUMMON {
         return false;
     }
-    // Specific monsters in Juraid Mountain never drop loot (C++ Npc.cpp:7429-7433)
+    // Specific monsters in Juraid Mountain never drop loot
     if zone_id == ZONE_RONARK_LAND_BASE && JURAID_NO_LOOT_PROTOS.contains(&proto_id) {
         return false;
     }
@@ -99,7 +92,6 @@ pub fn is_show_box(npc_type: u8, zone_id: u16, proto_id: u16) -> bool {
 }
 
 /// Extract item/percent slot pairs from a `MonsterItemRow`.
-///
 /// Both `MonsterItemRow` and `NpcItemRow` have identical item01-12 + percent01-12 fields.
 /// This helper extracts them into an indexable array for iteration.
 fn extract_drop_slots(table: &ko_db::models::MonsterItemRow) -> [(i32, i16); LOOT_DROP_ITEMS] {
@@ -120,7 +112,6 @@ fn extract_drop_slots(table: &ko_db::models::MonsterItemRow) -> [(i32, i16); LOO
 }
 
 /// Convert an `NpcItemRow` into a `MonsterItemRow` for uniform processing.
-///
 /// Both structs have identical field layouts (s_index + 12 item/percent pairs).
 fn npc_item_to_monster_item(npc_row: &ko_db::models::NpcItemRow) -> ko_db::models::MonsterItemRow {
     ko_db::models::MonsterItemRow {
@@ -153,9 +144,6 @@ fn npc_item_to_monster_item(npc_row: &ko_db::models::NpcItemRow) -> ko_db::model
 }
 
 /// Generate loot for a killed NPC and create a ground bundle.
-///
-/// C++ Reference: `Npc.cpp:7681-7994` -- GiveNpcHaveItem()
-///
 /// Returns the bundle_id if loot was generated, None if no loot.
 pub fn generate_npc_loot(
     world: &WorldState,
@@ -184,16 +172,13 @@ pub fn generate_npc_loot(
     // -- Slot 0: Gold --
     if tmpl.money > 0 {
         // C++ generates 70-100% of m_iMoney, then caps at SHRT_MAX (32000).
-        // C++ Reference: `Npc.cpp:7700-7705` — `iMoney = m_iMoney * MoneyRandom / 100; if (iMoney >= SHRT_MAX) iMoney = 32000;`
         let gold_pct = rng.gen_range(70..=100);
         let mut gold_amount = ((tmpl.money as u64 * gold_pct) / 100).min(32000) as u32;
 
         // NOTE: noah_gain + item_gold bonus is applied at PICKUP time via GoldGain(bApplyBonus=true),
         // NOT at loot generation time. C++ Npc.cpp:7700-7705 only does money * random / 100.
-        // C++ Reference: UserGoldSystem.cpp:86-88 applies the bonus in GoldGain(), not here.
 
         // Apply coin event amount (GM-set server-wide gold multiplier) AFTER the 32000 cap.
-        // C++ Reference: `Npc.cpp:7911` — `coinAmount = count * (100 + m_byCoinEventAmount) / 100`
         // C++ caps the final result at USHRT_MAX (65535), not 32000.
         let coin_event = world
             .game_time_weather()
@@ -203,7 +188,6 @@ pub fn generate_npc_loot(
             gold_amount = gold_amount * (100 + coin_event as u32) / 100;
         }
 
-        // C++ Reference: `Npc.cpp:7912-7913` — cap at USHRT_MAX (65535)
         let gold_amount = gold_amount.min(u16::MAX as u32) as u16;
         if gold_amount > 0 {
             items[0] = LootItem {
@@ -234,7 +218,6 @@ pub fn generate_npc_loot(
             }
 
             // Apply premium and event drop rate bonuses.
-            // C++ Reference: Npc.cpp:7725-7741 — order matters:
             //   1) premium drop (additive)
             //   2) drop scroll (multiplicative)
             //   3) clan premium (additive)
@@ -264,7 +247,6 @@ pub fn generate_npc_loot(
             }
 
             // 4) Flame level bonus (additive): iPer += iPer * droprate / 100
-            // C++ Reference: Npc.cpp:7737-7738
             let flame_level = crate::systems::flash::get_flame_level(world, killer_sid);
             if flame_level > 0 {
                 if let Some(feat) = world.get_burning_feature(flame_level) {
@@ -284,7 +266,6 @@ pub fn generate_npc_loot(
             }
 
             // 6) Perk percentDrop bonus (additive): iPer += iPer * perkDrop / 100
-            // C++ Reference: Npc.cpp:7752-7761
             let perk_drop = world
                 .with_session(killer_sid, |h| {
                     world.compute_perk_bonus(&h.perk_levels, 4, false)
@@ -322,7 +303,6 @@ pub fn generate_npc_loot(
                 (produced, 1u16)
             } else {
                 // MakeItemGroup (100 <= id < 100_000_000)
-                // C++ Reference: Npc.cpp:7515-7520 — m_MakeItemGroupArray lookup
                 if let Some(group) = world.get_make_item_group(item_id) {
                     if group.items.is_empty() {
                         continue;
@@ -402,7 +382,6 @@ pub fn generate_npc_loot(
     );
 
     // ── Auto-loot: immediately pick up items if an eligible player has robin loot ──
-    // C++ Reference: Npc.cpp:7929-7993 — check killer (solo) or party members
     // for m_bAutoLoot, then call auto-loot bundle pickup (BundleSystem.cpp)
     try_auto_loot(world, killer_sid, bundle_id, npc);
 
@@ -410,9 +389,6 @@ pub fn generate_npc_loot(
 }
 
 /// Get the next item routing user for party round-robin distribution.
-///
-/// C++ Reference: `User.cpp:3986-4019` — `GetItemRoutingUser()`
-///
 /// Uses the party's `item_routing` cursor to find the next eligible member
 /// who is alive, in range, and has weight/slot capacity.
 /// Cursor increments BEFORE filtering (load balancing over time).
@@ -485,10 +461,6 @@ fn get_item_routing_user(
 }
 
 /// Try to auto-loot a ground bundle for the killer or their party.
-///
-/// C++ Reference: `Npc.cpp:7929-7993` — auto-loot trigger after monster death.
-/// C++ Reference: `BundleSystem.cpp:42-277` — auto-loot bundle pickup.
-///
 /// Checks killer and party members for `auto_loot` flag, then picks up all
 /// items in the bundle automatically. `fairy_check` blocks auto-loot.
 fn try_auto_loot(world: &WorldState, killer_sid: SessionId, bundle_id: u32, npc: &NpcInstance) {
@@ -496,7 +468,6 @@ fn try_auto_loot(world: &WorldState, killer_sid: SessionId, bundle_id: u32, npc:
     use crate::world::{COIN_MAX, ITEMCOUNT_MAX, ITEM_GOLD, RANGE_50M};
 
     // Find the auto-loot user: check killer first, then party members.
-    // C++: solo player → check m_bAutoLoot; party → iterate members.
     let party_id = world.get_party_id(killer_sid);
     let party = party_id.and_then(|pid| world.get_party(pid));
 
@@ -543,7 +514,6 @@ fn try_auto_loot(world: &WorldState, killer_sid: SessionId, bundle_id: u32, npc:
     }
 
     // Zone auto_loot check
-    // C++ Reference: BundleSystem.cpp:55-56
     let zone_allows = world
         .get_zone(npc.zone_id)
         .and_then(|z| z.zone_info.as_ref().map(|zi| zi.abilities.auto_loot))
@@ -584,7 +554,6 @@ fn try_auto_loot(world: &WorldState, killer_sid: SessionId, bundle_id: u32, npc:
                 }
                 let share = (count as f32 / eligible.len() as f32) as u32;
                 for &member_sid in &eligible {
-                    // C++ Reference: BundleSystem.cpp:125-126 — JackPotNoah per party member
                     if !world.try_jackpot_noah(member_sid, share) {
                         world.gold_gain_with_bonus_silent(member_sid, share);
                     }
@@ -610,9 +579,7 @@ fn try_auto_loot(world: &WorldState, killer_sid: SessionId, bundle_id: u32, npc:
                     world.restore_bundle_item(bundle_id, slot_id, item_id, count);
                     continue;
                 }
-                // C++ Reference: BundleSystem.cpp:93-94 — JackPotNoah check before GoldGain
                 if !world.try_jackpot_noah(looter_sid, count as u32) {
-                    // C++ Reference: BundleSystem.cpp:96 — GoldGain(pGold, false, true)
                     // false = don't send WIZ_GOLD_CHANGE (LOOT_SOLO packet handles it)
                     world.gold_gain_with_bonus_silent(looter_sid, count as u32);
                 }
@@ -634,7 +601,6 @@ fn try_auto_loot(world: &WorldState, killer_sid: SessionId, bundle_id: u32, npc:
         }
 
         // Non-gold item: determine receiver via party routing or looter
-        // C++ Reference: BundleSystem.cpp:138 — GetLootUser() → GetItemRoutingUser()
         let receiver = match party_id {
             Some(pid) if party.is_some() => {
                 get_item_routing_user(world, pid, looter_sid, item_id, count).unwrap_or(looter_sid)
@@ -703,7 +669,6 @@ fn try_auto_loot(world: &WorldState, killer_sid: SessionId, bundle_id: u32, npc:
         pkt.write_u16(slot_id);
         world.send_to_session_owned(receiver, pkt);
 
-        // C++ Reference: BundleSystem.cpp:266-271 — LOOT_PARTY notification
         if let Some(pid) = party_id {
             if party.is_some() {
                 let receiver_name = world
@@ -728,7 +693,6 @@ fn try_auto_loot(world: &WorldState, killer_sid: SessionId, bundle_id: u32, npc:
         }
 
         // ── Drop Notice: server-wide broadcast for rare items (auto-loot) ──
-        // C++ Reference: BundleSystem.cpp:258-263 (auto-loot path)
         //   if (pTable.m_isDropNotice && g_pMain->pServerSetting.DropNotice && !isGM())
         // Note: C++ uses pReceiver->GetName() and this->GetLoyaltySymbolRank()
         if item_def.drop_notice.unwrap_or(0) != 0 && !world.is_gm(looter_sid) {
@@ -870,7 +834,6 @@ mod tests {
     #[test]
     fn test_gold_initial_cap_at_32000() {
         // Initial random gold caps at 32000 (SHRT_MAX)
-        // C++ Reference: `Npc.cpp:7704-7705` — `if (iMoney >= SHRT_MAX) iMoney = 32000;`
         let money: u64 = 50000;
         let pct: u64 = 100;
         let result = (money * pct / 100).min(32000) as u32;
@@ -880,7 +843,6 @@ mod tests {
     #[test]
     fn test_gold_coin_event_can_exceed_32000() {
         // After initial 32000 cap, coin event can push gold higher
-        // C++ Reference: `Npc.cpp:7911` — coin event applied AFTER initial cap
         let base: u32 = 32000;
         let coin_event: u8 = 50;
         let result = base * (100 + coin_event as u32) / 100;
@@ -890,7 +852,6 @@ mod tests {
     #[test]
     fn test_gold_final_cap_at_u16_max() {
         // Final cap is USHRT_MAX (65535), not 32000
-        // C++ Reference: `Npc.cpp:7912` — `if (count + coinAmount > USHRT_MAX) coinAmount = USHRT_MAX;`
         let base: u32 = 32000;
         let coin_event: u8 = 255; // extreme event
         let result = (base * (100 + coin_event as u32) / 100).min(u16::MAX as u32);

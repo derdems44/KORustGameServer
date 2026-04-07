@@ -1,7 +1,5 @@
 //! Premium repository — loads premium type definitions, XP bonus table,
 //! and per-account premium subscriptions from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `LoadServerData.cpp` — `LoadPremiumItemTable()`, `LoadPremiumItemExpTable()`
 //! - `DBAgent.cpp` — `AccountPremiumData` load/save
 
@@ -24,7 +22,6 @@ impl<'a> PremiumRepository<'a> {
     /// Load all premium item type definitions (bulk load at startup).
     ///
     /// Returns one row per premium type (13 rows).
-    /// C++ Reference: `CGameServerDlg::LoadPremiumItemTable()`
     pub async fn load_all_premium_types(&self) -> Result<Vec<PremiumItemRow>, sqlx::Error> {
         sqlx::query_as::<_, PremiumItemRow>(
             "SELECT premium_type, name, exp_restore_pct, noah_pct, drop_pct, \
@@ -38,7 +35,6 @@ impl<'a> PremiumRepository<'a> {
     /// Load all premium gift items (bulk load at startup).
     ///
     /// Returns bonus items grouped by premium type, sent via letter on activation.
-    /// C++ Reference: `CGameServerDlg::LoadPremiumGiftItemTable()`
     pub async fn load_all_premium_gift_items(
         &self,
     ) -> Result<Vec<PremiumGiftItemRow>, sqlx::Error> {
@@ -53,7 +49,6 @@ impl<'a> PremiumRepository<'a> {
     /// Load all premium XP bonus entries (bulk load at startup).
     ///
     /// Returns level-range-based XP bonus percentages per premium type.
-    /// C++ Reference: `CGameServerDlg::LoadPremiumItemExpTable()`
     pub async fn load_all_premium_exp(&self) -> Result<Vec<PremiumItemExpRow>, sqlx::Error> {
         sqlx::query_as::<_, PremiumItemExpRow>(
             "SELECT n_index, premium_type, min_level, max_level, s_percent \
@@ -66,7 +61,6 @@ impl<'a> PremiumRepository<'a> {
     /// Load premium subscriptions for a specific account.
     ///
     /// Returns up to 6 slots with their premium type and expiry.
-    /// C++ Reference: `CDBAgent::AccountPremiumData()` load path
     pub async fn load_account_premium(
         &self,
         account_id: &str,
@@ -85,7 +79,6 @@ impl<'a> PremiumRepository<'a> {
     /// Save (upsert) premium subscriptions for an account.
     ///
     /// Writes all active slots. Called on premium change and periodic save.
-    /// C++ Reference: `CDBAgent::AccountPremiumData()` save path
     pub async fn save_account_premium(
         &self,
         account_id: &str,

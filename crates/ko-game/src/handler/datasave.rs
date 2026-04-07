@@ -1,13 +1,8 @@
 //! WIZ_DATASAVE (0x37) handler — periodic character data save.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:585-587, 1788-1795`
-//!
 //! The client periodically sends this opcode to request a DB save of
 //! character data (position, HP, MP, EXP, gold, etc.). The server
 //! saves and sends no response.
-//!
 //! ## Client -> Server
-//!
 //! Empty packet body (no data fields).
 
 use ko_db::repositories::character::{CharacterRepository, SaveStatPointsParams, SaveStatsParams};
@@ -17,9 +12,6 @@ use tracing::{debug, warn};
 use crate::session::{ClientSession, SessionState};
 
 /// Handle WIZ_DATASAVE from the client.
-///
-/// C++ Reference: `User.cpp:1788-1795` — `CUser::UserDataSaveToAgent()`
-///
 /// Saves character stats (HP, MP, EXP, gold, loyalty) and position to DB.
 /// Stats are saved via fire-and-forget spawned task; position via the existing
 /// `save_position_async` helper.
@@ -80,7 +72,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     super::zone_change::save_position_async(session, pos.zone_id, pos.x, pos.z);
 
     // Save stat + skill points (fire-and-forget)
-    // C++ Reference: DBAgent.cpp — UpdateUser saves strong/sta/dex/intel/cha/points/skill0-9
     if let Some(ch) = world.get_character_info(sid) {
         let pool_clone = pool.clone();
         let cid = char_id.clone();

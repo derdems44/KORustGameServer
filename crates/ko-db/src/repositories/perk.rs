@@ -1,6 +1,4 @@
 //! Perk repository — `perks` and `user_perks` table access.
-//!
-//! C++ Reference: `CDBAgent::LoadPerksData`, `CDBAgent::UpdateUserPerks`
 //! in `DBAgent.cpp:5698-5745`.
 
 use sqlx::PgPool;
@@ -20,7 +18,6 @@ impl<'a> PerkRepository<'a> {
 
     /// Load all perk definitions (static data, loaded once at startup).
     ///
-    /// C++ Reference: `CGameServerDlg::m_PerksArray` loaded from MSSQL PERKS table.
     pub async fn load_all_perks(&self) -> Result<Vec<PerkRow>, sqlx::Error> {
         sqlx::query_as::<_, PerkRow>(
             "SELECT p_index, status, description, perk_count, perk_max, percentage \
@@ -35,7 +32,6 @@ impl<'a> PerkRepository<'a> {
     ///
     /// Returns None if the character has no perk record yet.
     ///
-    /// C++ Reference: `CDBAgent::LoadPerksData` — `{CALL LOAD_PERKS_DATA(?)}`
     pub async fn load_user_perks(
         &self,
         character_id: &str,
@@ -56,7 +52,6 @@ impl<'a> PerkRepository<'a> {
 
     /// Save (upsert) a character's perk allocations.
     ///
-    /// C++ Reference: `CDBAgent::UpdateUserPerks` — `{CALL UPDATE_USER_PERKS(...)}`
     pub async fn save_user_perks(
         &self,
         character_id: &str,

@@ -1,15 +1,10 @@
 //! WIZ_SEAL (0x95) handler — v2525-specific item seal system.
-//!
 //! v2525-specific opcode. The C++ server handles sealing via
 //! `WIZ_ITEM_UPGRADE (0x5B) sub=8 (ITEM_SEAL)`. The v2525 client has a
 //! dedicated seal UI at opcode 0x95 with its own protocol.
-//!
 //! ## Client RE
-//!
 //! ### C2S Dispatch (client at 0x7BF9A0)
-//!
 //! Reads `u8 sub`, dispatches on `(sub - 2)` via jump table (range 0x02..0x13):
-//!
 //! | Sub       | Handler    | Description                          |
 //! |-----------|-----------|--------------------------------------|
 //! | 0x02      | 0x938BD0  | Seal toggle                          |
@@ -19,9 +14,7 @@
 //! | 0x10-0x11 | 0x93ECA0  | Seal type operation (variant A)      |
 //! | 0x12-0x13 | 0x93EFD0  | Seal type operation (variant B)      |
 //! | 0x05-0x0F | 0x9398E0  | Default — generic seal operation     |
-//!
 //! ### C2S Wire Formats
-//!
 //! ```text
 //! sub=0x02: [u8 sub=0x02][u8 0x40][u16 zero]         — seal toggle
 //! sub=0x65: [u8 sub=0x65][u8 0x30][u16 zero]         — zone sync
@@ -30,26 +23,20 @@
 //!           [u32 slot_calc=(slot-8)*60]
 //!           [u8 type_flag][u16 seal_idx][u32 ts_hash]
 //! ```
-//!
 //! ### S2C Wire Format (handler at 0x7C02F0)
-//!
 //! ```text
 //! [i32 npc_id]              — seal NPC proto_id
 //! ```
-//!
 //! NPC ID gating — only NPC 12401 (0x3071) processes further:
 //! - 12385, 12387, 16385: early exit (no display)
 //! - 12401: seal result notification (full packet below)
-//!
 //! Full S2C (npc_id == 12401):
 //! ```text
 //! [i32 npc_id=12401][u16 result_type][u16 operation]
 //! [u16 name_len][u8 item_name × name_len]
 //! [i32 field_a][i32 field_b][i32 item_num]
 //! ```
-//!
 //! ### String Table IDs
-//!
 //! | result_type | operation | String ID |
 //! |-------------|-----------|-----------|
 //! | 1 (seal)    | 1         | 3352      |
@@ -60,7 +47,6 @@
 //! | 3 (break)   | 1         | 3357      |
 //! | 3 (break)   | 2         | 3358      |
 //! | 4 (other)   | any       | 3359      |
-//!
 //! **NOTE**: Strings 3352-3359 are ALL EMPTY in v2525 Texts_us.tbl.
 
 use ko_db::repositories::character::{CharacterRepository, SaveItemParams};
@@ -109,10 +95,8 @@ pub const RESULT_OTHER: u16 = 4;
 // ── S2C Builders ────────────────────────────────────────────────────
 
 /// Build a seal NPC early-exit packet (NPC types 12385/12387/16385).
-///
 /// Client reads npc_id, matches against known seal NPC IDs,
 /// and exits early for these types (no further fields read).
-///
 /// Wire: `[i32 npc_id]`
 pub fn build_npc_ack(npc_id: i32) -> Packet {
     let mut pkt = Packet::new(Opcode::WizSeal as u8);
@@ -121,15 +105,12 @@ pub fn build_npc_ack(npc_id: i32) -> Packet {
 }
 
 /// Build a full seal result notification (NPC 12401 only).
-///
 /// Client displays formatted string in yellow (0xFFFFFF00) chat.
-///
 /// - `result_type`: 1=seal, 2=unseal, 3=break, 4=other
 /// - `operation`: Message variant (1/2/3)
 /// - `item_name`: Item name string (raw bytes)
 /// - `field_a`, `field_b`: Format arguments for display template
 /// - `item_num`: Full item number (e.g. 379006001)
-///
 /// Wire: `[i32 npc_id=12401][u16 result_type][u16 operation]`
 ///       `[u16 name_len][u8 × name][i32 field_a][i32 field_b][i32 item_num]`
 pub fn build_seal_result(
@@ -158,10 +139,8 @@ pub fn build_seal_result(
 // ── C2S Handler ─────────────────────────────────────────────────────
 
 /// Handle WIZ_SEAL (0x95) from the client.
-///
 /// C2S sub-opcodes: 0x02 (toggle), 0x03 (unseal), 0x04 (double),
 /// 0x09 (scroll), 0x10-0x13 (type ops), 0x63 (full request), 0x65 (zone sync).
-///
 /// Full implementation requires seal item DB tables + NPC validation.
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
@@ -250,13 +229,9 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 // ── Sub-opcode Handlers ───────────────────────────────────────────────
 
 /// Handle SUB_UNSEAL (0x03) — unseal one or more items.
-///
 /// C2S: `[u16 count]` + per-item `[u8 slot_pos][u32 item_id]`
-///
 /// For each valid sealed item: restore `original_flag` (bound/not-bound) or
 /// default to ITEM_FLAG_NONE. Persists each slot change to DB.
-///
-/// C++ Reference: `SealHandler.cpp` — `SealOpcodes::ITEM_UNLOCK`
 async fn handle_unseal(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -321,10 +296,7 @@ async fn handle_unseal(
 
 /// Handle SUB_DOUBLE (0x04) — seal an item, preserving its current flag
 /// in `original_flag` (enables "double seal" — bound + sealed state).
-///
 /// C2S: `[u8 slot_pos][u32 item_id]`
-///
-/// C++ Reference: `SealHandler.cpp` — `SealOpcodes::ITEM_LOCK` with
 /// `oFlag = bFlag` saved before setting ITEM_FLAG_SEALED.
 async fn handle_double_seal(
     session: &mut ClientSession,
@@ -367,9 +339,7 @@ async fn handle_double_seal(
 }
 
 /// Handle SUB_SCROLL (0x09) — seal UI scroll/page selection.
-///
 /// C2S: `[u16 scroll_idx][u16 page]`
-///
 /// Responds with sealed item count so the client can update its UI state.
 async fn handle_scroll_select(
     session: &mut ClientSession,
@@ -396,7 +366,6 @@ async fn handle_scroll_select(
 // ── DB Persistence ────────────────────────────────────────────────────
 
 /// Fire-and-forget DB save for a single inventory slot after seal/unseal.
-///
 /// Same pattern as `item_upgrade::save_seal_item_async`.
 fn save_seal_slot_async(session: &ClientSession, slot_idx: usize) {
     let world = session.world().clone();

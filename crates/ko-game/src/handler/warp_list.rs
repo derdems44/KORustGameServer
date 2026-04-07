@@ -1,28 +1,20 @@
 //! WIZ_WARP_LIST (0x4B) handler — warp gate destination list and selection.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/UserObjectSystem.cpp`
 //!   - `CUser::GetWarpList(int warp_group)` — builds and sends the warp list
 //!   - `CUser::SelectWarpList(Packet & pkt)` — validates and executes a warp
-//!
 //! ## Flow
-//!
 //! 1. Player interacts with a warp gate object (WIZ_OBJECT_EVENT, type=OBJECT_WARP_GATE)
 //! 2. Server calls `send_warp_list()` → sends WIZ_WARP_LIST sub=1 with available destinations
 //! 3. Player picks a destination → client sends WIZ_WARP_LIST with [u16 objectIndex, u16 warpID]
 //! 4. Server handles `handle()` → validates warp, deducts gold, triggers zone change
-//!
 //! ## Wire Format
-//!
 //! **GetWarpList (server → client, sub=1):**
 //! ```text
 //! u8(1) + u16(count) + per entry: [u16 warpID, str name, str announce, u16 zone, u16 maxuser, u32 pay]
 //! ```
-//!
 //! **SelectWarpList (client → server):**
 //! ```text
 //! [u16 objectIndex] [u16 warpID]
 //! ```
-//!
 //! **SelectWarpList response (server → client, sub=2):**
 //! ```text
 //! u8(2) + u8(result)   // result: 1=success, 0xFF=fail
@@ -37,18 +29,15 @@ use crate::session::{ClientSession, SessionState};
 use crate::systems::war::{NATION_BATTLE, SIEGE_BATTLE};
 use crate::world::types::{ZONE_ARDREAM, ZONE_RONARK_LAND, ZONE_RONARK_LAND_BASE};
 
-/// Default max users per zone (C++ `m_sMaxUser`, not yet stored in our zone model).
+/// Default max users per zone (`m_sMaxUser`, not yet stored in our zone model).
 const DEFAULT_MAX_USERS: u16 = 150;
 
 use crate::npc_type_constants::MAX_OBJECT_RANGE;
 use crate::object_event_constants::OBJECT_WARP_GATE;
 
 /// Handle incoming WIZ_WARP_LIST from the client (SelectWarpList).
-///
 /// The client sends `[u16 objectIndex] [u16 warpID]` after choosing a destination
 /// from the warp list UI.
-///
-/// C++ Reference: `UserObjectSystem.cpp:5-73` (CUser::SelectWarpList)
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -57,7 +46,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let sid_check = session.session_id();
 
     // Player state validation: dead, trading, merchanting, mining, fishing
-    // C++ Reference: UserObjectSystem.cpp:5-10 — validates player state before warp
     if world_ref.is_player_dead(sid_check)
         || world_ref.is_trading(sid_check)
         || world_ref.is_merchanting(sid_check)
@@ -102,7 +90,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Object event validation — prevents warping without being near the gate
-    // C++ Reference: UserObjectSystem.cpp:18-26
     {
         let obj_event = match zone.get_object_event(object_index) {
             Some(e) => e,
@@ -167,14 +154,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Nation check: if warp is nation-restricted, must match player nation
-    // C++ Reference: `pWarp->sNation != 0 && pWarp->sNation != GetNation()`
     if warp.nation != 0 && warp.nation != char_info.nation as i16 {
         send_select_fail(session).await?;
         return Ok(());
     }
 
     // Verify destination zone exists and is active
-    // C++ Reference: UserObjectSystem.cpp:35-37 — `pMap->m_Status` must be non-zero
     match world.get_zone(warp.dest_zone as u16) {
         Some(z) => {
             let status = z.zone_info.as_ref().map(|i| i.status).unwrap_or(1);
@@ -190,7 +175,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Eslant zone redirect — all Eslant variants redirect to ZONE_KARUS_ESLANT (11).
-    // C++ Reference: UserObjectSystem.cpp:39-40
     //   if (isInKarusEslant(zoneid) || isInElmoradEslant(zoneid))
     //       zoneid = ZONE_KARUS_ESLANT;
     // Karus Eslant: 11, 13, 14 — Elmorad Eslant: 12, 15, 16
@@ -200,7 +184,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Add random offset within warp radius
-    // C++ Reference: UserObjectSystem.cpp:51-56
     let (dest_x, dest_z, dest_zone) = {
         let mut rng = thread_rng();
         let mut rx = rng.gen_range(0.0..=(warp.radius * 2.0));
@@ -215,7 +198,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Same-zone warp: send success response before warping
-    // C++ Reference: UserObjectSystem.cpp:58
     if pos.zone_id == dest_zone {
         let mut result = Packet::new(Opcode::WizWarpList as u8);
         result.write_u8(2); // sub-opcode: SelectWarpList response
@@ -228,7 +210,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     zone_change::trigger_zone_change(session, dest_zone, dest_x, dest_z).await?;
 
     // Deduct gold only after SUCCESSFUL zone change.
-    // C++ Reference: UserObjectSystem.cpp:65-66
     //   if (ZoneChange(...)) { if (GetZoneID() == pWarp->sZone && dwPay > 0 && hasCoins(dwPay)) GoldLose(dwPay); }
     // ZoneChange returns bool; gold is deducted only on success.
     // Our trigger_zone_change returns Ok(()) on all paths, so check zone_id parity.
@@ -253,11 +234,7 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Send the warp list to the player for a given warp group.
-///
 /// Called from object event handling when a player interacts with a WARP_GATE object.
-///
-/// C++ Reference: `UserObjectSystem.cpp:99-172` (CUser::GetWarpList)
-///
 /// Wire format:
 /// ```text
 /// WIZ_WARP_LIST + u8(1) + u16(count) + per entry:
@@ -285,7 +262,6 @@ pub async fn send_warp_list(session: &mut ClientSession, warp_group: i32) -> any
     };
 
     // Filter warps: nation check, destination zone must exist and be active
-    // C++ Reference: UserObjectSystem.cpp:123-160
     let battle = world.get_battle_state();
     let mut entries: Vec<&ko_protocol::smd::WarpInfo> = Vec::with_capacity(warps.len());
     for warp in &warps {
@@ -295,7 +271,6 @@ pub async fn send_warp_list(session: &mut ClientSession, warp_group: i32) -> any
         }
 
         // Destination zone must exist and be active
-        // C++ Reference: UserObjectSystem.cpp:125-131 — `pDstMap->m_Status == 0` → skip
         match world.get_zone(warp.dest_zone as u16) {
             Some(z) => {
                 let status = z.zone_info.as_ref().map(|i| i.status).unwrap_or(1);
@@ -307,7 +282,6 @@ pub async fn send_warp_list(session: &mut ClientSession, warp_group: i32) -> any
         }
 
         // Battle zone filter: hide Ardream/Ronark warps based on active battle type
-        // C++ Reference: UserObjectSystem.cpp:145-152
         let dz = warp.dest_zone as u16;
         if battle.battle_open == NATION_BATTLE || battle.battle_open == SIEGE_BATTLE {
             let is_battle_zone =
@@ -353,8 +327,6 @@ pub async fn send_warp_list(session: &mut ClientSession, warp_group: i32) -> any
 }
 
 /// Send SelectWarpList failure response.
-///
-/// C++ Reference: UserObjectSystem.cpp:70-72 — `result << uint8(-1);`
 async fn send_select_fail(session: &mut ClientSession) -> anyhow::Result<()> {
     let mut result = Packet::new(Opcode::WizWarpList as u8);
     result.write_u8(2); // sub-opcode: SelectWarpList response
@@ -519,7 +491,6 @@ mod tests {
 
     // ── Sprint 319: Zone status filter tests ────────────────────────
 
-    /// C++ Reference: UserObjectSystem.cpp:35-37 — `pDstMap->m_Status == 0` → fail
     #[test]
     fn test_zone_status_active() {
         let status: i16 = 1;
@@ -546,7 +517,6 @@ mod tests {
 
     #[test]
     fn test_eslant_redirect_all_variants_to_zone_11() {
-        // C++ Reference: UserObjectSystem.cpp:39-40
         // isInKarusEslant: 11, 13, 14
         // isInElmoradEslant: 12, 15, 16
         // All redirect to ZONE_KARUS_ESLANT (11)

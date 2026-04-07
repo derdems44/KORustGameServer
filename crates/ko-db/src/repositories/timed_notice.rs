@@ -1,6 +1,4 @@
 //! Timed notice repository — loads periodic server announcements from PostgreSQL.
-//!
-//! C++ Reference: `ServerStartStopHandler.cpp` — Timer_TimedNotice loads at startup.
 
 use crate::models::timed_notice::TimedNoticeRow;
 use crate::DbPool;

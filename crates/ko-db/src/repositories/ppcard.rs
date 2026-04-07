@@ -1,6 +1,4 @@
 //! PPCard repository — ppcard_list table access.
-//!
-//! C++ Reference: `DBAgent.cpp:5225-5277` — `CDBAgent::LoadPPCard()`
 //! Handles lookup and atomic redemption of prepaid card codes.
 
 use crate::models::ppcard::PPCardRow;
@@ -21,7 +19,6 @@ impl<'a> PPCardRepository<'a> {
     /// and unused, and atomically marks it as used. Returns `None` if the key
     /// does not exist or has already been redeemed.
     ///
-    /// C++ Reference: `CDBAgent::LoadPPCard()` — queries PPCARD_LIST,
     /// checks status, marks as used, stores account/character info.
     pub async fn redeem(
         &self,

@@ -1,6 +1,4 @@
 //! Zone info model — maps to the `zone_info` PostgreSQL table.
-//!
-//! C++ Reference: `shared/database/structs.h` — `_ZONE_INFO`
 
 /// A single zone configuration row from the database.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -36,6 +34,6 @@ pub struct ZoneInfoRow {
     pub blink_zone: bool,
     pub auto_loot: bool,
     pub gold_lose: bool,
-    /// Zone status (C++ `m_Status`). 0=inactive, 1=active.
+    /// Zone status (`m_Status`). 0=inactive, 1=active.
     pub status: i16,
 }

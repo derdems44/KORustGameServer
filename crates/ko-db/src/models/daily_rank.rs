@@ -1,12 +1,8 @@
 //! Daily rank models — maps to `daily_rank` and `draki_tower_daily_rank` tables.
-//!
-//! C++ Reference: `_DAILY_RANK` struct in `GameDefine.h:4468-4487`.
 
 /// A cached daily rank entry from the `daily_rank` table.
-///
 /// Each row stores the current and previous rank position per rank type
 /// for a single character. Rank position is 1-based (1 = best).
-/// C++ equivalent: `_DAILY_RANK` (GameDefine.h).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DailyRankRow {
     /// Character name (primary key).
@@ -38,8 +34,6 @@ pub struct DailyRankRow {
 }
 
 /// Per-player raw daily rank stats from the `user_daily_rank_stats` table.
-///
-/// C++ equivalent: `_USER_DAILY_RANK` (GameDefine.h:4457-4466).
 /// These cumulative stats are loaded on login and saved on logout.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserDailyRankStatsRow {
@@ -58,9 +52,7 @@ pub struct UserDailyRankStatsRow {
 }
 
 /// A Draki Tower daily rank entry from the `draki_tower_daily_rank` table.
-///
 /// Rankings are filtered by class and sorted by stage DESC, time ASC.
-/// C++ equivalent: `_DRAKI_TOWER_FORDAILY_RANKING` (GameDefine.h:4450-4455).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DrakiTowerDailyRankRow {
     /// Character name (primary key).

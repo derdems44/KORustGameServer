@@ -1,13 +1,8 @@
 //! WIZ_MARKET_BBS (0x50) handler -- Market bulletin board system.
-//!
-//! C++ Reference: `KOOriginalGameServer/shared/packets.h:82,917-928`
-//!
 //! The market bulletin board allows players to post buy/sell listings
 //! visible to all players on the server. Other players can browse,
 //! search, and remotely purchase listed items.
-//!
-//! ## Sub-opcodes (C++ packets.h:917-928)
-//!
+//! ## Sub-opcodes
 //! | Code | Name                    | Direction | Description                      |
 //! |------|-------------------------|-----------|----------------------------------|
 //! | 0x01 | MARKET_BBS_REGISTER     | C2S       | Post a new listing               |
@@ -16,14 +11,11 @@
 //! | 0x04 | MARKET_BBS_OPEN         | C2S       | Open market BBS UI               |
 //! | 0x05 | MARKET_BBS_REMOTE_PURCHASE | C2S    | Buy from remote listing          |
 //! | 0x06 | MARKET_BBS_MESSAGE      | S2C       | Status/error message to client   |
-//!
 //! ## Trade types
-//!
 //! | Code | Name             | Description    |
 //! |------|------------------|----------------|
 //! | 0x01 | MARKET_BBS_BUY   | Buying listing |
 //! | 0x02 | MARKET_BBS_SELL  | Selling listing|
-//!
 //! IDA analysis (sub_A6B080): Client sends `[opcode=0x97] [sub=1] [sub=1] [u32 npc_item_id]`
 //! when interacting with the market BBS NPC. The 0x50 dispatch on client side
 //! triggers the C2S send, and S2C responses update the local listing cache.
@@ -67,7 +59,6 @@ const MAX_LISTINGS_PER_PLAYER: u8 = 5;
 const MAX_REPORT_LISTINGS: u8 = 20;
 
 /// Handle WIZ_MARKET_BBS (0x50) -- market bulletin board operations.
-///
 /// Routes to sub-handlers based on the sub-opcode byte.
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
@@ -98,7 +89,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle MARKET_BBS_REGISTER (0x01) -- post a new listing.
-///
 /// C2S: `[u8 sub=1] [u8 trade_type] [u32 item_id] [u16 count] [u32 price] [sbyte_string title]`
 /// S2C: `[u8 sub=1] [u8 result]`
 async fn handle_register(
@@ -128,7 +118,6 @@ async fn handle_register(
 }
 
 /// Handle MARKET_BBS_DELETE (0x02) -- remove own listing.
-///
 /// C2S: `[u8 sub=2] [u32 listing_id]`
 /// S2C: `[u8 sub=2] [u8 result]`
 async fn handle_delete(
@@ -149,7 +138,6 @@ async fn handle_delete(
 }
 
 /// Handle MARKET_BBS_REPORT (0x03) -- list/search existing listings.
-///
 /// C2S: `[u8 sub=3] [u8 trade_type] [u16 page] [sbyte_string search_text]`
 /// S2C: `[u8 sub=3] [u8 count] [per_listing: [u32 id] [u8 trade_type]
 ///        [u32 item_id] [u16 count] [u32 price] [sbyte_string seller] [sbyte_string title]]`
@@ -176,7 +164,6 @@ async fn handle_report(
 }
 
 /// Handle MARKET_BBS_OPEN (0x04) -- open market BBS UI.
-///
 /// C2S: `[u8 sub=4]`
 /// S2C: `[u8 sub=4] [u8 result(1=ok)]`
 async fn handle_open(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -188,7 +175,6 @@ async fn handle_open(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Handle MARKET_BBS_REMOTE_PURCHASE (0x05) -- buy from remote listing.
-///
 /// C2S: `[u8 sub=5] [u32 listing_id]`
 /// S2C: `[u8 sub=5] [u8 result]`
 async fn handle_purchase(
@@ -210,7 +196,6 @@ async fn handle_purchase(
 }
 
 /// Build a simple result packet for market BBS operations.
-///
 /// Format: `[u8 sub_opcode] [u8 result]`
 fn build_result_packet(sub_opcode: u8, result: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizMarketBbs as u8);
@@ -220,7 +205,6 @@ fn build_result_packet(sub_opcode: u8, result: u8) -> Packet {
 }
 
 /// Build an empty report (no listings found).
-///
 /// Format: `[u8 sub=3] [u8 count=0]`
 fn build_empty_report_packet() -> Packet {
     let mut pkt = Packet::new(Opcode::WizMarketBbs as u8);
@@ -230,7 +214,6 @@ fn build_empty_report_packet() -> Packet {
 }
 
 /// Build a MARKET_BBS_MESSAGE S2C packet (status/error notification).
-///
 /// Format: `[u8 sub=6] [u8 message_type] [sbyte_string message]`
 pub fn build_message_packet(message_type: u8, message: &str) -> Packet {
     let mut pkt = Packet::new(Opcode::WizMarketBbs as u8);

@@ -1,10 +1,7 @@
 //! Zone and region grid for spatial partitioning, map data, and zone rules.
-//!
-//! C++ Reference:
-//! - `KOOriginalGameServer/GameServer/Map.h` — C3DMap (zone flags, events, abilities)
-//! - `KOOriginalGameServer/GameServer/Region.h` — CRegion
-//! - `KOOriginalGameServer/GameServer/GameEvent.h` — CGameEvent
-//!
+//! -  — C3DMap (zone flags, events, abilities)
+//! -  — CRegion
+//! -  — CGameEvent
 //! Each zone (map) is divided into a 2D grid of regions.
 //! Region size = VIEW_DISTANCE (48 units).
 //! Nearby players = current region + 8 surrounding (3×3 grid).
@@ -18,7 +15,6 @@ use smallvec::SmallVec;
 use crate::npc::NpcId;
 
 /// Region cell size in world units.
-/// C++ Reference: `shared/globals.h` — `#define VIEW_DISTANCE 48`
 pub const VIEW_DISTANCE: u16 = 48;
 
 /// Session identifier — unique per connection.
@@ -26,9 +22,7 @@ pub type SessionId = u16;
 
 // ─── Zone Ability Types ─────────────────────────────────────────────────
 
-/// Zone type enum matching the C++ `ZoneAbilityType`.
-///
-/// C++ Reference: `GameServer/Map.h:17-28`
+/// Zone type enum matching the `ZoneAbilityType`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ZoneAbilityType {
@@ -73,8 +67,6 @@ impl ZoneAbilityType {
 // ─── Game Event Types ───────────────────────────────────────────────────
 
 /// Game event type — loaded from the `game_event` DB table.
-///
-/// C++ Reference: `GameServer/GameEvent.h` — `enum GameEventType`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum GameEventType {
@@ -99,8 +91,6 @@ impl GameEventType {
 }
 
 /// A game event loaded from the database.
-///
-/// C++ Reference: `GameServer/GameEvent.h` — `CGameEvent`
 #[derive(Debug, Clone)]
 pub struct GameEvent {
     pub event_type: GameEventType,
@@ -111,8 +101,6 @@ pub struct GameEvent {
 // ─── Object Events ──────────────────────────────────────────────────────
 
 /// Object type enum for interactive world objects.
-///
-/// C++ Reference: `shared/packets.h:1022-1038` — `enum ObjectType`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i16)]
 pub enum ObjectType {
@@ -158,8 +146,6 @@ impl ObjectType {
 }
 
 /// An interactive object event in a zone (bind point, warp gate, lever, anvil, etc.).
-///
-/// C++ Reference: `_OBJECT_EVENT` in `shared/database/structs.h:308-321`
 #[derive(Debug, Clone)]
 pub struct ObjectEventInfo {
     /// Auto-assigned index (position in array).
@@ -182,15 +168,13 @@ pub struct ObjectEventInfo {
     pub pos_y: f32,
     /// World Z coordinate.
     pub pos_z: f32,
-    /// Life flag (C++ `byLife`). Only objects with by_life == 1 are valid bind points.
+    /// Life flag (`byLife`). Only objects with by_life == 1 are valid bind points.
     pub by_life: i16,
 }
 
 // ─── Zone Info ──────────────────────────────────────────────────────────
 
 /// Zone configuration from the database.
-///
-/// C++ Reference: `GameServer/Map.h` — C3DMap member variables
 #[derive(Debug, Clone)]
 pub struct ZoneInfo {
     pub smd_name: String,
@@ -203,13 +187,11 @@ pub struct ZoneInfo {
     pub init_z: f32,
     pub init_y: f32,
     pub abilities: ZoneAbilities,
-    /// Zone status (C++ `m_Status`). 0=inactive, 1=active.
+    /// Zone status (`m_Status`). 0=inactive, 1=active.
     pub status: i16,
 }
 
 /// Zone ability flags — determines what actions are allowed in this zone.
-///
-/// C++ Reference: `GameServer/Map.h:93-125` — `C3DMap` flags
 #[derive(Debug, Clone, Default)]
 pub struct ZoneAbilities {
     pub trade_other_nation: bool,
@@ -239,7 +221,6 @@ pub struct ZoneAbilities {
 // ─── Map Data ───────────────────────────────────────────────────────────
 
 /// Parsed map data from an SMD file.
-///
 /// Holds the event grid and warp info needed for movement validation.
 #[derive(Debug)]
 pub struct MapData {
@@ -255,35 +236,30 @@ impl MapData {
 
     /// Check if a world position is within map boundaries.
     ///
-    /// C++ Reference: `SMDFile::IsValidPosition`
     pub fn is_valid_position(&self, x: f32, z: f32) -> bool {
         self.smd.is_valid_position(x, z)
     }
 
     /// Check if a world position is on a walkable tile.
     ///
-    /// C++ Reference: `C3DMap::IsMovable`
     pub fn is_movable(&self, x: f32, z: f32) -> bool {
         self.smd.is_movable_at(x, z)
     }
 
     /// Get the event ID at a world position.
     ///
-    /// C++ Reference: `C3DMap::CheckEvent` — first gets event_id from grid
     pub fn get_event_id_at(&self, x: f32, z: f32) -> i16 {
         self.smd.get_event_id_at(x, z)
     }
 
     /// Get a warp by ID.
     ///
-    /// C++ Reference: `SMDFile::GetWarp(warpID)` — direct lookup by sWarpID.
     pub fn get_warp(&self, warp_id: i16) -> Option<&WarpInfo> {
         self.smd.warps.iter().find(|w| w.warp_id == warp_id)
     }
 
     /// Get all warps matching a warp group.
     ///
-    /// C++ Reference: `SMDFile::GetWarpList(warpGroup, set)` — filters by `(warp_id / 10) == warp_group`.
     pub fn get_warp_list(&self, warp_group: i32) -> Vec<&WarpInfo> {
         self.smd
             .warps
@@ -304,7 +280,6 @@ impl MapData {
 
     /// Grid unit distance in world meters (TILE_SIZE, typically 4.0).
     ///
-    /// C++ Reference: `NpcDefines.h` — `#define TILE_SIZE 4`
     pub fn unit_dist(&self) -> f32 {
         self.smd.unit_dist
     }
@@ -317,7 +292,6 @@ impl MapData {
     /// Check if a grid cell is walkable (event_id == 0).
     ///
     /// Takes grid indices, not world coordinates.
-    /// C++ Reference: `C3DMap::IsMovable` → `GetEventID(x, z) == 0`
     pub fn is_movable_grid(&self, gx: i32, gz: i32) -> bool {
         self.smd.is_movable(gx, gz)
     }
@@ -344,7 +318,6 @@ pub struct ZoneState {
     pub events: HashMap<i16, GameEvent>,
     /// Interactive object events keyed by `s_index` (the in-zone object identifier).
     ///
-    /// C++ Reference: `C3DMap::m_ObjectEventArray` — `CSTLMap<_OBJECT_EVENT>`
     /// C++ uses `GetData(objectindex)` which searches by `s_index`, NOT by array position.
     pub object_events: HashMap<i16, ObjectEventInfo>,
 }
@@ -369,8 +342,6 @@ impl Region {
 }
 
 /// Calculate region coordinate from world position.
-///
-/// C++ Reference: `Unit.h` — `GetNewRegionX() = (uint16)(GetX()) / VIEW_DISTANCE`
 pub fn calc_region(pos: f32) -> u16 {
     (pos as u16) / VIEW_DISTANCE
 }
@@ -410,7 +381,6 @@ impl ZoneState {
 
     /// Create a fully-configured zone with map data, events, and zone info.
     ///
-    /// C++ Reference: `C3DMap::Initialize()`
     pub fn new_with_data(
         zone_id: u16,
         zone_info: ZoneInfo,
@@ -439,7 +409,6 @@ impl ZoneState {
 
     /// Look up an object event by its `s_index` (in-zone object identifier).
     ///
-    /// C++ Reference: `C3DMap::GetObjectEvent(int objectindex)` — searches by `s_index`,
     /// NOT by array position.
     pub fn get_object_event(&self, index: u16) -> Option<&ObjectEventInfo> {
         self.object_events.get(&(index as i16))
@@ -451,7 +420,6 @@ impl ZoneState {
     ///
     /// Returns true if no map data is loaded (permissive fallback).
     ///
-    /// C++ Reference: `SMDFile::IsValidPosition`
     pub fn is_valid_position(&self, x: f32, z: f32) -> bool {
         match &self.map_data {
             Some(md) => md.is_valid_position(x, z),
@@ -463,7 +431,6 @@ impl ZoneState {
     ///
     /// Returns true if no map data is loaded (permissive fallback).
     ///
-    /// C++ Reference: `C3DMap::IsMovable`
     pub fn is_movable(&self, x: f32, z: f32) -> bool {
         match &self.map_data {
             Some(md) => md.is_movable(x, z),
@@ -475,7 +442,6 @@ impl ZoneState {
     ///
     /// Returns `None` if no event or no map data.
     ///
-    /// C++ Reference: `C3DMap::CheckEvent`
     pub fn check_event(&self, x: f32, z: f32) -> Option<&GameEvent> {
         let event_id = match &self.map_data {
             Some(md) => md.get_event_id_at(x, z),
@@ -518,7 +484,6 @@ impl ZoneState {
 
     /// Can players trade with the other nation in this zone?
     ///
-    /// C++ Reference: `Map.h:94` — `canTradeWithOtherNation()`
     pub fn can_trade_other_nation(&self) -> bool {
         self.zone_info
             .as_ref()
@@ -528,7 +493,6 @@ impl ZoneState {
 
     /// Can players talk to the other nation in this zone?
     ///
-    /// C++ Reference: `Map.h:95` — `canTalkToOtherNation()`
     pub fn can_talk_other_nation(&self) -> bool {
         self.zone_info
             .as_ref()
@@ -615,7 +579,6 @@ impl ZoneState {
     /// (≤64 players in a 3×3 area). Each player is in exactly one region cell,
     /// so no deduplication is needed.
     ///
-    /// C++ Reference: `foreach_region(x, z)` macro in `globals.h`
     pub fn get_users_in_3x3(&self, rx: u16, rz: u16) -> SmallVec<[SessionId; 64]> {
         let mut result = SmallVec::new();
         for dx in -1i16..=1 {
@@ -635,7 +598,6 @@ impl ZoneState {
 
     /// Lightweight check: are there ANY users in the 3×3 region grid around (rx, rz)?
     ///
-    /// C++ Reference: `Npc.cpp:5570-5573` — `CheckFindEnemy()` checks
     /// `m_byMoving == 1` on the NPC's region.  We extend to 3×3 to match
     /// the actual search area of `find_enemy()`.
     ///

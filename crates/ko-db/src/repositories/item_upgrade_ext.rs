@@ -1,6 +1,4 @@
 //! Extended item upgrade repository — loads upgrade probability config from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `GameServer/LoadServerData.cpp` — `LoadItemUpProbability()`
 
 use crate::models::item_upgrade_ext::ItemUpProbabilityRow;
@@ -20,7 +18,6 @@ impl<'a> ItemUpgradeExtRepository<'a> {
     /// Load all item upgrade probability rows (bulk load at startup).
     ///
     /// Returns all itemup_probability entries (typically 1 row).
-    /// C++ Reference: `CGameServerDlg::LoadItemUpProbability()`
     pub async fn load_all_itemup_probability(
         &self,
     ) -> Result<Vec<ItemUpProbabilityRow>, sqlx::Error> {

@@ -1,5 +1,4 @@
 //! Game server — TCP listener and connection accept loop.
-//!
 //! Binds to a TCP port and spawns a `ClientSession` task per connection.
 
 use std::path::PathBuf;
@@ -15,8 +14,6 @@ use crate::session::ClientSession;
 use crate::world::WorldState;
 
 /// Maximum concurrent sessions before rejecting new connections.
-///
-/// C++ Reference: `MAX_USER` — typically 5000 in production servers.
 /// Prevents unbounded memory growth from excessive connections.
 const MAX_SESSIONS: usize = 5000;
 
@@ -38,7 +35,6 @@ pub struct GameServer {
 impl GameServer {
     /// Create a new game server — loads zone data from DB and SMD files.
     ///
-    /// C++ Reference: `CGameServerDlg::OnStartUp()`
     pub async fn new(config: ServerConfig, pool: DbPool) -> anyhow::Result<Self> {
         let world = match WorldState::load(&pool, &config.map_dir).await {
             Ok(w) => Arc::new(w),
@@ -62,7 +58,6 @@ impl GameServer {
     /// Run the server — listens for connections and spawns session tasks.
     pub async fn run(&self) -> anyhow::Result<()> {
         // Clear stale online entries from a previous crash.
-        // C++ Reference: CDBAgent::ClearAllOnlineEntries() on startup.
         let repo = ko_db::repositories::account::AccountRepository::new(&self.pool);
         match repo.clear_all_online().await {
             Ok(n) if n > 0 => info!("Cleared {} stale online entries from previous run", n),
@@ -83,7 +78,6 @@ impl GameServer {
         crate::handler::vanguard::initialize_wanted_rooms(&self.world);
 
         // Spawn random boss monsters at startup.
-        // C++ Reference: BossHandler.cpp — RandomBossSystemLoad() called during server init.
         self.world.random_boss_system_load();
 
         // Start background tick systems — collect handles for clean shutdown.
@@ -218,7 +212,6 @@ impl GameServer {
         info!("S→C heartbeat probe DISABLED (0x02 collision with WIZ_NEW_CHAR)");
 
         // King election timer — runs every 60s, checks both nations.
-        // C++ Reference: ServerStartStopHandler.cpp — Timer_UpdateGameTime calls
         // CheckKingTimer() per nation once per minute.
         {
             let world = self.world.clone();
@@ -240,7 +233,6 @@ impl GameServer {
         info!("====================================");
 
         // Main accept loop with graceful shutdown on Ctrl+C / SIGTERM.
-        // C++ Reference: signal_handler.cpp — saves all users before exit.
         let shutdown = async {
             let ctrl_c = tokio::signal::ctrl_c();
             #[cfg(unix)]

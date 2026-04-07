@@ -1,16 +1,11 @@
 //! Game time and weather broadcast system.
-//!
-//! C++ Reference:
 //! - `User.cpp:1816-1831` — `CUser::SendTime()` / `CUser::SendWeather()`
 //! - `GameServerDlg.cpp:1384-1428` — weather update cycle
 //! - `GameServerDlg.h:1089-1091` — `m_sYear/m_sMonth/m_sDate/m_sHour/m_sMin/m_sSec`
-//!
 //! ## WIZ_TIME (0x13) — Server -> Client
 //! `[u16 year] [u16 month] [u16 day] [u16 hour] [u16 minute]`
-//!
 //! ## WIZ_WEATHER (0x14) — Server -> Client
 //! `[u8 weather_type] [u16 amount]`
-//!
 //! Weather types (from `packets.h`):
 //! - `WEATHER_FINE` (1) = clear sky
 //! - `WEATHER_RAIN` (2) = rain
@@ -35,13 +30,10 @@ pub const WEATHER_SNOW: u8 = 0x03;
 const TIME_BROADCAST_INTERVAL_SECS: u64 = 30;
 
 /// Weather change interval in seconds (every hour, matching C++).
-///
-/// C++ Reference: `ServerStartStopHandler.cpp:111-115` — `UpdateWeather()`
 /// Previously was 300s (5 min) which caused client-side resource reload crashes.
 const WEATHER_CHANGE_INTERVAL_SECS: u64 = 3600;
 
 /// Shared game-time and weather state.
-///
 /// Thread-safe via atomics — updated by the background task,
 /// read by `send_time()` / `send_weather()` on game entry.
 pub struct GameTimeWeather {
@@ -53,19 +45,15 @@ pub struct GameTimeWeather {
     // ── GM event rate modifiers (server-wide) ─────────────────────
     /// Bonus EXP percentage set by GM `+exp_add` command.
     ///
-    /// C++ Reference: `CGameServerDlg::m_byExpEventAmount`
     pub exp_event_amount: AtomicU8,
     /// Bonus coin (noah) percentage set by GM `+money_add` command.
     ///
-    /// C++ Reference: `CGameServerDlg::m_byCoinEventAmount`
     pub coin_event_amount: AtomicU8,
     /// Bonus NP (loyalty) percentage set by GM `+np_add` command.
     ///
-    /// C++ Reference: `CGameServerDlg::m_byNPEventAmount`
     pub np_event_amount: AtomicU8,
     /// Bonus drop rate percentage set by GM `+drop_add` command.
     ///
-    /// C++ Reference: `CGameServerDlg::m_byDropEventAmount`
     pub drop_event_amount: AtomicU8,
 }
 
@@ -100,7 +88,6 @@ impl GameTimeWeather {
 }
 
 /// Start the game time broadcast task.
-///
 /// Broadcasts WIZ_TIME to all in-game sessions every 30 seconds.
 pub fn start_time_broadcast_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -114,10 +101,7 @@ pub fn start_time_broadcast_task(world: Arc<WorldState>) -> tokio::task::JoinHan
 }
 
 /// Start the weather cycle task.
-///
 /// Changes weather and broadcasts to all in-game sessions every 5 minutes.
-///
-/// C++ Reference: `GameServerDlg.cpp:1384-1428`
 pub fn start_weather_task(
     world: Arc<WorldState>,
     time_weather: Arc<GameTimeWeather>,
@@ -148,8 +132,6 @@ pub fn start_weather_task(
 }
 
 /// Build a WIZ_TIME (0x13) packet with the current real time.
-///
-/// C++ Reference: `User.cpp:1818-1820`
 /// ```text
 /// result << uint16(m_sYear) << uint16(m_sMonth) << uint16(m_sDate)
 ///        << uint16(m_sHour) << uint16(m_sMin);
@@ -179,8 +161,6 @@ pub fn build_time_packet_with(year: u16, month: u16, day: u16, hour: u16, minute
 }
 
 /// Build a WIZ_WEATHER (0x14) packet.
-///
-/// C++ Reference: `User.cpp:1829-1830`
 /// ```text
 /// result << g_pMain->m_byWeather << g_pMain->m_sWeatherAmount;
 /// ```

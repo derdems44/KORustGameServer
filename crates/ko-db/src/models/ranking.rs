@@ -1,6 +1,4 @@
 /// A row from `user_personal_rank` or `user_knights_rank`.
-///
-/// C++ Reference: `_USER_RANK` struct in `GameDefine.h:2146-2170`.
 /// Both tables share the same column layout (dual-nation per row).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserRankRow {
@@ -11,8 +9,6 @@ pub struct UserRankRow {
 }
 
 /// A row from `knights_rating` — per-nation clan ranking.
-///
-/// C++ Reference: `_KNIGHTS_RATING` struct in `GameDefine.h:2139-2144`.
 /// C++ fields: `nRank` (u32), `sClanID` (u16), `nPoints` (u32).
 /// Our table adds `nation` for per-nation ranking support.
 #[derive(Debug, Clone, sqlx::FromRow)]

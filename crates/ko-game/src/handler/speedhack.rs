@@ -1,7 +1,4 @@
 //! WIZ_SPEEDHACK_CHECK (0x41) handler — anti-cheat speed validation.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/KnightCrownGuard.cpp:5-35`
-//!
 //! The server compares distance traveled (since last check) against
 //! class-based speed limits. If the player moved too fast, they are
 //! warped back to their last validated position.
@@ -13,8 +10,6 @@ use crate::clan_constants::COMMAND_CAPTAIN;
 use crate::session::{ClientSession, SessionState};
 
 /// Handle WIZ_SPEEDHACK_CHECK from the client.
-///
-/// C++ Reference: `CUser::SpeedHackTime()` in `KnightCrownGuard.cpp:5-35`
 pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -29,7 +24,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     };
 
     // GMs are exempt from speed checks
-    // C++ Reference: KnightCrownGuard.cpp:7 — `if (!isInGame() || isGM() || isGMUser()) return;`
     if ch.authority == 0 {
         return Ok(());
     }
@@ -40,7 +34,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     };
 
     // Determine class-based speed limit
-    // C++ Reference: KnightCrownGuard.cpp:10-18
     let base_class = ch.class % 100;
     let is_rogue = matches!(base_class, 2 | 7 | 8);
     let is_captain = ch.fame == COMMAND_CAPTAIN;
@@ -67,7 +60,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
         return Ok(());
     }
 
-    // C++ Reference: KnightCrownGuard.cpp:20
     // `float nRange = (pow(GetX() - m_LastX, 2.0f) + pow(GetZ() - m_LastZ, 2.0f)) / 100.0f;`
     let dx = pos.x - last_x;
     let dz = pos.z - last_z;
@@ -75,7 +67,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
 
     if range >= max_speed {
         // Speed hack detected — warp player back to last validated position
-        // C++ Reference: KnightCrownGuard.cpp:24-26
         // `Warp(uint16(m_LastX) * 10, uint16(m_LastZ) * 10);`
         debug!(
             "[{}] Speed hack detected: range={:.1} > limit={:.1}, warping back to ({:.0},{:.0})",
@@ -98,7 +89,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
         session.send_packet(&warp_pkt).await?;
     } else {
         // Valid movement — update last position
-        // C++ Reference: KnightCrownGuard.cpp:29-33
         world.update_session(sid, |h| {
             h.speed_last_x = pos.x;
             h.speed_last_z = pos.z;

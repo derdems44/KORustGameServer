@@ -1,14 +1,9 @@
 //! Clan-wide nation transfer (ClanNts) handler.
-//!
-//! C++ Reference: `ClanNtsHandler.cpp` (268 LOC)
-//!
 //! Triggered by the Lua `ClanNts(uid)` function (NPC dialog).
 //! The leader's clan and all member characters switch nation
 //! (Karus ↔ El Morad). Requires: leader, NTS item, all members
 //! offline, no king, no cross-clan characters.
-//!
 //! ## Response Packet
-//!
 //! `WIZ_EXT_HOOK (0xE9) << u8(0xBE MESSAGE) << string(title) << string(msg)`
 
 use std::sync::Arc;
@@ -26,8 +21,6 @@ use crate::zone::SessionId;
 use super::ext_hook::EXT_SUB_MESSAGE;
 
 /// Item required for clan nation transfer.
-///
-/// C++ Reference: `GameDefine.h` — `#define CLAN_NTS_ITEM 900144023`
 const CLAN_NTS_ITEM: u32 = 900144023;
 
 use crate::world::{NATION_ELMORAD, NATION_KARUS};
@@ -38,7 +31,6 @@ use crate::race_constants::{
 
 // ── Result Codes ───────────────────────────────────────────────────────────
 
-/// C++ Reference: `GameDefine.h` — `cntscode` enum values.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClanNtsResult {
@@ -57,9 +49,6 @@ pub enum ClanNtsResult {
 // ── Race Conversion ────────────────────────────────────────────────────────
 
 /// Get the new race for a class after clan nation transfer.
-///
-/// C++ Reference: `CGameServerDlg::GetCntNewRace(uint16 newclass, Nation newnation)`
-///
 /// The class modulo 100 determines the base class type; the target nation
 /// determines which race constant to assign.
 pub fn get_cnts_new_race(class: u16, nation: u8) -> u8 {
@@ -88,8 +77,6 @@ pub fn get_cnts_new_race(class: u16, nation: u8) -> u8 {
 // ── Packet Builders ────────────────────────────────────────────────────────
 
 /// Build WIZ_EXT_HOOK (0xE9) + MESSAGE (0xBE) packet.
-///
-/// C++ Reference: `CUser::ClanNtsSendMsg()` — sends ext_hook message box.
 fn build_ext_hook_message(title: &str, msg: &str) -> Packet {
     let mut pkt = Packet::new(Opcode::EXT_HOOK_S2C);
     pkt.write_u8(EXT_SUB_MESSAGE);
@@ -123,8 +110,6 @@ fn send_result(world: &WorldState, sid: SessionId, code: ClanNtsResult, extra: &
 // ── Main Handler ───────────────────────────────────────────────────────────
 
 /// Entry point for ClanNts — called from `tokio::spawn` in Lua binding.
-///
-/// C++ Reference: `CUser::ClanNtsHandler()` + `CUser::ReqClanNts()`
 pub async fn handle_clan_nts(world: Arc<WorldState>, pool: DbPool, sid: SessionId) {
     match execute_clan_nts(&world, &pool, sid).await {
         Ok(()) => {}

@@ -1,17 +1,12 @@
 //! Coefficient model — maps to the `coefficient` PostgreSQL table.
-//!
-//! C++ Reference:
 //! - `GameDefine.h` — `_CLASS_COEFFICIENT` struct
 //! - `shared/database/CoefficientSet.h` — DB loader
-//!
 //! Each row contains weapon proficiency and stat scaling coefficients for a
 //! single class. Keyed by `s_class` (101-115 Karus, 201-215 El Morad).
 
 /// A single class coefficient row from the database.
-///
 /// Used by the ability system to compute weapon damage, max HP/MP/SP,
 /// armor class, hit rate, and evasion rate per class.
-/// C++ equivalent: `_CLASS_COEFFICIENT` (GameDefine.h:1418).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct CoefficientRow {
     /// Class identifier (101-115 Karus, 201-215 El Morad).

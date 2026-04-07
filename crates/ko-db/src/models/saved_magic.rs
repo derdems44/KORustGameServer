@@ -1,6 +1,4 @@
 //! Saved magic (buff persistence) model — maps to `user_saved_magic` table.
-//!
-//! C++ Reference: `USER_SAVED_MAGIC` table in MSSQL — 10 skill/duration pairs per character.
 //! Persists active buffs across logout and zone changes.
 
 /// A single saved buff entry (one slot in the 10-slot persistence system).

@@ -1,15 +1,9 @@
 //! WIZ_LOADING_LOGIN (0x9F) handler — server queue / capacity check.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CharacterSelectionHandler.cpp:1231-1265`
-//!
 //! ## Request Packet (Client → Server)
-//!
 //! | Offset | Type | Value | Description          |
 //! |--------|------|-------|----------------------|
 //! | 0      | u8   | 0x01  | Unknown flag         |
-//!
 //! ## Response Packet (Server → Client)
-//!
 //! | Offset | Type  | Value | Description              |
 //! |--------|-------|-------|--------------------------|
 //! | 0      | u8    | 0x01  | Success flag             |
@@ -20,10 +14,8 @@ use ko_protocol::{Opcode, Packet};
 use crate::session::{ClientSession, SessionState};
 
 /// Handle WIZ_LOADING_LOGIN from the client.
-///
 /// The client sends this right after WIZ_LOGIN succeeds.
 /// Server responds with queue position (0 means no queue, proceed).
-/// C++ Reference: `CharacterSelectionHandler.cpp:1231-1265`
 pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
     // Only accept after login (before game start).
     match session.state() {

@@ -1,10 +1,6 @@
 //! Bot system models — farm bots, merchant bots, ranking data.
-//!
-//! C++ Reference: `_BOT_DATA`, `_BOT_MERCHANT_ITEM`, `_BOT_SAVE_DATA` structs.
 
 /// A row from the `bot_handler_farm` table — defines a farm bot character.
-///
-/// C++ Reference: `_BOT_DATA` loaded via `CDBAgent::LoadBotTable()`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct BotHandlerFarmRow {
     /// Unique bot ID (added to MAX_USER for in-game socket ID).
@@ -66,8 +62,6 @@ pub struct BotHandlerFarmRow {
 }
 
 /// A row from the `bot_handler_merchant` table — merchant bot item template.
-///
-/// C++ Reference: `_BOT_MERCHANT_ITEM` loaded via `CDBAgent::LoadBotHandlerMerchantTable()`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct BotHandlerMerchantRow {
     /// Template index (used as key in m_ArtificialMerchantArray).
@@ -85,8 +79,6 @@ pub struct BotHandlerMerchantRow {
 }
 
 /// A row from the `bot_merchant_data` table — pre-configured merchant stall.
-///
-/// C++ Reference: `_BOT_SAVE_DATA` used in `CDBAgent::InsertBotMerchant()`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct BotMerchantDataRow {
     /// Unique stall index.
@@ -171,7 +163,6 @@ pub struct BotMerchantDataRow {
 }
 
 /// A row from the `user_bots` table — individual user bot definitions.
-///
 /// Similar to BotHandlerFarmRow but without loyalty fields.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserBotRow {
@@ -203,8 +194,6 @@ pub struct UserBotRow {
 }
 
 /// A row from the `bot_knights_rank` table — dual-nation knights ranking.
-///
-/// C++ Reference: Used by `GetBotRank()` for CBot::m_bKnightsRank
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct BotKnightsRankRow {
     pub sh_index: i16,
@@ -221,8 +210,6 @@ pub struct BotKnightsRankRow {
 }
 
 /// A row from the `bot_personal_rank` table — dual-nation personal ranking.
-///
-/// C++ Reference: Used by `GetBotRank()` for CBot::m_bPersonalRank
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct BotPersonalRankRow {
     pub n_rank: i16,

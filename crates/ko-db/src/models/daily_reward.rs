@@ -1,7 +1,5 @@
 //! Daily reward models — maps to `daily_reward`, `daily_reward_cumulative`,
 //! and `daily_reward_user` PostgreSQL tables.
-//!
-//! C++ Reference: `DBAgent.cpp:5827-6024` — LoadDailyReward, LoadDailyRewardUser, UpdateDailyRewardUser
 
 /// A row from the `daily_reward` table — defines the item reward for
 /// each daily login day (0–24).
@@ -30,8 +28,6 @@ pub struct DailyRewardCumulative {
 }
 
 /// A row from the `daily_reward_user` table — per-user daily reward progress.
-///
-/// C++ Reference: strDateTime binary blob — 25 × (type u8, day u8).
 /// - type: 0 = unclaimed, 1 = claimed
 /// - day: day-of-month when claimed (0 = never)
 #[derive(Debug, Clone, sqlx::FromRow)]

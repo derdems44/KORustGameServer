@@ -1,7 +1,4 @@
 //! Packet handler dispatch — routes opcodes to handler functions.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:431-900`
-//!
 //! Each handler receives a mutable reference to the session and the
 //! incoming packet, processes it, and sends the appropriate response.
 
@@ -181,8 +178,6 @@ use crate::session::{ClientSession, SessionState};
 use crate::systems::time_weather::{build_weather_packet, WEATHER_FINE};
 
 /// Check if an opcode is blocked during Cinderella War for event participants.
-///
-/// C++ Reference: `User.cpp:668-914` — `if (!isCindIn)` checks gate these opcodes.
 /// When a player is an event user AND in the Cinderella zone, these handlers
 /// are silently skipped (packet dropped).
 fn is_cinderella_blocked_opcode(opcode: Opcode) -> bool {
@@ -223,7 +218,6 @@ pub async fn dispatch(session: &mut ClientSession, packet: Packet) -> anyhow::Re
         packet.data.len(),
     );
 
-    // C++ Reference: KOSocket::OnRead() — `m_lastResponse = UNIXTIME2;`
     // Update activity timestamp after successful packet receive.
     session.world().touch_session(session.session_id());
 
@@ -262,7 +256,6 @@ pub async fn dispatch(session: &mut ClientSession, packet: Packet) -> anyhow::Re
     }
 
     // ── Cinderella War handler gating ─────────────────────────────────────
-    // C++ Reference: User.cpp:668 — `bool isCindIn = pCindWar.isEventUser() && g_pMain->isCindirellaZone(GetZoneID());`
     // When player is in Cinderella event zone, many handlers are silently blocked.
     if session.state() == SessionState::InGame {
         if let Some(op) = opcode {
@@ -402,7 +395,6 @@ pub async fn dispatch(session: &mut ClientSession, packet: Packet) -> anyhow::Re
         Some(Opcode::WizSanta) => Ok(()), // server→client only (flying Santa/Angel visual event)
         Some(Opcode::WizNpcSay) => Ok(()), // server→client only (sent by quest/Lua system)
         Some(Opcode::WizItemUpgrade) => {
-            // C++ Reference: User.cpp:831-836 — WIZ_ITEM_UPGRADE always calls
             // ExchangeSystemProcess(pkt). When isCindIn, it also falls through
             // to TempleProcess(pkt) (WIZ_EVENT handler).
             item_upgrade::handle(session, packet.clone()).await?;
@@ -541,9 +533,6 @@ pub async fn dispatch(session: &mut ClientSession, packet: Packet) -> anyhow::Re
 }
 
 /// Handle WIZ_TIME / WIZ_WEATHER from client (GM-only update).
-///
-/// C++ Reference: `User.cpp:3308-3323` — `CUser::UpdateGameWeather()`
-///
 /// GM clients can update the server's time or weather. Non-GM clients
 /// are silently ignored (matching C++ behavior).
 async fn handle_gm_time_weather(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
@@ -569,7 +558,6 @@ async fn handle_gm_time_weather(session: &mut ClientSession, pkt: Packet) -> any
     let tw = world.game_time_weather();
 
     if opcode == Opcode::WizWeather as u8 {
-        // C++: pkt >> m_byWeather >> m_sWeatherAmount;
         let mut reader = PacketReader::new(&pkt.data);
         let weather_type = reader.read_u8().unwrap_or(WEATHER_FINE);
         let weather_amount = reader.read_u16().unwrap_or(0);
@@ -591,13 +579,11 @@ async fn handle_gm_time_weather(session: &mut ClientSession, pkt: Packet) -> any
         );
     } else {
         // WIZ_TIME — GM time update
-        // C++: pkt >> y >> m >> d >> m_sHour >> m_sMin;
         // We read but don't override real server time (the time packet
         // is built from chrono::Local and broadcast by the background task).
         debug!("[{}] GM WIZ_TIME received (acknowledged)", session.addr());
     }
 
-    // C++: Send(&pkt); — echo the packet back to the GM
     session.send_packet(&pkt).await?;
 
     Ok(())
@@ -605,7 +591,6 @@ async fn handle_gm_time_weather(session: &mut ClientSession, pkt: Packet) -> any
 
 /// Strip the first byte (ext sub-opcode) from a WIZ_EXT_HOOK packet,
 /// returning a new packet with the remaining payload.
-///
 /// Used by ext_hook dispatch arms that delegate to handlers expecting
 /// the sub-opcode byte already consumed.
 fn repack_ext_data(pkt: &Packet) -> Packet {
@@ -617,9 +602,6 @@ fn repack_ext_data(pkt: &Packet) -> Packet {
 }
 
 /// Handle WIZ_EXT_HOOK (0xE9) — dispatches to sub-handlers based on ext sub-opcodes.
-///
-/// C++ Reference: `XGuard.cpp:2013-2143` — extended packet dispatcher.
-///
 /// First byte of data = ext sub-opcode, which routes to specific handlers.
 async fn handle_ext_hook(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     let mut reader = PacketReader::new(&pkt.data);
@@ -650,7 +632,6 @@ async fn handle_ext_hook(session: &mut ClientSession, pkt: Packet) -> anyhow::Re
             wheel_of_fun::handle(session, repack_ext_data(&pkt)).await
         }
         // Extended hook sub-opcodes — anti-cheat + extended gameplay features
-        // C++ Reference: XGuard.cpp — ExtHookSubOpcodes enum
         ext_hook::EXT_SUB_AUTHINFO => ext_hook::handle_authinfo(session, &pkt.data[1..]),
         ext_hook::EXT_SUB_XALIVE => ext_hook::handle_xalive(session, &pkt.data[1..]),
         ext_hook::EXT_SUB_UIINFO => ext_hook::handle_ui_request(session).await,
@@ -714,9 +695,6 @@ async fn handle_ext_hook(session: &mut ClientSession, pkt: Packet) -> anyhow::Re
 }
 
 /// Handle WIZ_WARP (0x1E) — GM intra-zone teleport.
-///
-/// C++ Reference: `ZoneChangeWarpHandler.cpp:640-649` — `CUser::RecvWarp()`
-///
 /// Only GMs can use this. Client sends `[u16 PosX] [u16 PosZ]` and the
 /// server warps the player within the same zone using the existing
 /// `same_zone_warp()` flow.

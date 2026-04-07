@@ -1,19 +1,13 @@
 //! Character creation data models — starting equipment and stats per class.
-//!
-//! C++ Reference:
 //! - `CDBAgent::LoadNewCharSet()` — inserts starting items for a new character
 //! - `CDBAgent::LoadNewCharValue()` — updates starting stats/level/gold for a new character
-//!
 //! These tables are loaded at server startup and used during character creation
 //! to populate the new character's inventory and stat block.
 
 /// A single starting item entry for a class.
-///
 /// Maps to `create_new_char_set` table. Each class has 75 slots (0-74),
 /// where slot_id 0-13 = equipment, 14+ = inventory bag.
 /// Rows with item_id=0 are empty slots.
-///
-/// C++ Reference: MSSQL `CREATE_NEW_CHAR_SET` table
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct CreateNewCharSetRow {
     /// Row identifier.
@@ -35,11 +29,8 @@ pub struct CreateNewCharSetRow {
 }
 
 /// Starting stat/level/gold configuration for a class + job type combination.
-///
 /// Maps to `create_new_char_value` table. Each class has entries for job types
 /// 0-4 (base, 1st class change, 2nd class change, master, grand master).
-///
-/// C++ Reference: MSSQL `CREATE_NEW_CHAR_VALUE` table
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct CreateNewCharValueRow {
     /// Row identifier.

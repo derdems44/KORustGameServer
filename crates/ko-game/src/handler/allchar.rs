@@ -1,12 +1,9 @@
 //! WIZ_ALLCHAR_INFO_REQ (0x0C) handler — character list request.
-//!
 //! ## Wireshark-Verified Format: 0x0C sub=1
-//!
 //! Original server sends 0x0C sub=1 with 4 character slots.
 //! Per slot (character): `[u16 name_len][name][u8 race][u16 class][i16 level]
 //!   [u8 face][u32 hair][i16 zone][14×{u32 item_id + u16 dur}][18×0x00]`
 //! Empty slot: `[u16 0][114×0x00]` = 116 bytes fixed.
-//!
 //! Verified from 3 Wireshark captures: 467b, 479b, 490b packet sizes.
 //! The previous 0x2F sub=3 approach was INCORRECT — original server never sends 0x2F
 //! during character selection.
@@ -25,8 +22,7 @@ const ALLCHAR_NAME_CHANGE: u8 = 2;
 const ALLCHAR_LOCATION_SEND: u8 = 3; // S2C only — server never receives this
 const ALLCHAR_LOCATION_RECV: u8 = 4;
 
-/// Visible equipment slots in charsel order (C++ DBAgent.cpp:169).
-///
+/// Visible equipment slots in charsel order
 /// The C++ code loops i=0..13, writes only when `i` matches these slots.
 /// Output order: HEAD, BREAST, SHOULDER, RIGHTHAND, LEFTHAND, LEG, GLOVE, FOOT.
 const CHARSEL_EQUIP_SLOTS: &[i16] = &[1, 4, 5, 6, 8, 10, 12, 13];
@@ -70,13 +66,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Send the character selection list via 0x0C sub=1.
-///
 /// ## Wire Format (Wireshark verified)
 /// ```text
 /// [0x0C] [sub=1] [result=1]
 /// [4 × slot]
 /// ```
-///
 /// Per slot (character present):
 /// ```text
 /// [u16 name_len][name][u8 race][u16 class][i16 level]
@@ -84,7 +78,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 /// [14 × {u32 item_id, u16 durability}]
 /// [18 × 0x00]
 /// ```
-///
 /// Empty slot: `[u16 0][114 × 0x00]` = 116 bytes fixed.
 pub async fn send_allchar_list(
     session: &mut ClientSession,
@@ -161,7 +154,6 @@ pub async fn send_allchar_list(
 }
 
 /// Handle sub=2: character name change.
-///
 /// ## Wire Format
 /// C2S: `[0x0C][sub=2][charRanking:u16][oldName:str][newName:str]`
 /// S2C: `[0x0C][sub=2][result:u8]`
@@ -208,11 +200,9 @@ async fn handle_name_change(
 }
 
 /// Handle sub=4: character slot reorder.
-///
 /// ## Wire Format
 /// C2S: `[0x0C][sub=4][rank1:u8][rank2:u8][rank3:u8][rank4:u8]`
 /// S2C: `[0x0C][sub=1]...` (refreshed char list)
-///
 /// The client sends the desired slot ordering as 4 rank bytes (0-3).
 /// Each byte indicates which current slot goes into position N.
 async fn handle_slot_reorder(
@@ -281,7 +271,6 @@ async fn handle_slot_reorder(
 }
 
 /// Write a populated character slot to the packet.
-///
 /// Format: `[string name][u8 race][u16 class][i16 level][u8 face]`
 ///         `[u32 hair][i16 zone][14×{u32 item_id, u16 dur}][18×0x00]`
 fn write_character_slot(

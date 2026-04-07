@@ -1,23 +1,16 @@
 //! Knight Online packet framing — wire format encode/decode.
-//!
-//! C++ Reference: `KOOriginalGameServer/shared/KOSocket.cpp`
-//!
 //! ## Wire Format
-//!
 //! Both directions use the same framing on the wire:
 //! ```text
 //! [0xAA 0x55] [len: u16le] [encrypted payload] [0x55 0xAA]
 //! ```
-//!
 //! The C++ code checks `if (header != 0x55AA)` — on little-endian x86
 //! the uint16 value `0x55AA` maps to wire bytes `[0xAA, 0x55]`.
 //! Server also sends `"\xaa\x55"` literally. Same framing both ways.
-//!
 //! **Encrypted payload (after decrypt):**
 //! ```text
 //! [sequence: u32le] [opcode: u8] [data ...]  [crc32: u32le]
 //! ```
-//!
 //! **Unencrypted payload:**
 //! ```text
 //! [opcode: u8] [data ...]
@@ -296,7 +289,6 @@ impl Packet {
 
     /// Overwrite a u16 value at a specific offset in the payload.
     ///
-    /// C++ Reference: `Packet::put(wpos, value)` — used for backpatching
     /// counts after iterating (e.g., ranking entry counts).
     ///
     /// # Panics
@@ -309,20 +301,18 @@ impl Packet {
 
     /// Overwrite a u8 value at a specific offset in the payload.
     ///
-    /// C++ Reference: `Packet::put(wpos, value)` — used for backpatching.
     pub fn put_u8_at(&mut self, offset: usize, val: u8) {
         self.data[offset] = val;
     }
 
     /// Get the current write position (end of data).
     ///
-    /// C++ Reference: `Packet::wpos()` — returns current write cursor.
     pub fn wpos(&self) -> usize {
         self.data.len()
     }
 
     /// Write an SByte string (u8 length prefix + bytes).
-    /// Used by C++ `Packet::SByte()` mode for short strings.
+    /// Used by `Packet::SByte()` mode for short strings.
     /// Uses Latin-1 encoding for round-trip preservation (see `write_string`).
     pub fn write_sbyte_string(&mut self, s: &str) {
         let bytes = encode_string_bytes(s);
@@ -332,7 +322,6 @@ impl Packet {
 
     /// Wrap this packet with LZF compression if payload > threshold.
     ///
-    /// C++ Reference: `KOSocket::SendCompressed` in `KOSocket.cpp:204-230`
     ///
     /// If the packet size < 500 bytes, returns None (send normally).
     /// Otherwise wraps in WIZ_COMPRESS_PACKET (0x42):
@@ -537,7 +526,7 @@ impl<'a> PacketReader<'a> {
     }
 
     /// Read an SByte string (u8 length prefix + bytes).
-    /// Used by C++ `Packet::SByte()` mode.
+    /// Used by `Packet::SByte()` mode.
     /// Uses Windows-1254 decoding (see `read_string`).
     pub fn read_sbyte_string(&mut self) -> Option<String> {
         let len = self.read_u8()? as usize;

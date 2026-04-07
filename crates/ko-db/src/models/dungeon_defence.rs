@@ -1,11 +1,7 @@
 //! Dungeon Defence (Full Moon Rift) stage and monster spawn models.
-//!
-//! C++ Reference: `_DUNGEON_DEFENCE_STAGE_LIST`, `_DUNGEON_DEFENCE_MONSTER_LIST`
 //!                in `GameDefine.h`
 
 /// A row from the `df_stage_list` table -- maps difficulty to stage IDs.
-///
-/// C++ Reference: `_DUNGEON_DEFENCE_STAGE_LIST` loaded into `m_DungeonDefenceStageListArray`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DfStageRow {
     /// Primary key.
@@ -19,8 +15,6 @@ pub struct DfStageRow {
 }
 
 /// A row from the `df_monster_list` table -- monster spawns per stage.
-///
-/// C++ Reference: `_DUNGEON_DEFENCE_MONSTER_LIST` loaded into `m_DungeonDefenceMonsterListArray`
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DfMonsterRow {
     /// Stage ID (matches `df_stage_list.stage_id` for lookup).

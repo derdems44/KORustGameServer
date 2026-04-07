@@ -1,18 +1,11 @@
 //! WIZ_BIFROST (0x7B) handler -- Bifrost / Beef Roast Event lifecycle.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/BeefEventNew.cpp`
-//!                `KOOriginalGameServer/GameServer/EventMainTimer.cpp`
-//!
 //! ## Sub-opcodes (TempleOpCodes from packets.h)
-//!
 //! | Value | Name            | Description                              |
 //! |-------|-----------------|------------------------------------------|
 //! | 2     | BIFROST_EVENT   | Bifrost event remaining time             |
 //! | 3     | TEMPLE_SCREEN   | Temple event screen info                 |
 //! | 5     | MONSTER_SQUARD  | Monster squad timer (Monster Stone)      |
-//!
 //! ## Lifecycle
-//!
 //! ```text
 //! Inactive ──[GM +bifroststart]──> Active (monument attackable)
 //! Active ──[monument destroyed]──> Farming (winner enters, loser waits)
@@ -33,8 +26,6 @@ use crate::world::{WorldState, ZONE_BIFROST, ZONE_RONARK_LAND};
 const BIFROST_EVENT: u8 = 2;
 
 /// Notice type constants for `broadcast_beef_notice`.
-///
-/// C++ Reference: `BeefEventNew.cpp:122-212` — switch(NoticeType)
 pub const NOTICE_START: u8 = 1;
 pub const NOTICE_DRAW: u8 = 2;
 pub const NOTICE_VICTORY: u8 = 3;
@@ -42,13 +33,9 @@ pub const NOTICE_FINISH: u8 = 4;
 pub const NOTICE_LOSER_SIGN: u8 = 5;
 
 /// Default monument phase duration in minutes.
-///
-/// C++ Reference: `pPlayInfo->MonumentTime * MINUTE` — typical default 120 minutes.
 const DEFAULT_MONUMENT_MINUTES: u32 = 120;
 
 /// Handle incoming WIZ_BIFROST (0x7B) packet.
-///
-/// C++ Reference: `EventSigningSystem.cpp:5-41` -- `SendEventRemainingTime()`
 pub async fn handle(session: &mut ClientSession, packet: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -99,9 +86,7 @@ pub enum BifrostTickResult {
 }
 
 /// Perform one Bifrost timer tick (called every 1 second from event_system).
-///
-/// C++ Reference: `SingleOtherEventLocalTimer()` in `EventMainTimer.cpp:320-331`
-///                `EventMainTimer()` in `EventMainTimer.cpp:244-258`
+///                `EventMainTimer()`
 pub fn bifrost_tick(world: &WorldState) -> BifrostTickResult {
     // Decrement remaining seconds
     let prev = world.get_bifrost_remaining_secs();
@@ -145,8 +130,6 @@ pub fn bifrost_tick(world: &WorldState) -> BifrostTickResult {
 }
 
 /// Start the Bifrost event (monument phase).
-///
-/// C++ Reference: `BeefEventManuelOpening()` in `EventMainTimer.cpp:106-138`
 pub fn bifrost_start(world: &WorldState, monument_minutes: Option<u32>) {
     let beef = world.get_beef_event();
     if beef.is_active {
@@ -182,8 +165,6 @@ pub fn bifrost_start(world: &WorldState, monument_minutes: Option<u32>) {
 }
 
 /// Reset the Bifrost event to inactive state.
-///
-/// C++ Reference: `ResetBeefEvent()` in `BeefEventNew.cpp:28-98`
 pub fn bifrost_reset(world: &WorldState) {
     world.update_beef_event(|b| {
         b.is_active = false;
@@ -202,10 +183,6 @@ pub fn bifrost_reset(world: &WorldState) {
 }
 
 /// Check if a player can enter the Bifrost zone.
-///
-/// C++ Reference: `CUser::BeefEventLogin()` in `BeefEventNew.cpp:243-254`
-///                `CharacterSelectionHandler.cpp:720` — selchar zone gate
-///
 /// Returns `true` if the player should be redirected to home zone.
 pub fn should_redirect_from_bifrost(world: &WorldState, player_nation: u8) -> bool {
     let beef = world.get_beef_event();
@@ -236,8 +213,6 @@ pub fn should_redirect_from_bifrost(world: &WorldState, player_nation: u8) -> bo
 // ── Broadcasting ──────────────────────────────────────────────────────────────
 
 /// Broadcast remaining time to all players in Bifrost and Ronark Land zones.
-///
-/// C++ Reference: `BeefEventUpdateTime()` in `BeefEventNew.cpp:215-240`
 pub fn broadcast_beef_time_update(world: &WorldState) {
     let remaining = world.get_bifrost_remaining_secs();
     let mut pkt = Packet::new(Opcode::WizBifrost as u8);
@@ -250,9 +225,6 @@ pub fn broadcast_beef_time_update(world: &WorldState) {
 }
 
 /// Broadcast a Bifrost event notice to players in Bifrost and Ronark Land zones.
-///
-/// C++ Reference: `BeefEventSendNotice()` in `BeefEventNew.cpp:101-213`
-///
 /// Uses WAR_SYSTEM_CHAT (chat type 8) with server resource strings.
 pub fn broadcast_beef_notice(world: &WorldState, notice_type: u8) {
     let beef = world.get_beef_event();
@@ -289,8 +261,6 @@ pub fn broadcast_beef_notice(world: &WorldState, notice_type: u8) {
 }
 
 /// Build a WAR_SYSTEM_CHAT packet (chat type 8).
-///
-/// C++ Reference: `ChatPacket::Construct(&x, WAR_SYSTEM_CHAT, &notice)`
 fn build_war_system_chat(message: &str) -> Packet {
     // Same format as timed_notice::build_notice_packet but with chat_type=8
     crate::systems::timed_notice::build_notice_packet(8, message)

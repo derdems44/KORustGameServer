@@ -1,23 +1,15 @@
 //! Daily Quest system — quest definition loading, kill tracking, quest list sending.
-//!
-//! C++ Reference: `DailyQuest.cpp`
-//!
 //! ## Daily Quest Flow
-//!
 //! 1. On login, `DailyQuestSendList()` sends all quest definitions + user progress.
 //! 2. On monster kill, `UpdateDailyQuestCount(monsterID)` checks all active quests.
 //! 3. On quest completion, rewards are given and status updated.
-//!
-//! ## Time Types (C++ `DailyQuesttimetype`)
-//!
+//! ## Time Types
 //! | Value | Name    | Behavior after completion                   |
 //! |-------|---------|---------------------------------------------|
 //! | 0     | Repeat  | Reset to ongoing, can redo immediately       |
 //! | 1     | Time    | Set to timewait, replay after cooldown hours |
 //! | 2     | Single  | Set to completed permanently                 |
-//!
-//! ## Kill Types (C++ `killtype`)
-//!
+//! ## Kill Types
 //! | Value | Name  | Restriction       |
 //! |-------|-------|-------------------|
 //! | 0     | Solo  | Must NOT be in party |
@@ -32,9 +24,9 @@ use ko_protocol::{Opcode, Packet};
 use crate::world::WorldState;
 use crate::zone::SessionId;
 
-/// ExtHookSubOpcodes::DailyQuest sub-opcode (C++ packets.h:239).
+/// ExtHookSubOpcodes::DailyQuest sub-opcode
 const EXT_SUB_DAILY_QUEST: u8 = 0xD3;
-/// ExtHookSubOpcodes for daily quest progress notice (C++ DailyQuest.cpp:170).
+/// ExtHookSubOpcodes for daily quest progress notice
 const EXT_SUB_DAILY_NOTICE: u8 = 0xDC;
 
 /// DailyQuestOp::sendlist = 0, userinfo = 1, killupdate = 2.
@@ -45,8 +37,6 @@ const DQ_OP_KILLUPDATE: u8 = 2;
 use crate::world::{ITEM_COUNT, ITEM_EXP, ITEM_GOLD, ITEM_LADDERPOINT, ITEM_RANDOM};
 
 /// Check if a monster ID matches any of the quest's 4 mob slots.
-///
-/// C++ Reference: `DailyQuest.cpp:149-156` — iterates `pDailyQuest->Mobid[0..4]`.
 pub fn quest_matches_monster(quest: &DailyQuestRow, monster_id: i32) -> bool {
     if monster_id == 0 {
         return false;
@@ -58,15 +48,11 @@ pub fn quest_matches_monster(quest: &DailyQuestRow, monster_id: i32) -> bool {
 }
 
 /// Check if a character's level is within the quest's level range.
-///
-/// C++ Reference: Implicit level check in quest assignment (min_level..=max_level).
 pub fn quest_level_check(quest: &DailyQuestRow, level: i16) -> bool {
     level >= quest.min_level && level <= quest.max_level
 }
 
 /// Check if a kill is valid for the quest based on party status.
-///
-/// C++ Reference: `DailyQuest.cpp:145-147`
 /// - killtype 0: solo only (must NOT be in party)
 /// - killtype 1: party only (must be in party)
 /// - killtype 2: any
@@ -79,8 +65,6 @@ pub fn quest_party_check(quest: &DailyQuestRow, in_party: bool) -> bool {
 }
 
 /// Determine the new status after a quest is completed, based on the time type.
-///
-/// C++ Reference: `CUser::DailyQuestFinished` in `DailyQuest.cpp:7-18`
 pub fn status_after_completion(time_type: i16) -> i16 {
     match time_type {
         t if t == DailyQuestTimeType::Repeat as i16 => DailyQuestStatus::Ongoing as i16,
@@ -91,24 +75,18 @@ pub fn status_after_completion(time_type: i16) -> i16 {
 }
 
 /// Calculate replay time for a time-gated quest completion.
-///
-/// C++ Reference: `DailyQuest.cpp:10` — `puserq->replaytime = UNIXTIME + (replaytime * HOUR)`
 /// Returns the replay cooldown in seconds (replay_time_hours * 3600).
 pub fn calculate_replay_cooldown_secs(replay_time_hours: i16) -> i32 {
     (replay_time_hours as i32) * 3600
 }
 
 /// Check if a quest's replay cooldown has expired.
-///
-/// C++ Reference: `GetRemeaningtime()` in `DailyQuest.cpp:4`
 /// `replay_time` is a future Unix timestamp. If current time >= replay_time, cooldown expired.
 pub fn is_replay_cooldown_expired(replay_time: i32, current_unix_time: i32) -> bool {
     replay_time == 0 || current_unix_time >= replay_time
 }
 
 /// Get reward item IDs and counts from a daily quest definition.
-///
-/// C++ Reference: `DailyQuest.cpp:33-43` — iterates reward slots 0-3.
 /// Returns (item_id, count) pairs for non-zero rewards.
 pub fn get_quest_rewards(quest: &DailyQuestRow) -> Vec<(i32, i32)> {
     let slots = [
@@ -127,11 +105,8 @@ pub fn get_quest_rewards(quest: &DailyQuestRow) -> Vec<(i32, i32)> {
 // ── Zone Check ──────────────────────────────────────────────────────────────
 
 /// Check if the player's current zone matches the quest's zone restriction.
-///
-/// Decompile (GameServer.exe.c:111774-111807): Zone check in UpdateDailyQuestCount.
 /// `quest_zone == 0` means no zone restriction.
-///
-/// The DECOMPILE uses the following zone checks (differs from C++ source!):
+/// The server uses the following zone checks (differs from older versions!):
 /// - zone 21 (Moradon): exact match only (NOT isInMoradon group)
 /// - zone 1 (Karus): exact match only (NOT isInLufersonCastle group)
 /// - zone 2 (Elmorad): zone 2, 7, 8 (isInElmoradCastle group)
@@ -144,20 +119,14 @@ pub fn zone_check(quest_zone: i16, player_zone: u16) -> bool {
     }
     let qz = quest_zone as u16;
     match qz {
-        // Decompile line 111776-111779: `if (v12 == 21) { if (m_bZone != 21) skip }`
         21 => player_zone == 21,
-        // Decompile line 111781-111784: `if (v12 == 1) { if (m_bZone != 1) skip }`
         1 => player_zone == 1,
-        // Decompile line 111788-111792: zone 2 OR 7 OR 8 (Elmorad castle group)
         // `if (m_bZone != 2 && (m_bZone - 7) > 1) skip`
         2 => player_zone == 2 || (player_zone >= 7 && player_zone <= 8),
-        // Decompile line 111794-111797: `if (v12 == 11) { if (m_bZone != 11) skip }`
         11 => player_zone == 11,
-        // Decompile line 111799-111803: zone 12 check uses isInKarusEslant logic
         // `((v14 - 11) & 0xFC) != 0 || v14 == 12` -> valid zones: 11, 13, 14
         // This is a C++ bug: quest zone 12 requires player in Karus Eslant, not Elmorad Eslant
         12 => matches!(player_zone, 11 | 13 | 14),
-        // Decompile line 111806: fallthrough — `if (v12 != m_bZone) skip`
         _ => qz == player_zone,
     }
 }
@@ -172,8 +141,6 @@ fn build_dq_base() -> Packet {
 }
 
 /// Build the kill update packet sent to the client on each daily quest kill.
-///
-/// C++ Reference: `DailyQuest.cpp:163-166`
 /// Wire: `[0xE9][0xD3][0x02][u8 quest_index][u16 monster_id]`
 pub fn build_kill_update(quest_index: i16, monster_id: u16) -> Packet {
     let mut pkt = build_dq_base();
@@ -184,8 +151,6 @@ pub fn build_kill_update(quest_index: i16, monster_id: u16) -> Packet {
 }
 
 /// Build the progress notice packet (toast/HUD notification).
-///
-/// C++ Reference: `DailyQuest.cpp:169-176`
 /// Wire: `[0xE9][0xDC][SByte][string quest_name][u16 current][u16 required][u16 monster_id]`
 pub fn build_progress_notice(
     quest_name: &str,
@@ -205,9 +170,6 @@ pub fn build_progress_notice(
 // ── DailyQuestSendList ──────────────────────────────────────────────────────
 
 /// Send daily quest definitions + user progress to the client.
-///
-/// C++ Reference: `CUser::DailyQuestSendList()` — `DailyQuest.cpp:183-245`
-///
 /// Sends two packets:
 /// 1. Quest definitions (sendlist): index, timetype, killtype, mobs, rewards, etc.
 /// 2. User progress (userinfo): index, status, kcount, remaining_time.
@@ -336,9 +298,6 @@ pub fn daily_quest_send_list(world: &WorldState, sid: SessionId) {
 // ── UpdateDailyQuestCount ───────────────────────────────────────────────────
 
 /// Process daily quest kill tracking for a player after an NPC death.
-///
-/// C++ Reference: `CUser::UpdateDailyQuestCount(uint16 m_sMonsteID)` — `DailyQuest.cpp:102-181`
-///
 /// Iterates all active daily quests and checks if the killed monster matches.
 /// If so, increments kill count, sends update packets, and triggers completion.
 pub async fn update_daily_quest_count(world: &WorldState, sid: SessionId, monster_id: u16) {
@@ -378,12 +337,12 @@ pub async fn update_daily_quest_count(world: &WorldState, sid: SessionId, monste
             None => continue,
         };
 
-        // Skip completed quests (C++ DailyQuest.cpp:115)
+        // Skip completed quests
         if uq.status == DailyQuestStatus::Completed as i16 {
             continue;
         }
 
-        // Skip timewait with active cooldown (C++ DailyQuest.cpp:118-120)
+        // Skip timewait with active cooldown
         if uq.status == DailyQuestStatus::TimeWait as i16
             && uq.replay_time > 0
             && now < uq.replay_time
@@ -391,17 +350,17 @@ pub async fn update_daily_quest_count(world: &WorldState, sid: SessionId, monste
             continue;
         }
 
-        // Zone check (C++ DailyQuest.cpp:126-140)
+        // Zone check
         if !zone_check(def.zone_id, player_zone) {
             continue;
         }
 
-        // Already at max kills (C++ DailyQuest.cpp:142-143)
+        // Already at max kills
         if uq.kill_count + 1 > def.kill_count {
             continue;
         }
 
-        // Party/kill type check (C++ DailyQuest.cpp:145-147)
+        // Party/kill type check
         if !quest_party_check(def, in_party) {
             continue;
         }
@@ -411,7 +370,7 @@ pub async fn update_daily_quest_count(world: &WorldState, sid: SessionId, monste
             continue;
         }
 
-        // Monster match (C++ DailyQuest.cpp:149-156)
+        // Monster match
         if !quest_matches_monster(def, monster_id as i32) {
             continue;
         }
@@ -420,11 +379,11 @@ pub async fn update_daily_quest_count(world: &WorldState, sid: SessionId, monste
         uq.kill_count += 1;
         changed = true;
 
-        // Send kill update packet (C++ DailyQuest.cpp:163-166)
+        // Send kill update packet
         let kill_pkt = build_kill_update(def.id, monster_id);
         world.send_to_session_owned(sid, kill_pkt);
 
-        // Send progress notice (C++ DailyQuest.cpp:169-176)
+        // Send progress notice
         let quest_name = def.quest_name.as_deref().unwrap_or("");
         let notice_pkt = build_progress_notice(
             quest_name,
@@ -442,7 +401,7 @@ pub async fn update_daily_quest_count(world: &WorldState, sid: SessionId, monste
         let chat_pkt = crate::systems::timed_notice::build_notice_packet(7, &chat_msg);
         world.send_to_session_owned(sid, chat_pkt);
 
-        // Check completion (C++ DailyQuest.cpp:178-179)
+        // Check completion
         if uq.kill_count >= def.kill_count {
             daily_quest_finished(world, sid, def, uq).await;
         }
@@ -459,8 +418,6 @@ pub async fn update_daily_quest_count(world: &WorldState, sid: SessionId, monste
 // ── Send Reward Letter ────────────────────────────────────────────────────────
 
 /// Send a daily quest reward item via letter when inventory is full.
-///
-/// C++ Reference: `DailyQuest.cpp:65-91` — `g_DBAgent.SendLetter(...)` fallback.
 pub(crate) async fn send_reward_letter(
     world: &WorldState,
     sid: SessionId,
@@ -508,9 +465,6 @@ pub(crate) async fn send_reward_letter(
 // ── DailyQuestFinished ──────────────────────────────────────────────────────
 
 /// Process daily quest completion: update status, give rewards, save to DB.
-///
-/// C++ Reference: `CUser::DailyQuestFinished()` — `DailyQuest.cpp:7-19`
-/// C++ Reference: `CUser::ReqDailyQuestSendReward()` — `DailyQuest.cpp:22-100`
 async fn daily_quest_finished(
     world: &WorldState,
     sid: SessionId,
@@ -522,15 +476,15 @@ async fn daily_quest_finished(
         .unwrap_or_default()
         .as_secs() as i32;
 
-    // Set replay timer (C++ DailyQuest.cpp:10)
+    // Set replay timer
     if quest.replay_time > 0 {
         user_quest.replay_time = now + calculate_replay_cooldown_secs(quest.replay_time);
     }
 
-    // Update status (C++ DailyQuest.cpp:11-13)
+    // Update status
     user_quest.status = status_after_completion(quest.time_type);
 
-    // Reset kill count (C++ DailyQuest.cpp:14)
+    // Reset kill count
     user_quest.kill_count = 0;
 
     // Distribute rewards (C++ ReqDailyQuestSendReward DailyQuest.cpp:22-100)
@@ -559,17 +513,16 @@ async fn daily_quest_finished(
     // Give each reward (C++ ReqDailyQuestSendReward — DailyQuest.cpp:22-100)
     for &(item_id, count) in &rewards {
         if item_id == ITEM_EXP as i32 {
-            // XP reward (C++ DailyQuest.cpp:72-74)
+            // XP reward
             super::level::exp_change(world, sid, count as i64).await;
         } else if item_id == ITEM_GOLD as i32 {
-            // Gold reward (C++ DailyQuest.cpp:75-77)
+            // Gold reward
             world.gold_gain(sid, count as u32);
         } else if item_id == ITEM_COUNT as i32 || item_id == ITEM_LADDERPOINT as i32 {
-            // Loyalty/NP reward (C++ DailyQuest.cpp:78-80)
-            // C++: SendLoyaltyChange("Daily Quest", count) — uses default monthly=true
+            // Loyalty/NP reward
             crate::systems::loyalty::send_loyalty_change(world, sid, count, false, false, true);
         } else if item_id == ITEM_RANDOM as i32 {
-            // Random item from pool (C++ DailyQuest.cpp:36-56)
+            // Random item from pool
             let random_items = world.get_item_random_by_session(quest.random_id);
             if !random_items.is_empty() {
                 let idx = (std::time::SystemTime::now()
@@ -588,11 +541,11 @@ async fn daily_quest_finished(
                 }
             }
         } else {
-            // Normal item reward (C++ DailyQuest.cpp:60-91)
+            // Normal item reward
             let given =
                 world.give_item(sid, item_id as u32, count.clamp(0, u16::MAX as i32) as u16);
             if !given {
-                // Inventory full — send via letter (C++ DailyQuest.cpp:65-91)
+                // Inventory full — send via letter
                 send_reward_letter(world, sid, item_id, count as i16).await;
             }
         }
@@ -1096,12 +1049,10 @@ mod tests {
 
     #[test]
     fn test_zone_check_eslant() {
-        // Decompile: zone 11 (Karus Eslant) = exact match only
         assert!(zone_check(11, 11));
         assert!(!zone_check(11, 12));
         assert!(!zone_check(11, 13));
 
-        // Decompile: zone 12 (Elmorad Eslant) uses isInKarusEslant (C++ bug)
         // Valid zones: 11, 13, 14 -- zone 12 itself is EXCLUDED
         assert!(!zone_check(12, 12)); // C++ bug: zone 12 quest fails for player in zone 12
         assert!(zone_check(12, 11)); // Karus Eslant counts
@@ -1114,7 +1065,6 @@ mod tests {
     fn test_zone_check_specific() {
         assert!(zone_check(71, 71)); // BDW
         assert!(!zone_check(71, 21));
-        // Decompile: zone 2 (Elmorad) = zones 2, 7, 8 (Elmorad castle group)
         assert!(zone_check(2, 2));
         assert!(zone_check(2, 7)); // Elmorad2
         assert!(zone_check(2, 8)); // Elmorad3

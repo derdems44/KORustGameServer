@@ -1,22 +1,14 @@
 //! WIZ_EDIT_BOX (0x59) handler — PPCard (product key / serial code) system.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:4750-4812`
-//!
 //! This handles product key / serial code redemption ("PPCard"). The client
 //! sends a serial key split into a numeric prefix (4 digits) and string
 //! suffix (16 chars). The server validates format, checks the 5-minute
 //! cooldown, then looks up the key in the `ppcard_list` DB table.
 //! On success the card's Knight Cash / TL balance is awarded via
 //! `give_balance()`.
-//!
 //! ## Client -> Server
-//!
 //! `[u8 opcode(4)] [i32 key_prefix] [sbyte_string key_suffix]`
-//!
 //! ## Server -> Client (result)
-//!
 //! `[u8 4] [u8 result]`
-//!
 //! Result codes:
 //! - 1 = Success ("Item has been inserted successfully. Please check the letter with pressing [L].")
 //! - 2 = Failed ("The serial is not existed or wrong. Please insert other serial after 5 minutes")
@@ -28,14 +20,11 @@ use tracing::{debug, warn};
 
 use crate::session::{ClientSession, SessionState};
 
-/// PPCard result codes (C++ `PPCardErrorCodes`).
+/// PPCard result codes
 const PPCARD_SUCCESS: u8 = 1;
 const PPCARD_FAILED: u8 = 2;
 
 /// Cooldown between PPCard attempts (40 seconds).
-///
-/// C++ Reference: `User.h:55` — `#define PPCARD_TIME (40)`
-/// `User.cpp:4766` — `PPCardTime = UNIXTIME + PPCARD_TIME`
 const PPCARD_COOLDOWN: Duration = Duration::from_secs(40);
 
 /// Build a PPCard result response.
@@ -47,8 +36,6 @@ fn build_ppcard_result(error_code: u8) -> Packet {
 }
 
 /// Handle WIZ_EDIT_BOX from the client.
-///
-/// C++ Reference: `User.cpp:4750-4812` — `CUser::PPCard()` + `CUser::ReqPPCard()`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -74,8 +61,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// PPCard redemption handler.
-///
-/// C++ Reference: `User.cpp:4750-4812` — validates key format (4+16=20 chars),
 /// enforces cooldown, queries DB, awards Knight Cash via `GiveBalance()`.
 async fn handle_ppcard(
     session: &mut ClientSession,
@@ -89,7 +74,6 @@ async fn handle_ppcard(
     let key_suffix = reader.read_sbyte_string().unwrap_or_default();
 
     // ── Cooldown check ──────────────────────────────────────────────────
-    // C++ Reference: `if (PPCardTime > UNIXTIME) { return SendPPCardFail(PPCardFailed); }`
     let now = Instant::now();
     let on_cooldown = world
         .with_session(sid, |h| {
@@ -111,7 +95,6 @@ async fn handle_ppcard(
     });
 
     // ── Validate key format ─────────────────────────────────────────────
-    // C++ Reference: `User.cpp:4770-4782`
     // Prefix must be exactly 4 digits, suffix must be exactly 16 chars.
     let prefix_str = format!("{}", key_prefix);
     if prefix_str.len() != 4 || !prefix_str.chars().all(|c| c.is_ascii_digit()) {
@@ -168,7 +151,6 @@ async fn handle_ppcard(
     }
 
     // ── DB lookup + atomic redeem ───────────────────────────────────────
-    // C++ Reference: `DBAgent.cpp:5225-5277` — `CDBAgent::LoadPPCard()`
     let pool = session.pool().clone();
     let repo = ko_db::repositories::ppcard::PPCardRepository::new(&pool);
 

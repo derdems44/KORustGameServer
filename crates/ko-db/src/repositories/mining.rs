@@ -1,6 +1,4 @@
 //! Mining & Fishing item drop table repository.
-//!
-//! C++ Reference: `CGameServerDlg::m_MiningFishingItemArray`
 
 use crate::models::{MiningExchangeRow, MiningFishingItemRow};
 use crate::DbPool;
@@ -18,7 +16,6 @@ impl<'a> MiningRepository<'a> {
 
     /// Load all mining/fishing item rows from the database.
     ///
-    /// C++ Reference: `CMiningFishingTableSet::Fetch()` in `MiningFishingTableSet.h`
     pub async fn load_all_mining_items(&self) -> Result<Vec<MiningFishingItemRow>, sqlx::Error> {
         sqlx::query_as::<_, MiningFishingItemRow>(
             "SELECT n_index, n_table_type, n_war_status, use_item_type, \
@@ -31,7 +28,6 @@ impl<'a> MiningRepository<'a> {
 
     /// Load all mining exchange (ore craft) rows from the database.
     ///
-    /// C++ Reference: `CMiningExchangeTableSet::Fetch()` in `MiningExchange.h`
     pub async fn load_all_mining_exchanges(&self) -> Result<Vec<MiningExchangeRow>, sqlx::Error> {
         sqlx::query_as::<_, MiningExchangeRow>(
             "SELECT n_index, s_npc_id, give_effect, ore_type, \

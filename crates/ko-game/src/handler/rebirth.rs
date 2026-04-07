@@ -3,7 +3,7 @@
 //! v2525 client's rebirth (reincarnation) system. Allows players to reset
 //! and re-level with bonuses.
 //!
-//! ## Binary/ Reference (Ghidra decompilation)
+//! ## Protocol Reference
 //!
 //! `RebirthBas @ 0x140284b40`:
 //! - Requires: GetExpPercent() >= 100, gold >= 100M, loyalty >= 10K

@@ -1,8 +1,5 @@
 //! WIZ_USER_INFORMATIN (0x98) handler — nearby user list (bottom-left panel).
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/BottomUserList.cpp`
-//!
-//! Sub-opcodes (C++ `BottomUserListOpcode` enum — GameDefine.h:1051):
+//! Sub-opcodes (`BottomUserListOpcode` enum — GameDefine.h:1051):
 //! - 1 = Sign (initial request, high bandwidth)
 //! - 2 = UserInfoDetail (inspect player equipment/stats)
 //! - 3 = UserList (refresh, lower bandwidth)
@@ -30,7 +27,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     match sub_opcode {
         1 | 3 => {
             // Sign (initial) or UserList (refresh)
-            // C++ Reference: BottomUserListOpcode::Sign=1, UserList=3
             // Response: [sub=1 or 3] [u8(1)] [u16 zone_id] [u8(0)] [u16 count] [per-user data]
             let response_sub = if sub_opcode == 1 { 1u8 } else { 3u8 };
 
@@ -78,12 +74,10 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         }
         2 => {
             // UserInfoDetail — inspect another player's equipment/stats
-            // C++ Reference: BottomUserListOpcode::UserInfoDetail=2, BottomUserList.cpp:191-192
             handle_user_info_detail(session, &mut reader).await?;
         }
         4 => {
             // RegionDelete — logout notification to nearby players
-            // C++ Reference: BottomUserList.cpp:206 — BottomUserLogOut
             handle_region_delete(session)?;
         }
         _ => {
@@ -99,15 +93,10 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle UserInfoDetail (sub-opcode 2) — inspect another player.
-///
 /// Reads the target character name from the bottom-left panel click, looks up
 /// the player, and sends their equipment, stats, and skill points via
 /// `WIZ_ITEM_UPGRADE` sub-opcode 9.
-///
-/// C++ Reference: `BottomUserList.cpp:216-315` — `HandleBottomUserInfoDetail`
-///
 /// Wire (Client -> Server): `[u8 sub=2] [SByte target_name]`
-///
 /// Wire (Server -> Client): `WIZ_ITEM_UPGRADE << u8(9) << u8(4) << u8(1)`
 /// `<< [SByte name] << u8 nation << u8 race << u16 class << u8 level << u32 loyalty`
 /// `<< u16 str << u16 sta << u16 dex << u16 int << u16 cha`
@@ -123,7 +112,6 @@ async fn handle_user_info_detail(
     let sid = session.session_id();
 
     // Check if player is busy (trading, merchanting, fishing, mining)
-    // C++ Reference: BottomUserList.cpp:177-178
     let is_busy = world
         .with_session(sid, |h| {
             h.trade_state > 1
@@ -138,7 +126,6 @@ async fn handle_user_info_detail(
     }
 
     // Read target character name (SByte-prefixed string after sub-opcode)
-    // C++ Reference: BottomUserList.cpp:224 — pkt.SByte(); pkt >> strCharName;
     let target_name = match reader.read_sbyte_string() {
         Some(s) => s,
         None => return Ok(()),
@@ -151,7 +138,6 @@ async fn handle_user_info_detail(
     };
 
     // GMs are invisible to non-GMs
-    // C++ Reference: BottomUserList.cpp:231-232
     let my_ch = match world.get_character_info(sid) {
         Some(c) => c,
         None => return Ok(()),
@@ -165,7 +151,6 @@ async fn handle_user_info_detail(
     }
 
     // Build WIZ_ITEM_UPGRADE response with sub=9 (character inspection)
-    // C++ Reference: BottomUserList.cpp:222-249
     let mut result = Packet::new(Opcode::WizItemUpgrade as u8);
     result.write_u8(9); // sub-opcode (character detail view)
 
@@ -197,14 +182,12 @@ async fn handle_user_info_detail(
     result.write_u16(0);
 
     // Skill categories (indices 5-8 in the skill_points array)
-    // C++ Reference: SkillPointCat1=5, Cat2=6, Cat3=7, Master=8
     result.write_u8(target_ch.skill_points.get(5).copied().unwrap_or(0));
     result.write_u8(target_ch.skill_points.get(6).copied().unwrap_or(0));
     result.write_u8(target_ch.skill_points.get(7).copied().unwrap_or(0));
     result.write_u8(target_ch.skill_points.get(8).copied().unwrap_or(0));
 
     // Equipment + inventory items (SLOT_MAX + HAVE_MAX = 42 slots)
-    // C++ Reference: BottomUserList.cpp:243-247
     let items = world.with_session(target_sid, |h| h.inventory.clone());
     let items = items.unwrap_or_default();
     for i in 0..(SLOT_MAX + HAVE_MAX) {
@@ -222,7 +205,6 @@ async fn handle_user_info_detail(
     }
 
     // Rebirth level
-    // C++ Reference: BottomUserList.cpp:249 — pUser->GetRebirthLevel()
     result.write_u8(target_ch.rebirth_level);
 
     session.send_packet(&result).await?;
@@ -238,9 +220,6 @@ async fn handle_user_info_detail(
 }
 
 /// Handle RegionDelete (sub-opcode 4) — notify nearby players of logout.
-///
-/// C++ Reference: `BottomUserList.cpp:206-214` — `BottomUserLogOut`
-///
 /// Wire (Server -> Client):
 /// `WIZ_USER_INFORMATIN << u8(4) << [SByte name]`
 fn handle_region_delete(session: &mut ClientSession) -> anyhow::Result<()> {
@@ -258,13 +237,11 @@ fn handle_region_delete(session: &mut ClientSession) -> anyhow::Result<()> {
     };
 
     // Build: WIZ_USER_INFORMATIN << u8(RegionDelete=4) << SByte(name)
-    // C++ Reference: BottomUserList.cpp:211-213
     let mut result = Packet::new(Opcode::WizUserInfo as u8);
     result.write_u8(4); // RegionDelete sub-opcode
     result.write_sbyte_string(&ch.name);
 
     // Send to all players in the same zone
-    // C++ Reference: Send_Zone(&result, GetZoneID(), this, Nation::ALL, GetEventRoom())
     world.broadcast_to_zone(pos.zone_id, Arc::new(result), Some(sid));
 
     tracing::debug!(
@@ -278,7 +255,6 @@ fn handle_region_delete(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// Build a UserInfoDetail response packet for a given player.
-///
 /// This is a helper for testing — produces the same wire format as `handle_user_info_detail`.
 #[cfg(test)]
 #[allow(clippy::too_many_arguments)]
@@ -326,8 +302,6 @@ fn build_user_info_detail_packet(
 }
 
 /// Build a RegionDelete notification packet.
-///
-/// C++ Reference: `BottomUserList.cpp:211-213`
 pub fn build_region_delete_packet(name: &str) -> Packet {
     let mut pkt = Packet::new(Opcode::WizUserInfo as u8);
     pkt.write_u8(4);
@@ -463,7 +437,6 @@ mod tests {
 
     #[test]
     fn test_region_delete_packet_format() {
-        // C++ Reference: BottomUserList.cpp:211-213
         // Wire: WIZ_USER_INFORMATIN << u8(4) << SByte(name)
         let pkt = build_region_delete_packet("Warrior123");
 
@@ -487,7 +460,6 @@ mod tests {
     #[test]
     fn test_user_info_request_format() {
         // Client -> Server: [u8 sub_opcode=2] [SByte target_name]
-        // C++ Reference: BottomUserListOpcode::UserInfoDetail = 2
         let mut pkt = Packet::new(Opcode::WizUserInfo as u8);
         pkt.write_u8(2); // UserInfoDetail
         pkt.write_sbyte_string("TargetPlayer");

@@ -1,12 +1,8 @@
 //! WIZ_ITEM_GET (0x26) handler — pick up an item from a ground bundle.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/BundleSystem.cpp:280-447`
-//!
 //! Packet format (from client):
 //! ```text
 //! [u32 bundle_id] [u32 item_id] [u16 slot_id]
 //! ```
-//!
 //! Response (WIZ_ITEM_GET):
 //! ```text
 //! [u8 result] — 0=error, 1=solo loot, 2=party distribution
@@ -23,8 +19,6 @@ use crate::world::{COIN_MAX, ITEMCOUNT_MAX, ITEM_GOLD, NPC_HAVE_ITEM_LIST, RANGE
 use crate::zone::SessionId;
 
 /// Loot error/result codes.
-///
-/// C++ Reference: `enum LootErrorCodes` in `GameDefine.h:1139-1149`
 const LOOT_ERROR: u8 = 0;
 const LOOT_SOLO: u8 = 1;
 const LOOT_PARTY_COIN_DISTRIBUTION: u8 = 2;
@@ -52,7 +46,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let mut result = Packet::new(Opcode::WizItemGet as u8);
 
     // Validate state — must be alive, not busy, valid slot
-    // C++ Reference: BundleSystem.cpp:291-292
     if world.is_player_dead(sid)
         || world.is_trading(sid)
         || world.is_merchanting(sid)
@@ -74,7 +67,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Bundle ownership validation
-    // C++ Reference: BundleSystem.cpp:299-307 — only bundle owner or same-party members
     let bundle_looter = bundle.looter;
     if bundle_looter != sid {
         // Not the bundle owner — must be in same party
@@ -129,14 +121,12 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Handle gold pickup — apply bonus multipliers (buff, item, clan premium)
-    // C++ Reference: BundleSystem.cpp:309-369
     if taken_id == ITEM_GOLD {
         let party_id = world.get_party_id(sid);
         let party = party_id.and_then(|pid| world.get_party(pid));
 
         if let Some(party) = party {
             // ── Party gold distribution ──────────────────────────────────
-            // C++ Reference: BundleSystem.cpp:332-369
             // Find alive party members within RANGE_50M of the bundle.
             let mut eligible: Vec<SessionId> = Vec::with_capacity(8);
             for &member_sid in &party.active_members() {
@@ -161,14 +151,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // Split gold equally among eligible members.
-            // C++ Reference: BundleSystem.cpp:353
             // `int coins = (int)(pBundle->Items[SlotID].sCount / (float)partyUsers.size());`
             let share = (taken_count as f32 / eligible.len() as f32) as u32;
 
             for &member_sid in &eligible {
                 // Apply each member's individual bonus multipliers.
-                // C++ Reference: BundleSystem.cpp:354-360 — premium + GoldGain(pGold, false, true)
-                // C++ Reference: BundleSystem.cpp:359 — JackPotNoah per party member
                 if !world.try_jackpot_noah(member_sid, share) {
                     world.gold_gain_with_bonus_silent(member_sid, share);
                 }
@@ -179,7 +166,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                     .unwrap_or(0);
 
                 // Send LootPartyCoinDistribution to each member.
-                // C++ Reference: BundleSystem.cpp:362-364
                 // Packet: [u8 result=2] [u32 bundle_id] [u8 0xFF] [u32 item_id] [u32 coins]
                 let mut coin_pkt = Packet::new(Opcode::WizItemGet as u8);
                 coin_pkt.write_u8(LOOT_PARTY_COIN_DISTRIBUTION);
@@ -191,13 +177,11 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             }
 
             // Send LootPartyItemGivenAway to the picker.
-            // C++ Reference: BundleSystem.cpp:366-368
             let mut away_pkt = Packet::new(Opcode::WizItemGet as u8);
             away_pkt.write_u8(LOOT_PARTY_ITEM_GIVEN_AWAY);
             session.send_packet(&away_pkt).await?;
         } else {
             // ── Solo gold pickup (no party) ──────────────────────────────
-            // C++ Reference: BundleSystem.cpp:318-321
             //   if ((GetCoins() + pItem.sCount) > COIN_MAX) return nullptr;
             let current_gold = world.get_character_info(sid).map(|ch| ch.gold).unwrap_or(0);
             if current_gold as u64 + taken_count as u64 > COIN_MAX as u64 {
@@ -205,9 +189,7 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
                 result.write_u8(LOOT_ERROR);
                 return session.send_packet(&result).await;
             }
-            // C++ Reference: BundleSystem.cpp:326-327 — JackPotNoah check before GoldGain
             if !world.try_jackpot_noah(sid, taken_count as u32) {
-                // C++ Reference: BundleSystem.cpp:329 — GoldGain(pGold, false, true)
                 // false = don't send WIZ_GOLD_CHANGE (LOOT_SOLO packet handles it)
                 world.gold_gain_with_bonus_silent(sid, taken_count as u32);
             }
@@ -255,7 +237,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     };
 
     // Add item to inventory — capture total count for the response packet
-    // C++ Reference: BundleSystem.cpp:405,415 — sends pDstItem->sCount (total in slot)
     let mut new_total_count: u16 = 0;
     let serial = world.generate_item_serial();
     let success = world.update_inventory(sid, |inv| {
@@ -299,7 +280,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     session.send_packet(&result).await?;
 
     // ── Party notification for non-gold item pickup ────────────────
-    // C++ Reference: BundleSystem.cpp:416-420
     //   if (isInParty()) {
     //     result << LootPartyNotification << nBundleID << nItemID << pReceiver->GetName() << SlotID;
     //     g_pMain->Send_PartyMember(GetPartyID(), &result);
@@ -320,7 +300,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // ── Drop Notice: server-wide broadcast for rare items ─────────────
-    // C++ Reference: BundleSystem.cpp:258-263,432-437
     //   if (pTable.m_isDropNotice && g_pMain->pServerSetting.DropNotice && !isGM())
     //     Send_All(WIZ_LOGOSSHOUT, 0x02, 0x04, name, item_num, rank)
     if item_def.drop_notice.unwrap_or(0) != 0 && !world.is_gm(sid) {
@@ -363,7 +342,6 @@ mod tests {
 
     #[test]
     fn test_coin_max_overflow_check() {
-        // C++ Reference: BundleSystem.cpp:318-321
         // (GetCoins() + pItem.sCount) > COIN_MAX → reject
         let _current: u32 = 2_000_000_000;
         let _pickup: u16 = 200_000_000u32 as u16; // wraps, but real test:
@@ -387,13 +365,11 @@ mod tests {
 
     #[test]
     fn test_loot_party_notification_constant() {
-        // C++ Reference: GameDefine.h — LootPartyNotification = 3
         assert_eq!(LOOT_PARTY_NOTIFICATION, 3);
     }
 
     #[test]
     fn test_loot_result_codes() {
-        // C++ Reference: GameDefine.h:1139-1149
         assert_eq!(LOOT_ERROR, 0);
         assert_eq!(LOOT_SOLO, 1);
         assert_eq!(LOOT_PARTY_COIN_DISTRIBUTION, 2);

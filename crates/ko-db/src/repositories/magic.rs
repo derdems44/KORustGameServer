@@ -1,9 +1,6 @@
 //! Magic repository — loads magic skill data from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `GameServer/LoadServerData.cpp` — `LoadMagicTable()`, `LoadMagicType1()` .. `LoadMagicType9()`
 //! - `shared/database/MagicTableSet.h` through `MagicType9Set.h`
-//!
 //! All tables are bulk-loaded at server startup and cached in memory.
 
 use crate::models::magic::{
@@ -26,7 +23,6 @@ impl<'a> MagicRepository<'a> {
     /// Load all master magic/skill rows (bulk load at startup).
     ///
     /// Returns ~3,880 rows. Keyed by `magic_num`.
-    /// C++ Reference: `CGameServerDlg::LoadMagicTable()`
     pub async fn load_magic_table(&self) -> Result<Vec<MagicRow>, sqlx::Error> {
         sqlx::query_as::<_, MagicRow>(
             "SELECT magic_num, en_name, kr_name, description, t_1, before_action, \
@@ -43,7 +39,6 @@ impl<'a> MagicRepository<'a> {
     /// Load all melee attack skill parameters (bulk load at startup).
     ///
     /// Returns ~525 rows. Keyed by `i_num`.
-    /// C++ Reference: `CGameServerDlg::LoadMagicType1()`
     pub async fn load_magic_type1(&self) -> Result<Vec<MagicType1Row>, sqlx::Error> {
         sqlx::query_as::<_, MagicType1Row>(
             "SELECT i_num, hit_type, hit_rate, hit, add_damage, combo_type, \
@@ -58,7 +53,6 @@ impl<'a> MagicRepository<'a> {
     /// Load all ranged/archery attack skill parameters (bulk load at startup).
     ///
     /// Returns ~91 rows. Keyed by `i_num`.
-    /// C++ Reference: `CGameServerDlg::LoadMagicType2()`
     pub async fn load_magic_type2(&self) -> Result<Vec<MagicType2Row>, sqlx::Error> {
         sqlx::query_as::<_, MagicType2Row>(
             "SELECT i_num, hit_type, hit_rate, add_damage, add_range, need_arrow, \
@@ -72,7 +66,6 @@ impl<'a> MagicRepository<'a> {
     /// Load all DOT / direct magic damage parameters (bulk load at startup).
     ///
     /// Returns ~1,152 rows. Keyed by `i_num`.
-    /// C++ Reference: `CGameServerDlg::LoadMagicType3()`
     pub async fn load_magic_type3(&self) -> Result<Vec<MagicType3Row>, sqlx::Error> {
         sqlx::query_as::<_, MagicType3Row>(
             "SELECT i_num, direct_type, first_damage, time_damage, duration, \
@@ -86,7 +79,6 @@ impl<'a> MagicRepository<'a> {
     /// Load all buff/debuff skill parameters (bulk load at startup).
     ///
     /// Returns ~1,917 rows. Keyed by `i_num`. Largest sub-table.
-    /// C++ Reference: `CGameServerDlg::LoadMagicType4()`
     pub async fn load_magic_type4(&self) -> Result<Vec<MagicType4Row>, sqlx::Error> {
         sqlx::query_as::<_, MagicType4Row>(
             "SELECT i_num, buff_type, radius, duration, attack_speed, speed, ac, \
@@ -102,7 +94,6 @@ impl<'a> MagicRepository<'a> {
     /// Load all resurrection/recovery skill parameters (bulk load at startup).
     ///
     /// Returns ~59 rows. Keyed by `i_num`.
-    /// C++ Reference: `CGameServerDlg::LoadMagicType5()`
     pub async fn load_magic_type5(&self) -> Result<Vec<MagicType5Row>, sqlx::Error> {
         sqlx::query_as::<_, MagicType5Row>(
             "SELECT i_num, \"type\", exp_recover, need_stone \
@@ -115,7 +106,6 @@ impl<'a> MagicRepository<'a> {
     /// Load all transformation skill parameters (bulk load at startup).
     ///
     /// Returns ~251 rows. Keyed by `i_num`.
-    /// C++ Reference: `CGameServerDlg::LoadMagicType6()`
     pub async fn load_magic_type6(&self) -> Result<Vec<MagicType6Row>, sqlx::Error> {
         sqlx::query_as::<_, MagicType6Row>(
             "SELECT i_num, \"name\", description, \"size\", transform_id, duration, \
@@ -133,7 +123,6 @@ impl<'a> MagicRepository<'a> {
     /// Load all summoning/CC skill parameters (bulk load at startup).
     ///
     /// Returns ~26 rows. Keyed by `n_index`.
-    /// C++ Reference: `CGameServerDlg::LoadMagicType7()`
     pub async fn load_magic_type7(&self) -> Result<Vec<MagicType7Row>, sqlx::Error> {
         sqlx::query_as::<_, MagicType7Row>(
             "SELECT n_index, str_name, str_note, valid_group, nation_change, \
@@ -148,7 +137,6 @@ impl<'a> MagicRepository<'a> {
     /// Load all teleportation/warp skill parameters (bulk load at startup).
     ///
     /// Returns ~121 rows. Keyed by `i_num`.
-    /// C++ Reference: `CGameServerDlg::LoadMagicType8()`
     pub async fn load_magic_type8(&self) -> Result<Vec<MagicType8Row>, sqlx::Error> {
         sqlx::query_as::<_, MagicType8Row>(
             "SELECT i_num, \"name\", description, target, radius, warp_type, \
@@ -162,7 +150,6 @@ impl<'a> MagicRepository<'a> {
     /// Load all advanced CC/debuff skill parameters (bulk load at startup).
     ///
     /// Returns ~84 rows. Keyed by `i_num`.
-    /// C++ Reference: `CGameServerDlg::LoadMagicType9()`
     pub async fn load_magic_type9(&self) -> Result<Vec<MagicType9Row>, sqlx::Error> {
         sqlx::query_as::<_, MagicType9Row>(
             "SELECT i_num, \"name\", description, valid_group, nation_change, \

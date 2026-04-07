@@ -1,15 +1,10 @@
 //! Timed notice background tick system — periodic server announcements.
-//!
-//! C++ Reference: `ServerStartStopHandler.cpp` — `Timer_TimedNotice`
 //!   - Checks every 60 seconds whether any timed notice is due for broadcast.
-//!
 //! ## Overview
-//!
 //! Loads all `timed_notice` rows from the database at startup. Each notice has
 //! a configurable interval (`time_minutes`) and target zone (`zone_id`). The
 //! tick runs every 60 seconds and broadcasts any due notices as `WIZ_CHAT`
 //! packets with the configured chat type (typically `PUBLIC_CHAT = 7`).
-//!
 //! If `zone_id == 0`, the notice is broadcast to all connected players.
 //! Otherwise, it is broadcast only to players in the specified zone.
 
@@ -23,8 +18,6 @@ use tracing::{debug, info, warn};
 use crate::world::WorldState;
 
 /// Tick interval for checking timed notices (60 seconds).
-///
-/// C++ Reference: `Timer_TimedNotice` fires every 60,000ms.
 const TIMED_NOTICE_TICK_SECS: u64 = 60;
 
 /// Minimum allowed interval in minutes (clamped).
@@ -45,12 +38,9 @@ struct ScheduledNotice {
 }
 
 /// Start the timed notice background task.
-///
 /// Loads all notices from the database, then ticks every 60 seconds to
 /// broadcast any due notices. Returns a `JoinHandle` so the caller can
 /// abort on shutdown.
-///
-/// C++ Reference: `CGameServerDlg::Timer_TimedNotice()`
 pub fn start_timed_notice_task(
     world: Arc<WorldState>,
     pool: ko_db::DbPool,
@@ -152,16 +142,13 @@ fn process_timed_notice_tick(world: &WorldState, scheduled: &mut HashMap<i32, Sc
 }
 
 /// Build a `WIZ_CHAT` notice packet for server-side announcements and per-player feedback.
-///
 /// Used for both timed server broadcasts and per-player notices (rejection
 /// messages, KC balance updates). v2525 vanilla client dispatch range is
 /// 0x06-0xD7, so WIZ_CHAT (0x12) is the only reliable text display opcode.
 /// WIZ_ADD_MSG (0xDB) is outside this range and silently dropped.
-///
 /// Common chat types:
 /// - `7` = PUBLIC_CHAT — system/GM announcements, shows in general tab
 /// - `8` = WAR_SYSTEM_CHAT — war system messages
-///
 /// Uses the same wire format as `ChatPacket::Construct` (chat.rs):
 /// ```text
 /// [u8 chat_type] [u8 nation=1] [u32 sender_id=0xFFFFFFFF]
@@ -169,11 +156,9 @@ fn process_timed_notice_tick(world: &WorldState, scheduled: &mut HashMap<i32, Sc
 /// [u16 msg_len] [bytes message]
 /// [i8 personal_rank=0] [u8 authority=0] [u8 system_msg=0]
 /// ```
-///
 /// C++ ChatPacket::Construct defaults: bNation=1, senderID=-1, systemmsg=0.
 pub fn build_notice_packet(chat_type: u8, message: &str) -> Packet {
     let mut pkt = Packet::new(Opcode::WizChat as u8);
-    // C++ Reference: ChatPacket::Construct defaults
     pkt.write_u8(chat_type);
     pkt.write_u8(1); // nation = 1 (C++ default bNation=1)
     pkt.write_u32(0xFFFFFFFF); // sender_id = -1 as u32 (C++ default senderID=-1)

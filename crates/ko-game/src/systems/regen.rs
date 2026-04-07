@@ -1,12 +1,7 @@
 //! HP/MP regeneration tick system.
-//!
-//! C++ Reference: `UserDurationSkillSystem.cpp` — `CUser::HPTimeChange()`
-//!
-//! Runs every 5 seconds (C++ `m_bHPIntervalNormal = 5`), iterating all
+//! Runs every 5 seconds (`m_bHPIntervalNormal = 5`), iterating all
 //! in-game sessions and applying HP/MP regen based on sit/stand state.
-//!
 //! ## Regen Rules (from C++)
-//!
 //! - **Snow Battle zone (69)**: `HpChange(5)` flat, return early
 //! - **Standing**: MP regen only
 //!   - `((level * (1 + level/60) + 1) * 0.2) + 3`
@@ -26,11 +21,10 @@ use ko_protocol::{Opcode, Packet};
 use crate::world::types::{ZONE_PRISON, ZONE_SNOW_BATTLE};
 use crate::world::{RegenData, WorldState, USER_DEAD, USER_SITDOWN, USER_STANDING};
 
-/// Regen tick interval in seconds (C++ `m_bHPIntervalNormal = 5`).
+/// Regen tick interval in seconds
 const REGEN_INTERVAL_SECS: u64 = 5;
 
 /// Start the HP/MP regeneration background task.
-///
 /// Returns a `JoinHandle` so the caller can abort on shutdown.
 pub fn start_regen_task(world: Arc<WorldState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -52,7 +46,6 @@ fn process_regen_tick(world: &Arc<WorldState>) {
     for rd in data {
         process_session_regen(world, &rd);
         // Training mode: sitting players get periodic XP
-        // C++ Reference: User.cpp:1005 — if (m_bResHpType == USER_SITDOWN) TrainingProcess();
         if rd.res_hp_type == USER_SITDOWN {
             training_process(world, &rd, now_unix);
         }
@@ -60,20 +53,15 @@ fn process_regen_tick(world: &Arc<WorldState>) {
 }
 
 /// Check if a class is a mage class (110/210 range).
-///
-/// C++ Reference: `CheckClass(110, 210)` — Karus mages are 110-115, El Morad mages are 210-215.
 fn is_mage_class(class: u16) -> bool {
     (110..=115).contains(&class) || (210..=215).contains(&class)
 }
 
 /// Calculate the MP regen percent multiplier.
-///
-/// C++ Reference: `UserDurationSkillSystem.cpp:55-57`
 /// ```text
 /// if (CheckClass(110, 210) && m_sMp < (30 * m_MaxMp / 100))
 ///     mpPercent = 120;
 /// ```
-///
 /// Returns 120 for mages below 30% MP, 100 otherwise.
 fn mp_percent(class: u16, mp: i16, max_mp: i16) -> i32 {
     if is_mage_class(class) && max_mp > 0 && mp < (30 * max_mp / 100) {
@@ -90,7 +78,6 @@ fn process_session_regen(world: &WorldState, rd: &RegenData) {
         return;
     }
 
-    // C++ Reference: User.cpp:957-968 — UpdateCheckSkillTime()
     //   if (!isBlinking()) { HPTimeChange(); SpTimeChange(); }
     // Blinking players do NOT receive normal HP/MP regen.
     let now_unix = std::time::SystemTime::now()
@@ -105,7 +92,6 @@ fn process_session_regen(world: &WorldState, rd: &RegenData) {
     let mut hp_change: i32 = 0;
     let mut mp_change: i32 = 0;
 
-    // C++ Reference: Snow Battle zone override — `HpChange(5)` and return early
     if rd.zone_id == ZONE_SNOW_BATTLE {
         if rd.hp < rd.max_hp {
             hp_change = 5;
@@ -127,7 +113,6 @@ fn process_session_regen(world: &WorldState, rd: &RegenData) {
     match rd.res_hp_type {
         USER_STANDING => {
             // Standing: MP regen only
-            // C++: MSpChange((int)(((GetLevel() * (1 + GetLevel() / 60.0) + 1) * 0.2) + 3) * mpPercent / 100)
             if rd.mp < rd.max_mp {
                 let base = ((level * (1.0 + level / 60.0) + 1.0) * 0.2 + 3.0) as i32;
                 mp_change = base * mp_pct / 100;
@@ -144,11 +129,9 @@ fn process_session_regen(world: &WorldState, rd: &RegenData) {
                 }
             } else {
                 // Normal player sitting: HP + MP regen
-                // C++: HpChange((int)(GetLevel() * (1 + GetLevel() / 30.0)) + 3)
                 if rd.hp < rd.max_hp {
                     hp_change = (level * (1.0 + level / 30.0)) as i32 + 3;
                 }
-                // C++ Reference: UserDurationSkillSystem.cpp:87-88
                 //   if (GetZoneID() == ZONE_PRISON && GetLevel() > 1)
                 //       MSpChange(+(m_MaxMp * 5 / 100));
                 //   else normal formula
@@ -169,7 +152,6 @@ fn process_session_regen(world: &WorldState, rd: &RegenData) {
     }
 
     // Apply HP change (undead: regen becomes damage)
-    // C++ Reference: UserHealtMagicSpSystem.cpp:138-142 — HpChange converts heal→damage for undead
     if hp_change > 0 {
         let effective = if rd.is_undead {
             -hp_change
@@ -185,7 +167,6 @@ fn process_session_regen(world: &WorldState, rd: &RegenData) {
             world.update_session_hp(rd.session_id, new_hp);
             let pkt = build_hp_change_packet(rd.max_hp, new_hp);
             world.send_to_session_owned(rd.session_id, pkt);
-            // C++ Reference: HpChange() calls SendPartyHPUpdate()
             crate::handler::party::broadcast_party_hp(world, rd.session_id);
         }
     }
@@ -202,12 +183,9 @@ fn process_session_regen(world: &WorldState, rd: &RegenData) {
 }
 
 /// Build a WIZ_HP_CHANGE (0x17) packet with a specific attacker ID.
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:177-179`
 /// ```text
 /// result << m_MaxHp << m_sHp << uint32(tid);
 /// ```
-///
 /// Wire format: `[i16 max_hp] [i16 current_hp] [u32 attacker_id]`
 pub fn build_hp_change_packet_with_attacker(
     max_hp: i16,
@@ -222,12 +200,9 @@ pub fn build_hp_change_packet_with_attacker(
 }
 
 /// Build a WIZ_HP_CHANGE (0x17) packet.
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:177-179`
 /// ```text
 /// result << m_MaxHp << m_sHp << uint32(tid);
 /// ```
-///
 /// Wire format: `[i16 max_hp] [i16 current_hp] [u32 attacker_id]`
 /// When regen (no attacker), attacker_id = 0xFFFFFFFF (-1).
 /// v2600 PCAP verified: original server sends 0xFFFFFFFF (not 0x0000FFFF).
@@ -236,12 +211,9 @@ pub fn build_hp_change_packet(max_hp: i16, current_hp: i16) -> Packet {
 }
 
 /// Build a WIZ_MSP_CHANGE (0x18) packet.
-///
-/// C++ Reference: `UserHealtMagicSpSystem.cpp:405-406`
 /// ```text
 /// result << m_MaxMp << m_sMp;
 /// ```
-///
 /// Wire format: `[i16 max_mp] [i16 current_mp]`
 pub fn build_mp_change_packet(max_mp: i16, current_mp: i16) -> Packet {
     let mut pkt = Packet::new(Opcode::WizMspChange as u8);
@@ -251,7 +223,6 @@ pub fn build_mp_change_packet(max_mp: i16, current_mp: i16) -> Packet {
 }
 
 /// Calculate standing MP regen amount (before mage percent).
-///
 /// C++ formula: `((level * (1 + level / 60.0) + 1) * 0.2) + 3`
 pub fn calc_standing_mp_regen(level: u8) -> i32 {
     let lvl = level as f64;
@@ -259,7 +230,6 @@ pub fn calc_standing_mp_regen(level: u8) -> i32 {
 }
 
 /// Calculate sitting HP regen amount.
-///
 /// C++ formula: `level * (1 + level / 30.0) + 3`
 pub fn calc_sitting_hp_regen(level: u8) -> i32 {
     let lvl = level as f64;
@@ -267,7 +237,6 @@ pub fn calc_sitting_hp_regen(level: u8) -> i32 {
 }
 
 /// Calculate sitting MP regen amount (before mage percent).
-///
 /// C++ formula: `((maxMp * 5) / ((level - 1) + 30)) + 3`
 pub fn calc_sitting_mp_regen(level: u8, max_mp: i16) -> i32 {
     let divisor = (level as i32 - 1).max(0) + 30;
@@ -275,16 +244,12 @@ pub fn calc_sitting_mp_regen(level: u8, max_mp: i16) -> i32 {
 }
 
 /// Training interval in seconds.
-///
-/// C++ Reference: `UserDurationSkillSystem.cpp` — `PLAYER_TRAINING_INTERVAL`
 const PLAYER_TRAINING_INTERVAL: u64 = 15;
 
 /// Minimum level for training mode XP.
 const TRAINING_MIN_LEVEL: u8 = 10;
 
 /// Calculate training XP reward for a given level.
-///
-/// C++ Reference: `UserDurationSkillSystem.cpp:108-120` — `CUser::TrainingProcess()`
 fn training_xp_for_level(level: u8) -> u32 {
     match level {
         10..=20 => 50,
@@ -298,9 +263,6 @@ fn training_xp_for_level(level: u8) -> u32 {
 }
 
 /// Process training mode for a sitting player.
-///
-/// C++ Reference: `UserDurationSkillSystem.cpp:96-136` — `CUser::TrainingProcess()`
-///
 /// When a player is sitting (USER_SITDOWN) and level >= 10, they receive
 /// periodic XP rewards every 15 seconds. A counter (`m_iTotalTrainingExp`)
 /// accumulates the total training XP earned and is sent to the client
@@ -348,7 +310,6 @@ fn training_process(world: &Arc<WorldState>, rd: &RegenData, now_unix: u64) {
     }
 
     // Give XP via async task (handles bonuses + level-up + DB save)
-    // C++ Reference: ExpChange("training", iExp, true)
     let w = Arc::clone(world);
     let sid = rd.session_id;
     tokio::spawn(async move {
@@ -500,7 +461,6 @@ mod tests {
 
     #[test]
     fn test_prison_mp_regen_formula() {
-        // C++ Reference: UserDurationSkillSystem.cpp:87-88
         // MSpChange(+(m_MaxMp * 5 / 100))
         // 5% of max MP for sitting in prison
         let max_mp: i16 = 500;
@@ -529,7 +489,6 @@ mod tests {
 
     #[test]
     fn test_blink_guard_skips_regen() {
-        // C++ Reference: User.cpp:957 — if (!isBlinking()) { HPTimeChange(); }
         // A blinking player should NOT receive HP/MP regen.
         let now_unix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -697,7 +656,6 @@ mod tests {
 
     #[test]
     fn test_training_xp_by_level() {
-        // C++ Reference: UserDurationSkillSystem.cpp:108-120
         assert_eq!(training_xp_for_level(5), 0); // below 10
         assert_eq!(training_xp_for_level(9), 0); // below 10
         assert_eq!(training_xp_for_level(10), 50); // 10-20

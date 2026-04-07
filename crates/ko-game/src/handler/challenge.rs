@@ -1,7 +1,4 @@
 //! WIZ_CHALLENGE (0x75) handler — PVP duel and CVC (clan vs clan) arena.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/ArenaHandler.cpp`
-//!
 //! Sub-opcodes:
 //! - CHALLENGE_PVP_REQUEST (1): Challenger requests a 1v1 duel
 //! - CHALLENGE_PVP_CANCEL (2): Challenger cancels the request
@@ -25,8 +22,6 @@ use crate::world::ZONE_ARENA;
 use crate::zone::SessionId;
 
 /// Challenge sub-opcode constants.
-///
-/// C++ Reference: ArenaHandler.cpp:5-20
 const CHALLENGE_PVP_REQUEST: u8 = 1;
 const CHALLENGE_PVP_CANCEL: u8 = 2;
 const CHALLENGE_PVP_ACCEPT: u8 = 3;
@@ -42,24 +37,18 @@ const CHALLENGE_ZONE_ERROR: u8 = 12;
 const CHALLENGE_CLAN_ERROR: u8 = 13;
 
 /// Arena zone coordinates for PVP duel.
-///
-/// C++ Reference: ArenaHandler.cpp:234-235
 const PVP_ARENA_ACCEPTER_X: f32 = 135.0;
 const PVP_ARENA_ACCEPTER_Z: f32 = 115.0;
 const PVP_ARENA_REQUESTER_X: f32 = 120.0;
 const PVP_ARENA_REQUESTER_Z: f32 = 115.0;
 
 /// Arena zone coordinates for CVC (clan1 and clan2).
-///
-/// C++ Reference: ArenaHandler.cpp:318, 337
 const CVC_ARENA_CLAN1_X: f32 = 128.0;
 const CVC_ARENA_CLAN1_Z: f32 = 125.0;
 const CVC_ARENA_CLAN2_X: f32 = 135.0;
 const CVC_ARENA_CLAN2_Z: f32 = 120.0;
 
 /// Handle WIZ_CHALLENGE from the client.
-///
-/// C++ Reference: `CUser::HandleChallenge` in ArenaHandler.cpp:23-57
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -102,8 +91,6 @@ fn build_error(error_code: u8) -> Packet {
 }
 
 /// Check if a zone is a nation PVP zone (can attack other nation but not same).
-///
-/// C++ Reference: `CMap::isNationPVPZone()` in Map.h:99
 fn is_nation_pvp_zone(world: &crate::world::WorldState, zone_id: u16) -> bool {
     world
         .get_zone(zone_id)
@@ -111,7 +98,6 @@ fn is_nation_pvp_zone(world: &crate::world::WorldState, zone_id: u16) -> bool {
 }
 
 /// Send a zone change teleport packet to a remote session.
-///
 /// Used when we cannot call trigger_zone_change directly (no &mut ClientSession).
 fn send_zone_change(
     world: &crate::world::WorldState,
@@ -137,8 +123,6 @@ fn send_zone_change(
 }
 
 /// CHALLENGE_PVP_REQUEST (1): Request a 1v1 duel.
-///
-/// C++ Reference: `CUser::HandleChallengeRequestPVP` in ArenaHandler.cpp:60-125
 async fn handle_pvp_request(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -260,8 +244,6 @@ async fn handle_pvp_request(
 }
 
 /// CHALLENGE_PVP_ACCEPT (3): Accept a PVP duel request.
-///
-/// C++ Reference: `CUser::HandleChallengeAcceptPVP` in ArenaHandler.cpp:212-236
 async fn handle_pvp_accept(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -327,8 +309,6 @@ async fn handle_pvp_accept(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// CHALLENGE_CVC_REQUEST (6): Request a clan vs clan battle.
-///
-/// C++ Reference: `CUser::HandleChallengeRequestCVC` in ArenaHandler.cpp:128-209
 async fn handle_cvc_request(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -466,8 +446,6 @@ async fn handle_cvc_request(
 }
 
 /// CHALLENGE_CVC_ACCEPT (8): Accept a clan vs clan battle.
-///
-/// C++ Reference: `CUser::HandleChallengeAcceptCVC` in ArenaHandler.cpp:239-339
 async fn handle_cvc_accept(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -547,8 +525,6 @@ async fn handle_cvc_accept(session: &mut ClientSession) -> anyhow::Result<()> {
 }
 
 /// CHALLENGE_PVP_CANCEL (2) / CHALLENGE_CVC_CANCEL (7): Challenger cancels the request.
-///
-/// C++ Reference: `CUser::HandleChallengeCancelled` in ArenaHandler.cpp:342-365
 async fn handle_cancelled(session: &mut ClientSession, opcode: u8) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -594,8 +570,6 @@ async fn handle_cancelled(session: &mut ClientSession, opcode: u8) -> anyhow::Re
 }
 
 /// CHALLENGE_PVP_REJECT (4) / CHALLENGE_CVC_REJECT (9): Challengee rejects the request.
-///
-/// C++ Reference: `CUser::HandleChallengeRejected` in ArenaHandler.cpp:368-391
 async fn handle_rejected(session: &mut ClientSession, opcode: u8) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -784,7 +758,6 @@ mod tests {
 
     /// Verify PVP arena spawn coordinates match C++ constants.
     ///
-    /// C++ Reference: ArenaHandler.cpp:234-235
     #[test]
     fn test_pvp_arena_coordinates() {
         assert_eq!(PVP_ARENA_ACCEPTER_X, 135.0);
@@ -795,7 +768,6 @@ mod tests {
 
     /// Verify CVC arena spawn coordinates match C++ constants.
     ///
-    /// C++ Reference: ArenaHandler.cpp:318,337
     #[test]
     fn test_cvc_arena_coordinates() {
         assert_eq!(CVC_ARENA_CLAN1_X, 128.0);

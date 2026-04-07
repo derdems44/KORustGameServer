@@ -1,20 +1,13 @@
 //! WIZ_SEL_CHAR (0x04) handler — character selection.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/CharacterSelectionHandler.cpp:644-869`
-//!
 //! ## Request (C->S)
-//!
 //! | Offset | Type   | Description |
 //! |--------|--------|-------------|
 //! | 0      | string | Account ID |
 //! | N      | string | Character ID |
 //! | M      | u8     | Init flag |
-//!
 //! ## Response (S->C) — opcode 0x04
-//!
 //! C++ format: `result << bResult << uint16(GetZoneID()) << GetSPosX() << GetSPosZ() << GetSPosY() << GetNation() << int16(-1);`
 //! where `GetSPosX()` = `uint16(GetX() * 10)` (Unit.h:255-257)
-//!
 //! | Offset | Type   | Description |
 //! |--------|--------|-------------|
 //! | 0      | u8     | Result (0=fail, 1=ok) |
@@ -35,7 +28,6 @@ use crate::world::{
 };
 
 /// Moradon default spawn position (version 2369).
-/// C++ Reference: CharacterSelectionHandler.cpp:732-735
 const MORADON_DEFAULT_X: f32 = 81400.0 / 100.0; // 814.0
 const MORADON_DEFAULT_Z: f32 = 43750.0 / 100.0; // 437.5
 
@@ -117,7 +109,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
             let nation = ch.nation as u8;
 
             // ── Zone redirect checks ─────────────────────────────────────
-            // C++ Reference: CharacterSelectionHandler.cpp:709-745
             // If the player is in a restricted zone, redirect to Moradon.
             let world = session.world();
             let redirect = should_redirect_to_moradon(world, zone_id, nation, ch.knights as u16);
@@ -223,9 +214,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Determine if a player should be redirected to Moradon on login.
-///
-/// C++ Reference: `CharacterSelectionHandler.cpp:709-722`
-///
 /// Returns `true` if the player's saved zone is restricted and they must
 /// be teleported to Moradon instead.
 pub(super) fn should_redirect_to_moradon(
@@ -237,25 +225,21 @@ pub(super) fn should_redirect_to_moradon(
     let battle_state = world.get_battle_state();
 
     // 1. Karus player in Elmorad zone when Elmorad not open
-    // C++ Reference: CharacterSelectionHandler.cpp:710
     if zone_id == ZONE_ELMORAD && !battle_state.elmorad_open_flag && nation == 1 {
         return true;
     }
 
     // 2. Elmorad player in Karus zone when Karus not open
-    // C++ Reference: CharacterSelectionHandler.cpp:711
     if zone_id == ZONE_KARUS && !battle_state.karus_open_flag && nation == 2 {
         return true;
     }
 
     // 3. War zone but war not open
-    // C++ Reference: CharacterSelectionHandler.cpp:712
     if let Some(zone) = world.get_zone(zone_id) {
         if zone.is_war_zone() && !battle_state.is_war_open() {
             return true;
         }
         // 4. War zone, war open, but player's nation lost
-        // C++ Reference: CharacterSelectionHandler.cpp:713
         if zone.is_war_zone()
             && battle_state.is_war_open()
             && battle_state.victory != 0
@@ -266,13 +250,11 @@ pub(super) fn should_redirect_to_moradon(
     }
 
     // 5. Stone zones — always redirect to Moradon
-    // C++ Reference: CharacterSelectionHandler.cpp:717
     if zone_id == ZONE_STONE1 || zone_id == ZONE_STONE2 || zone_id == ZONE_STONE3 {
         return true;
     }
 
     // 6. Temple event zones — redirect (BDW, Chaos, Juraid)
-    // C++ Reference: CharacterSelectionHandler.cpp:714 — isInTotalTempleEventZone()
     if zone_id == ZONE_BORDER_DEFENSE_WAR
         || zone_id == ZONE_CHAOS_DUNGEON
         || zone_id == ZONE_JURAID_MOUNTAIN
@@ -281,7 +263,6 @@ pub(super) fn should_redirect_to_moradon(
     }
 
     // 7. Delos (siege) + siege warfare open + no clan
-    // C++ Reference: CharacterSelectionHandler.cpp:715
     if zone_id == ZONE_DELOS {
         let csw_open = world
             .csw_event()
@@ -294,20 +275,17 @@ pub(super) fn should_redirect_to_moradon(
     }
 
     // 8. Special event zones (Zindan) when event not opened
-    // C++ Reference: CharacterSelectionHandler.cpp:716
     if crate::handler::attack::is_in_special_event_zone(zone_id) && !world.is_zindan_event_opened()
     {
         return true;
     }
 
     // 9. Cinderella zone — redirect
-    // C++ Reference: CharacterSelectionHandler.cpp:721
     if world.is_cinderella_active() && world.cinderella_zone_id() == zone_id {
         return true;
     }
 
     // 10. Bifrost — redirect based on event state and player nation
-    // C++ Reference: CharacterSelectionHandler.cpp:720 — BeefEventLogin() check
     if zone_id == ZONE_BIFROST && super::bifrost::should_redirect_from_bifrost(world, nation) {
         return true;
     }
@@ -379,7 +357,6 @@ mod tests {
     /// SelChar response packet format matches C++ wire format (u16 positions).
     #[test]
     fn test_selchar_response_packet_format() {
-        // C++: result << bResult << uint16(zone) << GetSPosX() << GetSPosZ() << GetSPosY() << GetNation() << int16(-1)
         // GetSPosX() = uint16(float * 10)
         let mut pkt = Packet::new(Opcode::WizSelChar as u8);
         pkt.write_u8(1); // success

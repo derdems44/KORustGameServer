@@ -1,7 +1,4 @@
 //! WIZ_ITEM_TRADE (0x21) handler — NPC shop buy/sell and repurchase.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/NPCHandler.cpp:844-2182`
-//!
 //! Packet format (from client):
 //! ```text
 //! [u8 type] — 1=Buy, 2=Sell, 5=Repurchase
@@ -13,7 +10,6 @@
 //!   [u8 sub_opcode] — 4=Refresh, 2=Buyback, 3=Clear
 //!   Buyback: [u8 index][u32 item_id][i16 unk]
 //! ```
-//!
 //! Response (WIZ_ITEM_TRADE):
 //! ```text
 //! On success: [u8 1] [u32 gold_after] [u32 total_price] [u8 selling_group]
@@ -46,20 +42,15 @@ use crate::world::{
 use super::{HAVE_MAX, ITEMCOUNT_MAX, ITEM_KIND_UNIQUE, SLOT_MAX};
 
 /// Scroll item IDs that are exempt from tariff/tax.
-///
-/// C++ Reference: `NPCHandler.cpp:1041-1049`
 const TAX_EXEMPT_SCROLLS: [u32; 5] = [379068000, 379107000, 379109000, 379110000, 379067000];
 
-/// Selling group ID for loyalty NPCs (C++ NPCHandler.cpp:949,1722,1886).
-///
+/// Selling group ID for loyalty NPCs
 /// C++ detects loyalty merchants by `m_iSellingGroup == 249000`, NOT by NPC type.
 const LOYALTY_SELLING_GROUP: u32 = 249000;
 
 // ── Tax Zone Classification ──────────────────────────────────────────────
 
 /// Zone tax type classification for tariff calculation.
-///
-/// C++ Reference: `NPCHandler.cpp:1060-1237`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaxZoneType {
     /// King tariff zones (Karus/Elmorad capitals, PvP zones, etc.)
@@ -73,8 +64,6 @@ pub enum TaxZoneType {
 }
 
 /// Classify a zone ID into its tax type.
-///
-/// C++ Reference: `NPCHandler.cpp:1060-1237`
 pub fn classify_zone_tax(zone_id: u16) -> TaxZoneType {
     match zone_id {
         ZONE_KARUS
@@ -129,10 +118,7 @@ pub fn classify_zone_tax(zone_id: u16) -> TaxZoneType {
 }
 
 /// Calculate the taxed transaction price for a single item.
-///
 /// Returns `(taxed_price, tax_amount)` where tax_amount can be negative for siege discounts.
-///
-/// C++ Reference: `NPCHandler.cpp:1041-1237`
 pub fn calculate_item_tax(
     base_price: u32,
     zone_type: TaxZoneType,
@@ -179,8 +165,6 @@ struct TradeItem {
 }
 
 /// Handle WIZ_ITEM_TRADE from the client.
-///
-/// C++ Reference: `CUser::ItemTrade()` in `NPCHandler.cpp:846-2003`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         debug!("[{}] NPC trade: not InGame state", session.addr());
@@ -197,7 +181,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     );
 
     // Must be in-game, alive, not busy
-    // C++ Reference: NPCHandler.cpp:861-874
     let no_char = world.get_character_info(sid).is_none();
     let is_dead = world.is_player_dead(sid);
     let is_trd = world.is_trading(sid);
@@ -225,7 +208,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
         pkt.data.iter().take(40).map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ")
     );
 
-    // C++ Reference: NPCHandler.cpp:888-894 — type 5 is dispatched directly
     if trade_type == 5 {
         return handle_repurchase(session, &mut reader).await;
     }
@@ -243,7 +225,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     let npc_id_raw = reader.read_u32().unwrap_or(0);
 
     // Validate NPC exists, is merchant type, selling_group matches, and is in range
-    // C++ Reference: NPCHandler.cpp:880-882 — `int16 test = (int16)npcid; GetNpcPtr(test, ...)`
     // Client sends the full NPC runtime ID (already includes NPC_BAND).
     // C++ casts to int16 (uint16 in GetNpcPtr signature) — just truncate, do NOT add NPC_BAND.
     let npc_nid = npc_id_raw as i16 as u16 as u32;
@@ -326,7 +307,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
     }
 
     // Cannot sell to loyalty merchants
-    // C++ Reference: NPCHandler.cpp:1886
     if trade_type == 2 && group == LOYALTY_SELLING_GROUP {
         return send_fail(session, 1).await;
     }
@@ -346,8 +326,6 @@ pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<
 }
 
 /// Handle buying items from an NPC shop.
-///
-/// C++ Reference: `CUser::ItemTrade()` type==1 in `NPCHandler.cpp:936-1719`
 async fn handle_buy(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -367,7 +345,6 @@ async fn handle_buy(
         let line = reader.read_u8().unwrap_or(0);
         let index = reader.read_u8().unwrap_or(0);
 
-        // C++ Reference: NPCHandler.cpp:924-944
         if item_id == 0 || count == 0 || inv_pos as usize >= HAVE_MAX || count >= ITEMCOUNT_MAX {
             return { tracing::warn!("[{}] BUY_FAIL_20 line 371", session.addr()); send_fail(session, 20) }.await;
         }
@@ -377,7 +354,6 @@ async fn handle_buy(
         }
 
         // Validate item exists in NPC sell table
-        // C++ Reference: NPCHandler.cpp:1020-1039
         if !world.validate_sell_table_item(selling_group as i32, index as usize, item_id as i32) {
             warn!(
                 "[{}] NPC trade: item {} not in sell table (group={}, index={})",
@@ -398,7 +374,6 @@ async fn handle_buy(
     }
 
     // Duplicate IPOS check — same slot cannot appear twice
-    // C++ Reference: NPCHandler.cpp:933-938
     for i in 0..items.len() {
         for j in (i + 1)..items.len() {
             if items[i].inv_pos == items[j].inv_pos {
@@ -409,7 +384,6 @@ async fn handle_buy(
 
     // ── Tax/Tariff Setup ─────────────────────────────────────────────────
     // Tax only applies to gold purchases (not loyalty).
-    // C++ Reference: NPCHandler.cpp:1041-1237
     let (zone_id, nation) = world
         .with_session(sid, |h| {
             let n = h.character.as_ref().map(|c| c.nation).unwrap_or(0);
@@ -453,7 +427,6 @@ async fn handle_buy(
         };
 
         // Loyalty merchants use NP price; regular merchants use gold price
-        // C++ Reference: NPCHandler.cpp:1742 vs NPCHandler.cpp:962
         let unit_price = if is_loyalty {
             item_def.np_buy_price.unwrap_or(0) as u64
         } else {
@@ -465,7 +438,6 @@ async fn handle_buy(
         }
 
         // Apply tariff/tax (gold purchases only, non-exempt items)
-        // C++ Reference: NPCHandler.cpp:1041-1237
         let transaction_price = if !is_loyalty && !is_tax_exempt(item.item_id) {
             let (taxed, tax_amount) = calculate_item_tax(
                 base_price as u32,
@@ -488,7 +460,6 @@ async fn handle_buy(
             base_price
         };
 
-        // C++ Reference: NPCHandler.cpp:1664-1668 — post-tax overflow check
         if transaction_price > COIN_MAX as u64 {
             return { tracing::warn!("[{}] BUY_FAIL_26 line 492", session.addr()); send_fail(session, 26) }.await;
         }
@@ -547,7 +518,6 @@ async fn handle_buy(
         None => return send_fail(session, 1).await,
     };
     if is_loyalty {
-        // C++ Reference: NPCHandler.cpp:1744 — `if (!hasCoins(total_price))`
         // For loyalty, hasCoins checks m_iLoyalty
         if (total_price as u32) > ch.loyalty {
             return send_fail(session, 3).await;
@@ -558,14 +528,12 @@ async fn handle_buy(
 
     // Execute: deduct currency and give items
     if is_loyalty {
-        // C++ Reference: NPCHandler.cpp:1883 — `m_iLoyalty -= real_price`
         world.update_character_stats(sid, |c| {
             c.loyalty = c.loyalty.saturating_sub(total_price as u32);
         });
     } else {
         world.gold_lose(sid, total_price as u32);
         // Daily rank stat: GMTotalSold += total_price (gold spent at NPC shop)
-        // C++ Reference: MerchantHandler.cpp:1002 — `pMerchUser->pUserDailyRank.GMTotalSold += req_gold`
         world.update_session(sid, |h| {
             h.dr_gm_total_sold += total_price;
         });
@@ -626,7 +594,6 @@ async fn handle_buy(
     }
 
     // ── Accumulate tax revenue ───────────────────────────────────────────
-    // C++ Reference: NPCHandler.cpp:1588-1658
     if total_king_tax > 0 && zone_tax_type == TaxZoneType::KingTariff {
         // 80% to national treasury, 20% to territory tax (king's collectible fund)
         let treasury_share = (total_king_tax * 80 / 100) as u32;
@@ -643,7 +610,6 @@ async fn handle_buy(
         });
     }
     // Siege revenue tracking (markup only, when tariff > 10)
-    // C++ Reference: NPCHandler.cpp:1239-1586
     if total_siege_tax > 0 {
         let siege_tax = total_siege_tax as u32;
         let dungeon_share = (siege_tax as u64 * 80 / 100) as i32;
@@ -677,12 +643,10 @@ async fn handle_buy(
     }
 
     // Send success response
-    // C++ Reference: NPCHandler.cpp:1988-2003
     let mut result = Packet::new(Opcode::WizItemTrade as u8);
     result.write_u8(1); // success
     if is_loyalty {
         // Loyalty response: loyalty_after + total_price + selling_group
-        // C++ Reference: NPCHandler.cpp:1993
         let loyalty_after = world
             .get_character_info(sid)
             .map(|c| c.loyalty)
@@ -701,8 +665,6 @@ async fn handle_buy(
 }
 
 /// Handle selling items to an NPC shop.
-///
-/// C++ Reference: `CUser::ItemTrade()` type==2 in `NPCHandler.cpp:1886-1975`
 async fn handle_sell(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -749,7 +711,6 @@ async fn handle_sell(
         };
 
         // Check flags — use equality, NOT bitmask.
-        // C++ Reference: NPCHandler.cpp:1901-1902 — isSealed/isRented/isDuplicate/isExpirationTime
         if slot.flag == ITEM_FLAG_SEALED
             || slot.flag == ITEM_FLAG_RENTED
             || slot.flag == ITEM_FLAG_DUPLICATE
@@ -771,7 +732,6 @@ async fn handle_sell(
         let sell_divisor: u64 = if sell_prem > 0 { 4 } else { 6 };
         let count = item.count as u64;
 
-        /// C++ `SellTypeFullPrice = 1` (GameDefine.h:1886).
         const SELL_TYPE_FULL_PRICE: i32 = 1;
 
         let sell_npc_type = item_def.sell_npc_type.unwrap_or(0);
@@ -828,7 +788,6 @@ async fn handle_sell(
         let actual_slot = SLOT_MAX + item.inv_pos as usize;
 
         // Capture slot data before clearing, for repurchase tracking
-        // C++ Reference: ItemHandler.cpp:2536-2556 — non-countable, non-expiring,
         // not in Cinderella War → save to trash list for repurchase
         let slot_snapshot = world.get_inventory_slot(sid, actual_slot);
 
@@ -849,7 +808,6 @@ async fn handle_sell(
         });
 
         // Record non-countable items for repurchase (trash item list)
-        // C++ Reference: ItemHandler.cpp:2535-2557
         //   if (!pCindWar.isEventUser() && g_pMain->pServerSetting.trashitem
         //       && !pItem->isExpirationTime() && !pTable.m_bCountable) { ... }
         let trash_item_enabled = world
@@ -915,8 +873,6 @@ async fn send_fail(session: &mut ClientSession, error_code: u8) -> anyhow::Resul
 // ── Repurchase (Trash Item) System ──────────────────────────────────
 
 /// Record a sold non-countable item in the trash list for future repurchase.
-///
-/// C++ Reference: `ItemHandler.cpp:2536-2556` — saves `_DELETED_ITEM` + DB insert.
 async fn record_trash_item(
     session: &mut ClientSession,
     world: &WorldState,
@@ -953,9 +909,6 @@ async fn record_trash_item(
 }
 
 /// Handle WIZ_ITEM_TRADE type 5 — Repurchase (trash item buyback).
-///
-/// C++ Reference: `CUser::ItemTradeRepurchase()` in `NPCHandler.cpp:2005-2037`
-///
 /// Sub-opcodes:
 /// - 4: Refresh list (send current valid items)
 /// - 2: Buyback a specific item
@@ -967,7 +920,6 @@ async fn handle_repurchase(
     let world = session.world().clone();
     let sid = session.session_id();
 
-    // C++ Reference: NPCHandler.cpp:2007 — if (!g_pMain->pServerSetting.trashitem) return;
     let trash_item_enabled = world
         .get_server_settings()
         .map(|s| s.trash_item)
@@ -977,7 +929,6 @@ async fn handle_repurchase(
     }
 
     // Must be in-game, alive, not busy
-    // C++ Reference: NPCHandler.cpp:2009-2017
     let is_busy = world.get_character_info(sid).is_none()
         || world.is_player_dead(sid)
         || world.is_trading(sid)
@@ -995,7 +946,6 @@ async fn handle_repurchase(
         4 => send_repurchase_list(session, &world, sid, true).await,
         2 => buyback_item(session, reader, &world, sid).await,
         3 => {
-            // C++ Reference: NPCHandler.cpp:2030 — ResetRepurchaseData()
             // Only clears the display mapping, NOT the actual deleted items
             world.clear_delete_item_list(sid);
             Ok(())
@@ -1012,9 +962,6 @@ async fn handle_repurchase(
 }
 
 /// Build and send the repurchase list to the client.
-///
-/// C++ Reference: `CUser::SendRepurchaseMsg()` in `NPCHandler.cpp:2039-2081`
-///
 /// Packet format (WIZ_ITEM_TRADE):
 /// ```text
 /// [u8 5][u8 sub_opcode][u8 1][u16 count]
@@ -1028,7 +975,6 @@ pub(crate) async fn send_repurchase_list(
     is_refreshed: bool,
 ) -> anyhow::Result<()> {
     // Clear old display mapping
-    // C++ Reference: NPCHandler.cpp:2041 — m_DeleteItemList.clear()
     world.clear_delete_item_list(sid);
 
     let now_unix = SystemTime::now()
@@ -1039,7 +985,6 @@ pub(crate) async fn send_repurchase_list(
     let deleted_items = world.get_deleted_items(sid);
 
     let mut result = Packet::new(Opcode::WizItemTrade as u8);
-    // C++ Reference: NPCHandler.cpp:2042-2043
     result.write_u8(5); // trade type
     let sub = if is_refreshed { 4u8 } else { 1u8 };
     result.write_u8(sub);
@@ -1054,13 +999,11 @@ pub(crate) async fn send_repurchase_list(
 
     for (vec_idx, entry) in deleted_items.iter().enumerate() {
         // Skip expired items
-        // C++ Reference: NPCHandler.cpp:2062
         if now_unix >= entry.delete_time {
             continue;
         }
 
         // Max 250 displayed
-        // C++ Reference: NPCHandler.cpp:2065
         if display_count >= WorldState::TRASH_DISPLAY_MAX {
             break;
         }
@@ -1072,7 +1015,6 @@ pub(crate) async fn send_repurchase_list(
         };
 
         // Price formula: buy_price * count * 30
-        // C++ Reference: NPCHandler.cpp:2068-2070
         let buy_price = item_def.buy_price.unwrap_or(0) as u64;
         let mut price = buy_price
             .saturating_mul(entry.count as u64)
@@ -1081,7 +1023,6 @@ pub(crate) async fn send_repurchase_list(
             price = COIN_MAX as u64;
         }
 
-        // C++ Reference: NPCHandler.cpp:2072-2078
         result.write_u32(entry.item_id);
         result.write_u32(price as u32);
         result.write_u32(entry.delete_time);
@@ -1092,7 +1033,6 @@ pub(crate) async fn send_repurchase_list(
     }
 
     // Patch the count field
-    // C++ Reference: NPCHandler.cpp:2080 — result.put(3, sCount)
     let count_bytes = display_count.to_le_bytes();
     if count_offset + 1 < result.data.len() {
         result.data[count_offset] = count_bytes[0];
@@ -1106,9 +1046,6 @@ pub(crate) async fn send_repurchase_list(
 }
 
 /// Handle buying back a specific item from the repurchase list.
-///
-/// C++ Reference: `CUser::BuyingItemRepurchase()` in `NPCHandler.cpp:2084-2156`
-///
 /// Packet format (from client):
 /// ```text
 /// [u8 index][u32 item_id][i16 unk]
@@ -1124,14 +1061,12 @@ async fn buyback_item(
     let _unk = reader.read_i16().unwrap_or(0);
 
     // Look up display index → deleted item entry
-    // C++ Reference: NPCHandler.cpp:2091-2097
     let (_, entry) = match world.get_deleted_item_by_display_index(sid, index) {
         Some(pair) => pair,
         None => return send_repurchase_fail(session).await,
     };
 
     // Validate item_id matches
-    // C++ Reference: NPCHandler.cpp:2099-2106
     let item_def = match world.get_item(item_id) {
         Some(i) => i,
         None => return send_repurchase_fail(session).await,
@@ -1147,7 +1082,6 @@ async fn buyback_item(
     }
 
     // Calculate price: buy_price * count * 30
-    // C++ Reference: NPCHandler.cpp:2108
     let buy_price = item_def.buy_price.unwrap_or(0) as u64;
     let price = buy_price
         .saturating_mul(entry.count as u64)
@@ -1159,7 +1093,6 @@ async fn buyback_item(
     };
 
     // Check gold
-    // C++ Reference: NPCHandler.cpp:2109
     let ch = match world.get_character_info(sid) {
         Some(c) => c,
         None => return send_repurchase_fail(session).await,
@@ -1169,7 +1102,6 @@ async fn buyback_item(
     }
 
     // Check weight
-    // C++ Reference: NPCHandler.cpp:2111-2112
     let weight = (item_def.weight.unwrap_or(0) as u32).saturating_mul(entry.count);
     let stats = world.get_equipped_stats(sid);
     if weight.saturating_add(stats.item_weight) > stats.max_weight {
@@ -1177,7 +1109,6 @@ async fn buyback_item(
     }
 
     // Find free inventory slot
-    // C++ Reference: NPCHandler.cpp:2114-2127
     let slot_pos =
         match world.find_slot_for_item(sid, entry.item_id, entry.count.min(u16::MAX as u32) as u16)
         {
@@ -1192,7 +1123,6 @@ async fn buyback_item(
     }
 
     // Restore item to inventory
-    // C++ Reference: NPCHandler.cpp:2130-2137
     let item_count = entry.count;
     let item_duration = entry.duration;
     let item_serial = entry.serial_num;
@@ -1213,7 +1143,6 @@ async fn buyback_item(
         inv[slot_pos].original_flag = 0; // C++ NPCHandler.cpp:2135 — pItem->oFlag = 0
         inv[slot_pos].expire_time = 0;
         // Non-countable or kind 255 always count=1
-        // C++ Reference: NPCHandler.cpp:2137
         if kind == ITEM_KIND_UNIQUE || countable == 0 {
             inv[slot_pos].count = 1;
         }
@@ -1227,7 +1156,6 @@ async fn buyback_item(
     world.set_user_ability(sid);
 
     // Deduct gold
-    // C++ Reference: NPCHandler.cpp:2142
     world.gold_lose(sid, price32);
 
     // Remove from in-memory list
@@ -1245,7 +1173,6 @@ async fn buyback_item(
     }
 
     // Send success response
-    // C++ Reference: NPCHandler.cpp:2145
     let mut result = Packet::new(Opcode::WizItemTrade as u8);
     result.write_u8(5); // trade type
     result.write_u8(2); // sub_opcode = buyback
@@ -1255,7 +1182,6 @@ async fn buyback_item(
     session.send_packet(&result).await?;
 
     // Send stack change to update client UI
-    // C++ Reference: NPCHandler.cpp:2139 — SendStackChange(...)
     let inv_pos = (slot_pos as u8).saturating_sub(SLOT_MAX as u8);
     let current_slot = world.get_inventory_slot(sid, slot_pos).unwrap_or_default();
     send_stack_change(
@@ -1271,9 +1197,6 @@ async fn buyback_item(
 }
 
 /// Send a stack change notification to the client.
-///
-/// C++ Reference: `CUser::SendStackChange()` in `ItemHandler.cpp:2425-2449`
-///
 /// Packet format:
 /// ```text
 /// [u16 1][u8 slot_section][u8 pos][u32 item_id][u32 count]
@@ -1311,8 +1234,6 @@ async fn send_stack_change(
 }
 
 /// Send a repurchase failure response.
-///
-/// C++ Reference: `NPCHandler.cpp:2153-2155` — `result << uint8(2) << uint8(2)`
 async fn send_repurchase_fail(session: &mut ClientSession) -> anyhow::Result<()> {
     let mut result = Packet::new(Opcode::WizItemTrade as u8);
     result.write_u8(5); // trade type
@@ -1450,7 +1371,7 @@ mod tests {
         assert_eq!(sell_price2, 16); // 100/6 = 16 (integer truncation)
     }
 
-    /// Test COIN_MAX constant from C++ reference.
+    /// Test COIN_MAX constant from protocol specification.
     #[test]
     fn test_coin_max() {
         assert_eq!(COIN_MAX, 2_100_000_000);
@@ -1579,7 +1500,6 @@ mod tests {
 
     /// Test NPC ID conversion — client sends full NPC runtime ID (includes NPC_BAND).
     ///
-    /// C++ Reference: NPCHandler.cpp:881 — `int16 test = (int16)npcid; GetNpcPtr(test, ...)`
     /// C++ does NOT add NPC_BAND; it just truncates to int16 → uint16.
     #[test]
     fn test_npc_id_conversion() {
@@ -1908,7 +1828,6 @@ mod tests {
 
     /// Test repurchase price formula: buy_price * count * 30.
     ///
-    /// C++ Reference: `NPCHandler.cpp:2068` — `nPrice = pItem.m_iBuyPrice * pItemDeleted->sCount * 30`
     #[test]
     fn test_repurchase_price_formula() {
         // Standard weapon: buy_price=1000, count=1
@@ -1940,7 +1859,6 @@ mod tests {
 
     /// Test 72-minute expiration calculation.
     ///
-    /// C++ Reference: `ItemHandler.cpp:2547` — `iDeleteTime = (uint32)UNIXTIME + 72 * 60`
     #[test]
     fn test_repurchase_expiry_72_minutes() {
         let now: u32 = 1700000000;
@@ -1961,7 +1879,6 @@ mod tests {
 
     /// Test countable items are NOT recorded for repurchase.
     ///
-    /// C++ Reference: `ItemHandler.cpp:2538` — `!pTable.m_bCountable`
     #[test]
     fn test_countable_items_rejected() {
         // Countable items (potions, arrows) should NOT go to repurchase
@@ -1978,7 +1895,6 @@ mod tests {
 
     /// Test expiring items are NOT recorded for repurchase.
     ///
-    /// C++ Reference: `ItemHandler.cpp:2537` — `!pItem->isExpirationTime()`
     #[test]
     fn test_expiring_items_rejected() {
         let countable: i16 = 0;
@@ -1989,7 +1905,6 @@ mod tests {
 
     /// Test repurchase list packet format.
     ///
-    /// C++ Reference: `CUser::SendRepurchaseMsg()` in `NPCHandler.cpp:2042-2081`
     #[test]
     fn test_repurchase_list_packet_format() {
         let mut pkt = Packet::new(Opcode::WizItemTrade as u8);
@@ -2033,7 +1948,6 @@ mod tests {
 
     /// Test repurchase buyback success packet format.
     ///
-    /// C++ Reference: `NPCHandler.cpp:2145` — `result << uint8(2) << uint8(1) << uint16(0) << ItemID`
     #[test]
     fn test_repurchase_buyback_success_packet() {
         let mut pkt = Packet::new(Opcode::WizItemTrade as u8);
@@ -2054,7 +1968,6 @@ mod tests {
 
     /// Test repurchase buyback failure packet format.
     ///
-    /// C++ Reference: `NPCHandler.cpp:2153-2155` — `result << uint8(2) << uint8(2)`
     #[test]
     fn test_repurchase_buyback_failure_packet() {
         let mut pkt = Packet::new(Opcode::WizItemTrade as u8);
@@ -2071,7 +1984,6 @@ mod tests {
 
     /// Test repurchase client request packet format (buyback).
     ///
-    /// C++ Reference: `NPCHandler.cpp:2086-2087` — `pkt >> Index >> ItemID >> unk2`
     #[test]
     fn test_repurchase_buyback_request_packet() {
         let mut pkt = Packet::new(Opcode::WizItemTrade as u8);
@@ -2099,7 +2011,6 @@ mod tests {
 
     /// Test stack change packet format for repurchase item restoration.
     ///
-    /// C++ Reference: `CUser::SendStackChange()` in `ItemHandler.cpp:2425-2449`
     #[test]
     fn test_stack_change_packet_format() {
         let mut pkt = Packet::new(Opcode::WizItemCountChange as u8);
@@ -2126,9 +2037,8 @@ mod tests {
         assert_eq!(r.remaining(), 0); // v2600: no trailing u16 padding
     }
 
-    /// Test repurchase sub-opcode constants match C++ reference.
+    /// Test repurchase sub-opcode constants match protocol specification.
     ///
-    /// C++ Reference: `NPCHandler.cpp:2021-2035`
     #[test]
     fn test_repurchase_sub_opcodes() {
         // Sub-opcode 4 = refresh list
@@ -2143,9 +2053,8 @@ mod tests {
         assert_ne!(buyback, clear);
     }
 
-    /// Test display index starts at 1 (not 0) as per C++ reference.
+    /// Test display index starts at 1 (not 0) as per protocol specification.
     ///
-    /// C++ Reference: `NPCHandler.cpp:2075` — `uint8(sCount + 1)`
     #[test]
     fn test_display_index_starts_at_one() {
         // C++ sends display_index as sCount + 1 (1-based)

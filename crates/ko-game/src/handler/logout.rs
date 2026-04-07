@@ -1,10 +1,5 @@
 //! WIZ_LOGOUT (0x0F) handler — player logout / return to character select.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/User.cpp:1799-1811` (CUser::LogOut)
-//! C++ Reference: `KOOriginalGameServer/GameServer/DatabaseThread.cpp:1453-1548` (ReqUserLogOut)
-//!
 //! ## Flow
-//!
 //! 1. Client sends WIZ_LOGOUT (empty packet, opcode only)
 //! 2. Server saves character state to DB
 //! 3. Server removes user from zone/region, broadcasts INOUT_OUT
@@ -28,11 +23,7 @@ use crate::handler::{mining, party_bbs, region};
 use crate::session::{ClientSession, SessionState};
 
 /// Handle WIZ_LOGOUT from the client.
-///
 /// Saves character data, cleans up world state, and sends confirmation.
-///
-/// C++ Reference: `User.cpp:1799-1811` (CUser::LogOut) and
-/// `DatabaseThread.cpp:1453-1548` (CUser::ReqUserLogOut)
 pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         debug!(
@@ -50,7 +41,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     let account_id = session.account_id().unwrap_or("").to_string();
 
     // ── 1. Save character stats + position to DB ────────────────────
-    // C++ Reference: DBAgent.cpp:1510-1543 — UpdateUser saves all fields on logout
     if !char_id.is_empty() {
         // Save stats (hp, mp, exp, gold, loyalty, loyalty_monthly, manner_point)
         if let Some(ch) = world.get_character_info(sid) {
@@ -92,7 +82,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 1a2. Save class/race (safety net for Lua PromoteUser*) ─────────
-    // C++ Reference: NPCHandler.cpp:228 — ClassChange persists class
     if !char_id.is_empty() {
         if let Some(ch) = world.get_character_info(sid) {
             let repo = CharacterRepository::new(&pool);
@@ -110,7 +99,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 1a3. Save flash time/count/type ────────────────────────────────
-    // C++ Reference: DBAgent.cpp — UpdateUser saves flash_time, flash_count, flash_type
     if !char_id.is_empty() {
         let flash_data = world.with_session(sid, |h| (h.flash_time, h.flash_count, h.flash_type));
         if let Some((ft, fc, ftype)) = flash_data {
@@ -127,7 +115,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 1a4. Save stat + skill points ──────────────────────────────────
-    // C++ Reference: DBAgent.cpp — UpdateUser saves strong/sta/dex/intel/cha/points/skill0-9
     // AWAITED — stat/skill point loss on re-login is highly noticeable
     if !char_id.is_empty() {
         if let Some(ch) = world.get_character_info(sid) {
@@ -166,7 +153,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 1b. Bulk save inventory items (AWAITED — not fire-and-forget) ──
-    // C++ Reference: DBAgent.cpp:1449-1458 — UpdateUser saves all 77 inventory slots
     // IMPORTANT: This save MUST complete before the player can re-select the
     // character, otherwise the re-login load may see stale/empty DB data.
     if !char_id.is_empty() {
@@ -205,7 +191,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 1c. Bulk save warehouse items ──────────────────────────────────
-    // C++ Reference: DBAgent.cpp:1553-1562 — UpdateWarehouseData saves all slots
     if !account_id.is_empty() {
         let wh_data = world.with_session(sid, |h| {
             (h.warehouse.clone(), h.inn_coins, h.warehouse_loaded)
@@ -248,11 +233,9 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 1b. BDW cleanup ────────────────────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1507 — BDWUserLogOut()
     bdw_user_logout(&world, sid);
 
     // ── 1c. Monster Stone cleanup ────────────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1473-1477 — TempleMonsterStoneItemExitRoom()
     {
         let ms_active = world
             .with_session(sid, |h| h.event_room > 0)
@@ -281,11 +264,9 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 2. Clean up party ────────────────────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1479-1486
     world.cleanup_party_on_disconnect(sid);
 
     // ── 3. Clean up exchange (trade) ─────────────────────────────────
-    // C++ Reference: User.cpp:3950-3951 — ResetWindows() calls ExchangeCancel()
     if world.is_trading(sid) {
         let partner_sid = world.get_exchange_user(sid);
         world.reset_trade(sid);
@@ -298,13 +279,11 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 4. Clean up merchant state ───────────────────────────────────
-    // C++ Reference: User.cpp:3959-3965 — MerchantClose/BuyingMerchantClose
     if world.is_merchanting(sid) {
         world.close_merchant(sid);
     }
 
     // ── 4b. Cancel active challenge/duel ───────────────────────────────
-    // C++ Reference: User.cpp:3953-3957 — HandleChallengeCancelled / HandleChallengeRejected
     {
         let (requesting, requested, challenge_user) = world.get_challenge_state(sid);
         if requesting > 0 || requested > 0 {
@@ -328,7 +307,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 4c. Remove rival ───────────────────────────────────────────────
-    // C++ Reference: ZoneChangeWarpHandler.cpp:301-302 — if (hasRival()) RemoveRival()
     {
         let has_rival = world
             .get_character_info(sid)
@@ -340,16 +318,13 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 4d. Remove from merchant we're browsing ────────────────────────
-    // C++ Reference: User.cpp:3968-3969 — CancelMerchant
     world.remove_from_merchant_lookers(sid);
 
     // ── 4e. Stop mining / fishing ──────────────────────────────────────
-    // C++ Reference: User.cpp:3971-3975 — HandleMiningStop / HandleFishingStop
     mining::stop_mining_internal(&world, sid);
     mining::stop_fishing_internal(&world, sid);
 
     // ── 5. Clean up party BBS ────────────────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1510 — PartyBBSUserLoqOut()
     party_bbs::cleanup_on_disconnect(&world, sid);
 
     // ── 5a. Chat room cleanup ────────────────────────────────────────
@@ -371,8 +346,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 5b. BottomUserLogOut — broadcast zone-wide logout notification ─
-    // C++ Reference: DatabaseThread.cpp:1465 — BottomUserLogOut()
-    // C++ Reference: BottomUserList.cpp:206-214
     // Sends WIZ_USER_INFORMATIN(sub=4/RegionDelete) to all players in the zone.
     if let Some(ch) = world.get_character_info(sid) {
         if let Some(pos) = world.get_position(sid) {
@@ -382,7 +355,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 5c. GM list removal ────────────────────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1466 — GmListProcess(true)
     if let Some(ch) = world.get_character_info(sid) {
         if ch.authority == 0 {
             // authority==0 means GM in KO (isGM check)
@@ -391,15 +363,12 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 5d. Knights/Clan cleanup ───────────────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1487-1498
     if let Some(ch) = world.get_character_info(sid) {
         if ch.knights_id > 0 {
             // KnightsClanBuffUpdate(false) — decrement online count, broadcast bonus
-            // C++ Reference: KnightsManager.cpp:1900-1938
             world.knights_clan_buff_update(ch.knights_id, false, sid);
 
             // CKnights::OnLogout — send clan offline notification
-            // C++ Reference: Knights.cpp:231-246
             crate::handler::knights::send_clan_offline_notification(
                 &world,
                 ch.knights_id,
@@ -410,7 +379,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6. Remove from zone/region and broadcast INOUT_OUT ───────────
-    // C++ Reference: DatabaseThread.cpp:1464-1465
     if let Some(pos) = world.get_position(sid) {
         if let Some(zone) = world.get_zone(pos.zone_id) {
             zone.remove_user(pos.region_x, pos.region_z, sid);
@@ -430,7 +398,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6b. Save premium state to DB ─────────────────────────────────
-    // C++ Reference: DBAgent.cpp — AccountPremiumData save path
     if !account_id.is_empty() {
         let premium_slots: Vec<(i16, i16, i32)> = world
             .with_session(sid, |h| {
@@ -454,10 +421,8 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6c. Save achievement data to DB ──────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1531 — g_DBAgent.UpdateAchieveData(this)
     if !char_id.is_empty() {
         // Update play_time before saving.
-        // C++ Reference: AchieveHandler.cpp:53-63 — UpdateAchievePlayTime()
         world.update_session(sid, |h| {
             if h.achieve_login_time > 0 {
                 let now = std::time::SystemTime::now()
@@ -524,7 +489,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6d. Save user perks to DB ─────────────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1538 — g_DBAgent.UpdateUserPerks(this)
     if !char_id.is_empty() {
         let perk_data = world.with_session(sid, |h| (h.perk_levels, h.rem_perk));
         if let Some((perk_levels, rem_perk)) = perk_data {
@@ -704,7 +668,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6e. Save quest progress to DB (AWAITED) ────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1525 — g_DBAgent.UpdateQuestData(this)
     // AWAITED — quest progress loss is highly disruptive to players
     if !char_id.is_empty() {
         let quest_data = world.with_session(sid, |h| h.quests.clone());
@@ -734,7 +697,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6f. Save active buffs (saved magic) to DB (AWAITED) ───────────
-    // C++ Reference: DatabaseThread.cpp:1536 — g_DBAgent.UpdateSavedMagic(this)
     if !char_id.is_empty() {
         let magic_entries = world.get_saved_magic_entries(sid);
         if !magic_entries.is_empty() {
@@ -746,7 +708,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6g. Save genie data to DB ─────────────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1529 — g_DBAgent.UpdateGenieData(GetName(), this)
     // Only save if genie data has been loaded from DB (prevents overwriting with 0).
     if !char_id.is_empty() {
         let genie_data = world.with_session(sid, |h| {
@@ -786,7 +747,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6g2. Save sealed_exp to DB ────────────────────────────────────
-    // C++ Reference: DBAgent.cpp — sealed_exp persisted on logout
     if !char_id.is_empty() {
         if let Some(ch) = world.get_character_info(sid) {
             if ch.sealed_exp > 0 {
@@ -802,7 +762,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6g3. Save bind point to DB (AWAITED) ────────────────────────
-    // C++ Reference: DBAgent.cpp — UpdateUser saves bind zone + coordinates
     if !char_id.is_empty() {
         if let Some(ch) = world.get_character_info(sid) {
             if ch.bind_zone > 0 {
@@ -818,7 +777,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6g4. Sync user_knightdata on logout (AWAITED) ───────────────────
-    // C++ Reference: SAVE_USER_DATA SP — updates USER_KNIGHTDATA level/class/loyalty/last_login
     if !char_id.is_empty() {
         if let Some(ch) = world.get_character_info(sid) {
             if ch.knights_id > 0 {
@@ -849,7 +807,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6g5. Save pet data to DB ──────────────────────────────────────
-    // C++ Reference: DBAgent.cpp — SavePetData() on logout
     if !char_id.is_empty() {
         let pet_snapshot = world.with_session(sid, |h| {
             h.pet_data.as_ref().filter(|p| p.serial_id > 0).map(|p| {
@@ -879,7 +836,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6h. Save daily quest progress to DB ─────────────────────────
-    // C++ Reference: QuestDatabase.cpp:131-156 — UpdateQuestData daily section
     if !char_id.is_empty() {
         let dq_data = world.with_session(sid, |h| h.daily_quests.clone());
         if let Some(dq_map) = dq_data {
@@ -894,7 +850,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6i. Save daily operation cooldowns to DB ──────────────────────
-    // C++ Reference: UserDailyOpSystem.cpp — persisted via WIZ_DB_DAILY_OP
     if !char_id.is_empty() {
         if let Some((_, data)) = world.daily_ops.remove(&char_id) {
             let do_repo = UserDataRepository::new(&pool);
@@ -906,7 +861,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 6j. Save daily rank stats to DB ───────────────────────────────
-    // C++ Reference: DBAgent.cpp:5529-5544 — UPDATE_USER_DAILY_RANK
     if !char_id.is_empty() {
         let dr_data = world.with_session(sid, |h| {
             (
@@ -936,7 +890,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 7. Mark account offline ──────────────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1541
     if !account_id.is_empty() {
         let pool2 = pool.clone();
         let acct = account_id.clone();
@@ -949,7 +902,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 7b. Soccer event cleanup ──────────────────────────────────
-    // C++ Reference: User.cpp:3863-3864 — isEventSoccerUserRemoved() on logout
     if let Some(ch) = world.get_character_info(sid) {
         if let Some(pos) = world.get_position(sid) {
             let soccer_state = world.soccer_state().clone();
@@ -961,11 +913,9 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 7c. Cinderella War cleanup ──────────────────────────────────
-    // C++ Reference: CindirellaWar.cpp:576-682 — CindirellaLogOut on logout
     crate::handler::cinderella::cinderella_logout(&world, sid, true);
 
     // ── 7d. Wanted event cleanup ────────────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1512-1513 — NewWantedEventLoqOut()
     {
         let is_wanted = world.with_session(sid, |h| h.is_wanted).unwrap_or(false);
         if is_wanted {
@@ -974,7 +924,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 7e. Temple event sign-up cleanup ────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1515-1518 — TempleDisbandEvent()
     // Remove player from event sign-up queue if still in signing phase.
     {
         let (active_event, is_active) = world
@@ -1003,7 +952,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     }
 
     // ── 7f. Clean up ALL ranking systems ────────────────────────────
-    // C++ Reference: NewRankingSystem.cpp:708-746
     // PlayerKillingRemovePlayerRank + ZindanWarKillingRemovePlayerRank
     // + BorderDefenceRemovePlayerRank + ChaosExpansionRemovePlayerRank
     world.pk_zone_remove_player(sid);
@@ -1012,7 +960,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
     world.chaos_remove_player(sid);
 
     // ── 8. Unregister session from world ─────────────────────────────
-    // C++ Reference: DatabaseThread.cpp:1543 — RemoveSessionNames(this)
     world.unregister_session(sid);
 
     // ── 9. Send WIZ_LOGOUT confirmation to client ────────────────────
@@ -1036,9 +983,6 @@ pub async fn handle(session: &mut ClientSession, _pkt: Packet) -> anyhow::Result
 }
 
 /// BDW logout cleanup — handles flag carrier disconnect and forfeit detection.
-///
-/// C++ Reference: `CUser::BDWUserLogOut()` in `JuraidBdwFragSystem.cpp:85-145`
-///
 /// 1. If the game is not finished and all players of one nation have left, the
 ///    other nation wins by forfeit.
 /// 2. If the logging-out user had the altar flag, starts altar respawn timer
@@ -1097,7 +1041,6 @@ pub(crate) fn bdw_user_logout(world: &crate::world::WorldState, sid: crate::zone
         };
 
         // Mark user as logged out (unconditional)
-        // C++ Reference: JuraidBdwFragSystem.cpp:101-102
         if let Some(u) = room.karus_users.get_mut(&user_name) {
             u.logged_out = true;
         } else if let Some(u) = room.elmorad_users.get_mut(&user_name) {
@@ -1105,7 +1048,6 @@ pub(crate) fn bdw_user_logout(world: &crate::world::WorldState, sid: crate::zone
         }
 
         // Flag carrier logout runs UNCONDITIONALLY (even after finish_packet_sent)
-        // C++ Reference: JuraidBdwFragSystem.cpp:144 — outside !m_FinishPacketControl block
         let bdw_state = match bdw_mgr.get_room_state_mut(room_id) {
             Some(s) => s,
             None => return,
@@ -1113,7 +1055,6 @@ pub(crate) fn bdw_user_logout(world: &crate::world::WorldState, sid: crate::zone
         let had_flag = bdw::flag_carrier_logout(&mut room, bdw_state, &user_name, now);
 
         // Forfeit detection is gated by finish_packet_sent
-        // C++ Reference: JuraidBdwFragSystem.cpp:106-115
         let forfeit_winner = if !room.finish_packet_sent && room.winner_nation == 0 {
             let k_active = room.karus_users.values().filter(|u| !u.logged_out).count();
             let e_active = room
@@ -1152,7 +1093,6 @@ pub(crate) fn bdw_user_logout(world: &crate::world::WorldState, sid: crate::zone
         super::dead::broadcast_to_bdw_room(world, room_id, &timer_pkt);
 
         // Remove speed debuff from the carrier
-        // C++ Reference: RemoveType4Buff case BUFF_TYPE_FRAGMENT_OF_MANES in MagicProcess.cpp:1299
         world.remove_buff(sid, bdw::BUFF_TYPE_FRAGMENT_OF_MANES);
     }
 

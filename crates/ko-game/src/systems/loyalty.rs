@@ -1,6 +1,4 @@
 //! Loyalty (Nation Points / NP) system — PvP kill rewards and party distribution.
-//!
-//! C++ Reference:
 //! - `GameServer/BotLoyalty.cpp` — SendLoyaltyChange, LoyaltyChange, LoyaltyDivide
 //! - `GameServer/GameServerDlg.cpp:690-697` — default loyalty rates from INI
 //! - `GameServer/Define.h:22` — `LOYALTY_MAX 2100000000`
@@ -17,32 +15,21 @@ use crate::zone::SessionId;
 use ko_protocol::{Opcode, Packet};
 
 /// Absolute loyalty cap (same for loyalty and monthly loyalty).
-///
-/// C++ Reference: `Define.h:22` — `#define LOYALTY_MAX 2100000000`
 pub const LOYALTY_MAX: u32 = 2_100_000_000;
 
 /// Additional NP bonus for killing a priest's rival target.
-///
-/// C++ Reference: `GameDefine.h:1330` — `#define RIVALRY_NP_BONUS (150)`
 pub const RIVALRY_NP_BONUS: u16 = 150;
 
 /// Additional NP bonus when your nation owns the PVP monument.
-///
-/// C++ Reference: `GameDefine.h:1335` — `#define PVP_MONUMENT_NP_BONUS (5)`
 pub const PVP_MONUMENT_NP_BONUS: i16 = 5;
 
 /// Maximum number of party members.
-///
 use crate::world::MAX_PARTY_USERS;
 
 /// Ardream level cap — NPCs below this level use downgraded skills.
-///
-/// C++ Reference: `Define.h:251` — `#define MAX_LEVEL_ARDREAM 59`
 pub const MAX_LEVEL_ARDREAM: u8 = 59;
 
 /// Zone-specific loyalty rates (configurable at startup, defaults from C++ INI).
-///
-/// C++ Reference: `GameServerDlg.cpp:690-697`
 #[derive(Debug, Clone)]
 pub struct LoyaltyRates {
     /// NP gained by the killer in Ardream.
@@ -80,8 +67,6 @@ impl Default for LoyaltyRates {
 }
 
 /// Zones that are considered PVP zones (for daily loyalty tracking).
-///
-/// C++ Reference: `Npc.cpp` / `Unit.cpp` — `isInPKZone()` checks
 fn is_pk_zone(zone_id: u16) -> bool {
     zone_id == ZONE_RONARK_LAND
         || zone_id == ZONE_ARDREAM
@@ -91,15 +76,11 @@ fn is_pk_zone(zone_id: u16) -> bool {
 }
 
 /// Zones excluded from monthly NP tracking.
-///
-/// C++ Reference: `BotLoyalty.cpp:29-30,80-81` — Ardream/RLB skip monthly
 fn skip_monthly_zone(zone_id: u16) -> bool {
     zone_id == ZONE_ARDREAM || zone_id == ZONE_RONARK_LAND_BASE
 }
 
 /// Check if a class is a priest class (base class 4, 11, or 12).
-///
-/// C++ Reference: `Unit.h` — `isPriest()` checks class modulo for priest archetypes.
 /// - 4: Priest base
 /// - 11: Priest sub-class (e.g. Shaman, Cleric)
 /// - 12: Priest master class
@@ -108,24 +89,18 @@ fn is_priest_class(class: u16) -> bool {
 }
 
 /// Check if a character has an active (non-expired) rivalry with the given victim.
-///
-/// C++ Reference: `User.h` — `hasRival()` checks `m_sRivalID >= 0`,
 /// `hasRivalryExpired()` checks current time >= `m_tRivalExpiryTime`,
 /// and the rival ID must match the victim.
-///
 /// # Arguments
 /// * `ch` — The character to check for rivalry.
 /// * `victim_id` — The session ID of the killed player.
 fn has_active_rivalry(ch: &CharacterInfo, victim_id: SessionId) -> bool {
-    // C++: hasRival() => m_sRivalID >= 0 (default is -1 = no rival)
     if ch.rival_id < 0 {
         return false;
     }
-    // C++: GetRivalID() == pTUser->GetID()
     if ch.rival_id as u16 != victim_id {
         return false;
     }
-    // C++: !hasRivalryExpired() => current time < m_tRivalExpiryTime
     if ch.rival_expiry_time > 0 {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -139,8 +114,6 @@ fn has_active_rivalry(ch: &CharacterInfo, victim_id: SessionId) -> bool {
 }
 
 /// Check whether a zone is excluded from PvP loyalty rewards.
-///
-/// C++ Reference: `BotLoyalty.cpp:176-181` — 4 zone exclusions
 fn is_excluded_pvp_zone(zone_id: u16) -> bool {
     zone_id == ZONE_DESPERATION_ABYSS
         || zone_id == ZONE_HELL_ABYSS
@@ -149,9 +122,6 @@ fn is_excluded_pvp_zone(zone_id: u16) -> bool {
 }
 
 /// Apply a loyalty change to a player (core NP update).
-///
-/// C++ Reference: `CBot::SendLoyaltyChange()` in `BotLoyalty.cpp:3-150`
-///
 /// - Positive `amount`: NP gain (kill reward modifiers applied)
 /// - Negative `amount`: NP loss
 /// - `is_kill_reward`: applies buff/event/bonus modifiers
@@ -175,7 +145,6 @@ pub fn send_loyalty_change(
         .unwrap_or(0);
 
     let mut add_monthly = has_monthly_loyalty;
-    // C++ Reference: CUser::m_bNPGainAmount — set by BUFF_TYPE_LOYALTY (15), default 100
     let np_gain_pct: i32 = world
         .with_session(session_id, |h| h.np_gain_amount as i32)
         .unwrap_or(100);
@@ -227,7 +196,6 @@ pub fn send_loyalty_change(
             change = change * (100 + np_event_pct) / 100;
 
             // Flame level bonus (burning feature drop_rate applied to NP)
-            // C++ Reference: UserLoyaltySystem.cpp:268-269
             let flame_level = world
                 .with_session(session_id, |h| h.flame_level)
                 .unwrap_or(0);
@@ -243,7 +211,6 @@ pub fn send_loyalty_change(
             change += item_np_bonus + skill_np_bonus;
 
             // PVP monument bonus — nation controlling this zone's monument gets extra NP.
-            // C++ Reference: UserLoyaltySystem.cpp:274-276
             //   `if (g_pMain->m_nPVPMonumentNation[GetZoneID()] == GetNation())`
             let monument_nation = world.get_pvp_monument_nation(zone_id);
             if monument_nation != 0 && monument_nation == ch.nation && is_pk_zone(zone_id) {
@@ -251,7 +218,6 @@ pub fn send_loyalty_change(
             }
 
             // Flash War bonus — additive NP from flash war event kills.
-            // C++ Reference: UserLoyaltySystem.cpp:278-281
             flash_war_bonus = world
                 .with_session(session_id, |h| h.flash_war_bonus as i32)
                 .unwrap_or(0);
@@ -261,7 +227,6 @@ pub fn send_loyalty_change(
             }
 
             // Player premium loyalty bonus — flat NP from premium subscription.
-            // C++ Reference: UserLoyaltySystem.cpp:284-288
             prem_loyalty = world.get_premium_property(session_id, PremiumProperty::BonusLoyalty);
             if prem_loyalty > 0 {
                 change += prem_loyalty;
@@ -269,7 +234,6 @@ pub fn send_loyalty_change(
             }
 
             // Clan premium loyalty bonus — flat NP from clan premium.
-            // C++ Reference: UserLoyaltySystem.cpp:290-294
             clan_prem_loyalty =
                 world.get_clan_premium_property(session_id, PremiumProperty::BonusLoyalty);
             if clan_prem_loyalty > 0 {
@@ -278,7 +242,6 @@ pub fn send_loyalty_change(
             }
 
             // Clan online member NP bonus — up to 5 NP based on online clan members.
-            // C++ Reference: UserLoyaltySystem.cpp:296-300
             if ch.knights_id > 0 {
                 if let Some(info) = world.get_knights(ch.knights_id) {
                     if info.online_np_count > 0 {
@@ -288,7 +251,6 @@ pub fn send_loyalty_change(
                 }
             }
 
-            // C++ Reference: UserLoyaltySystem.cpp:250-302 — perk loyalty bonus (flat)
             // Added AFTER all percentage modifiers, only on kill rewards.
             let perk_loyalty = world
                 .with_session(session_id, |h| {
@@ -301,7 +263,6 @@ pub fn send_loyalty_change(
         }
 
         // Update premium bonus tracking for rankings.
-        // C++ Reference: User.h:529 — m_PlayerKillingLoyaltyPremiumBonus
         if premium_bonus_sum > 0 {
             world.update_session(session_id, |h| {
                 h.pk_loyalty_premium_bonus = h
@@ -314,7 +275,6 @@ pub fn send_loyalty_change(
         world.update_character_loyalty(session_id, new_loyalty);
 
         // Daily PK tracking — accumulate daily loyalty and update PK zone ranking
-        // C++ Reference: `UserLoyaltySystem.cpp:310-321`
         if ((is_pk_zone(zone_id) || is_war_zone(zone_id)) && !is_bonus_reward)
             || zone_id == ZONE_BORDER_DEFENSE_WAR
             || zone_id == ZONE_BIFROST
@@ -324,12 +284,10 @@ pub fn send_loyalty_change(
             }
 
             // Accumulate daily loyalty in the PK zone ranking entry
-            // C++: m_PlayerKillingLoyaltyDaily += nChangeAmount; UpdatePlayerKillingRank();
             update_pk_zone_daily_loyalty(world, session_id, ch.nation, change as u32);
         }
 
         // Monthly NP — same pipeline as main NP but with deduction curve.
-        // C++ Reference: UserLoyaltySystem.cpp:335-358
         if add_monthly && !is_bonus_reward {
             let mut monthly_change = monthly_base;
             // C++ deduction curve
@@ -340,7 +298,6 @@ pub fn send_loyalty_change(
             }
 
             // Add premium bonuses to monthly NP (same as main NP).
-            // C++ Reference: UserLoyaltySystem.cpp:342-353
             if flash_war_bonus > 0 {
                 monthly_change += flash_war_bonus;
             }
@@ -364,7 +321,6 @@ pub fn send_loyalty_change(
     }
 
     // ── Clan NP Donation ─────────────────────────────────────────────
-    // C++ Reference: `BotLoyalty.cpp:120-144` — auto-donate NP to clan fund.
     // Only applies to non-bonus NP gains when the clan is accredited and uses
     // the equal point method (clan_point_method == 0).
     let mut clan_loyalty_amount: u32 = 0;
@@ -423,7 +379,6 @@ pub fn send_loyalty_change(
     }
 
     // ── Send WIZ_LOYALTY_CHANGE to client ────────────────────────────
-    // C++ Reference: `CBot::SendLoyaltyChange()` — always sends packet after state update.
     // Wire format: [0x2A][u8 sub=1][u32 loyalty][u32 monthly][u32 clan_donations=0][u32 clan_loyalty]
     if let Some(updated) = world.get_character_info(session_id) {
         let mut pkt = Packet::new(Opcode::WizLoyaltyChange as u8);
@@ -437,9 +392,6 @@ pub fn send_loyalty_change(
 }
 
 /// Calculate loyalty change for a solo player kill (no party).
-///
-/// C++ Reference: `CBot::LoyaltyChange()` in `BotLoyalty.cpp:152-253`
-///
 /// Returns `(source_np, target_np)` — source gains, target loses.
 pub fn loyalty_change(
     world: &WorldState,
@@ -463,7 +415,6 @@ pub fn loyalty_change(
         .unwrap_or(0);
 
     // Delos zone uses zone flags to determine whether PvP is allowed.
-    // C++ Reference: `BotLoyalty.cpp:160-181` — LoyaltyChange Delos check
     if victim_zone == ZONE_DELOS {
         if victim.nation == killer.nation {
             // Same-nation PK in Delos: only allowed if canAttackSameNation zone flag is set
@@ -497,7 +448,6 @@ pub fn loyalty_change(
     // Different nation
     let (mut source, mut target) = if victim.loyalty == 0 {
         // Victim has 0 NP — no NP exchange, just XP loss
-        // C++ Reference: ExpChange call at BotLoyalty.cpp:197-201
         (0i16, 0i16)
     } else {
         get_zone_loyalty_rates(victim_zone, rates)
@@ -528,9 +478,6 @@ pub fn loyalty_change(
 }
 
 /// Calculate and distribute loyalty for a party kill.
-///
-/// C++ Reference: `CBot::LoyaltyDivide()` in `BotLoyalty.cpp:256-343`
-///
 /// Each alive party member gets `loyalty_divide_source(total_members)` NP.
 /// The victim loses `loyalty_divide_target()` NP.
 pub fn loyalty_divide(
@@ -555,7 +502,6 @@ pub fn loyalty_divide(
         .unwrap_or(0);
 
     // Delos zone uses zone flags for PvP rules (same as LoyaltyChange).
-    // C++ Reference: `BotLoyalty.cpp:353-365` — LoyaltyDivide Delos check
     if killer_zone == ZONE_DELOS {
         if victim.nation == killer.nation {
             let can_attack = world
@@ -611,7 +557,6 @@ pub fn loyalty_divide(
         }
 
         // Rivalry bonus for priests (or the killer themselves).
-        // C++ Reference: BotLoyalty.cpp:312-340 — LoyaltyDivide rivalry check.
         // Any party member who is a priest with an active rivalry against the victim,
         // or the killer themselves, receives RIVALRY_NP_BONUS and has their rival cleared.
         let bonus_np: u16 = if has_active_rivalry(&member, victim_id)
@@ -646,8 +591,6 @@ pub fn loyalty_divide(
 }
 
 /// Get zone-based loyalty rates for a solo kill.
-///
-/// C++ Reference: `BotLoyalty.cpp:206-234`
 fn get_zone_loyalty_rates(zone_id: u16, rates: &LoyaltyRates) -> (i16, i16) {
     if zone_id == ZONE_ARDREAM {
         (rates.ardream_source, rates.ardream_target)
@@ -666,9 +609,6 @@ fn get_zone_loyalty_rates(zone_id: u16, rates: &LoyaltyRates) -> (i16, i16) {
 }
 
 /// Calculate per-member source loyalty for party kills.
-///
-/// C++ Reference: `CBot::GetLoyaltyDivideSource()` in `BotLoyalty.cpp:518-548`
-///
 /// Formula: `nMaxLoyalty = (base * 3) - 2`, `nMinLoyalty = nMax / MAX_PARTY_USERS`,
 /// then `+2` for each empty party slot.
 fn get_loyalty_divide_source(zone_id: u16, total_members: u8, rates: &LoyaltyRates) -> i16 {
@@ -702,8 +642,6 @@ fn get_loyalty_divide_source(zone_id: u16, total_members: u8, rates: &LoyaltyRat
 }
 
 /// Calculate victim NP loss for party kills.
-///
-/// C++ Reference: `CBot::GetLoyaltyDivideTarget()` in `BotLoyalty.cpp:550-563`
 fn get_loyalty_divide_target(zone_id: u16, rates: &LoyaltyRates) -> i16 {
     if zone_id == ZONE_ARDREAM {
         rates.ardream_target
@@ -719,9 +657,8 @@ fn get_loyalty_divide_target(zone_id: u16, rates: &LoyaltyRates) -> i16 {
 }
 
 /// Legacy aggregate monument bonus calculation (used by unit tests).
-///
 /// The main code now uses per-zone `world.get_pvp_monument_nation(zone_id)`
-/// matching C++ `g_pMain->m_nPVPMonumentNation[GetZoneID()]`.
+/// matching `g_pMain->m_nPVPMonumentNation[GetZoneID()]`.
 #[cfg(test)]
 fn monument_np_bonus(zone_id: u16, player_nation: u8, karus_mp: i16, elmorad_mp: i16) -> i32 {
     if !is_pk_zone(zone_id) {
@@ -742,14 +679,11 @@ fn monument_np_bonus(zone_id: u16, player_nation: u8, karus_mp: i16, elmorad_mp:
 use crate::clan_constants::{CLAN_TYPE_ACCREDITED5, MAX_CLAN_USERS};
 
 /// Calculate the NP donation amount based on clan member count.
-///
-/// C++ Reference: `BotLoyalty.cpp:120-134` — step function:
 /// - 1-5 members → 1
 /// - 6-10 → 2
 /// - 11-15 → 3
 /// - ...
 /// - 46+ → 10
-///
 /// Equivalent formula: `((members - 1) / 5 + 1).min(10)`
 fn calculate_clan_donation(members: u16) -> u32 {
     if members == 0 {
@@ -764,17 +698,12 @@ fn add_capped(current: u32, amount: u32) -> u32 {
 }
 
 /// Check if zone is a war zone (battle zones).
-///
-/// C++ Reference: `User.h:1015-1020` — `isInWarZone() => ZoneID >= ZONE_BATTLE && ZoneID <= ZONE_BATTLE6`
 fn is_war_zone(zone_id: u16) -> bool {
     (ZONE_BATTLE..=ZONE_BATTLE6).contains(&zone_id)
 }
 
 /// Update the PK zone ranking daily loyalty for a player after a PvP kill.
-///
-/// C++ Reference: `UserLoyaltySystem.cpp:315-320` — accumulates `m_PlayerKillingLoyaltyDaily`
 /// and then calls `UpdatePlayerKillingRank()` which copies the value to the ranking map.
-///
 /// In our implementation, we directly increment the ranking map entry.
 fn update_pk_zone_daily_loyalty(
     world: &WorldState,

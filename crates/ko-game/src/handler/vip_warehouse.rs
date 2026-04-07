@@ -1,11 +1,7 @@
 //! WIZ_VIPWAREHOUSE (0x8B) handler -- premium VIP storage vault.
-//!
-//! C++ Reference: `KOOriginalGameServer/GameServer/VipWareHouse.cpp`
-//!
 //! VIP Warehouse is a premium storage with 48 slots, requiring a vault key
 //! item to activate (time-limited). Supports 4-digit PIN password protection.
-//!
-//! Sub-opcodes (C++ `packets.h:1002-1012`):
+//! Sub-opcodes (`packets.h:1002-1012`):
 //! - 1 = VIP_Open: Open VIP storage UI
 //! - 2 = VIP_InvenToStorage: Inventory -> VIP storage
 //! - 3 = VIP_StorageToInven: VIP storage -> Inventory
@@ -29,7 +25,7 @@ use crate::world::{
     ITEM_FLAG_SEALED, ITEM_GOLD, ITEM_NO_TRADE_MAX, ITEM_NO_TRADE_MIN,
 };
 
-/// VIP sub-opcodes (C++ `packets.h:1002-1012`).
+/// VIP sub-opcodes
 const VIP_OPEN: u8 = 1;
 const VIP_INVEN_TO_STORAGE: u8 = 2;
 const VIP_STORAGE_TO_INVEN: u8 = 3;
@@ -41,11 +37,10 @@ const VIP_CANCEL_PASSWORD: u8 = 9;
 const VIP_CHANGE_PASSWORD: u8 = 10;
 const VIP_ENTER_PASSWORD: u8 = 11;
 
-/// C++ `VIPWAREHOUSE_MAX` in `globals.h:342`.
 const VIPWAREHOUSE_MAX: usize = 48;
 use super::{HAVE_MAX, ITEM_KIND_UNIQUE, SLOT_MAX};
 
-/// Vault key item IDs (C++ `Define.h:379-381`, `GameDefine.h:1316`).
+/// Vault key item IDs (`Define.h:379-381`, `GameDefine.h:1316`).
 const VIP_VAULT_KEY: u32 = 800_442_000;
 const VIP_SAFE_KEY_1: u32 = 810_442_000;
 const VIP_SAFE_KEY_7: u32 = 998_019_000;
@@ -56,8 +51,6 @@ const VIP_SAFE_KEY_7: u32 = 998_019_000;
 const MAX_VAULT_EXTENSION_SECS: u32 = 60 * 60 * 24 * 30;
 
 /// Build a VIP warehouse error response packet.
-///
-/// C++ Reference: `CUser::UseVipKeyError` in `VipWareHouse.cpp:168-173`
 fn build_error(subcode: u8, error_id: u8) -> Packet {
     let mut pkt = Packet::new(Opcode::WizVipwarehouse as u8);
     pkt.write_u8(subcode);
@@ -74,8 +67,6 @@ fn unix_now() -> u32 {
 }
 
 /// Handle WIZ_VIPWAREHOUSE from the client.
-///
-/// C++ Reference: `CUser::VIPhouseProcess` in `VipWareHouse.cpp:176-642`
 pub async fn handle(session: &mut ClientSession, pkt: Packet) -> anyhow::Result<()> {
     if session.state() != SessionState::InGame {
         return Ok(());
@@ -187,15 +178,12 @@ async fn load_vip_warehouse_from_db(session: &mut ClientSession) -> anyhow::Resu
 const VIPWAREHOUSE_V2525_TOTAL: usize = 192;
 
 /// Build the VIP warehouse open response with all items.
-///
 /// v2525 format (binary RE at `0x98F420`):
 /// ```text
 /// [u8 sub=1] [u8 result=1] [u8 password_request]
 /// [4 tabs × (u8 is_key_active + u32 vault_expiry)]   ← 20 bytes
 /// [192 items × (u32 id + u16 dur + u16 count + u8 flag + u32 unique + u32 expire)]
 /// ```
-///
-/// C++ Reference: `VipWareHouse.cpp:235-255` (old single-tab format)
 /// v2525 client expanded to 4 tabs (192 slots). Only tab 0 is active.
 async fn build_open_response(
     world: &WorldState,
@@ -248,8 +236,6 @@ async fn build_open_response(
 }
 
 /// Handle VIP_Open (sub-opcode 1).
-///
-/// C++ Reference: `VipWareHouse.cpp:207-256`
 async fn handle_open(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -263,7 +249,6 @@ async fn handle_open(
     let now = unix_now();
     let vault_expiry = world.get_vip_vault_expiry(sid);
 
-    // C++ Reference: VipWareHouse.cpp:229-234
     // If npc_id==0 (remote access) and vault not active, error 21
     if npc_id == 0 && vault_expiry < now {
         let err = build_error(VIP_OPEN, 21);
@@ -272,7 +257,6 @@ async fn handle_open(
     }
 
     // NPC range check — if NPC is specified, must be in range
-    // C++ Reference: VipWareHouse.cpp:229 — isInRange(pNpc, MAX_NPC_RANGE)
     if npc_id != 0 && !world.is_in_npc_range(sid, npc_id as u32) {
         let err = build_error(VIP_OPEN, 0);
         session.send_packet(&err).await?;
@@ -308,8 +292,6 @@ async fn handle_open(
 }
 
 /// Handle VIP_InvenToStorage (sub-opcode 2) -- inventory -> VIP storage.
-///
-/// C++ Reference: `VipWareHouse.cpp:257-347`
 async fn handle_inven_to_storage(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -478,8 +460,6 @@ async fn handle_inven_to_storage(
 }
 
 /// Handle VIP_StorageToInven (sub-opcode 3) -- VIP storage -> inventory.
-///
-/// C++ Reference: `VipWareHouse.cpp:348-426`
 async fn handle_storage_to_inven(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -628,8 +608,6 @@ async fn handle_storage_to_inven(
 }
 
 /// Handle VIP_StorageToStore (sub-opcode 4) -- rearrange within VIP storage.
-///
-/// C++ Reference: `VipWareHouse.cpp:427-451`
 async fn handle_storage_to_store(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -699,8 +677,6 @@ async fn handle_storage_to_store(
 }
 
 /// Handle VIP_InvenToInven (sub-opcode 5) -- rearrange inventory from VIP UI.
-///
-/// C++ Reference: `VipWareHouse.cpp:452-477`
 async fn handle_inven_to_inven(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -750,8 +726,6 @@ async fn handle_inven_to_inven(
 }
 
 /// Handle VIP_UseVault (sub-opcode 6) -- activate vault key item.
-///
-/// C++ Reference: `VipWareHouse.cpp:478-516` + `ReqVipStorageProcess:20-111`
 async fn handle_use_vault(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -863,8 +837,6 @@ async fn handle_use_vault(
 }
 
 /// Handle VIP_SetPassword (sub-opcode 8) -- set 4-digit PIN.
-///
-/// C++ Reference: `VipWareHouse.cpp:517-539`
 async fn handle_set_password(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -889,8 +861,6 @@ async fn handle_set_password(
 }
 
 /// Handle VIP_CancelPassword (sub-opcode 9) -- remove password.
-///
-/// C++ Reference: `VipWareHouse.cpp:540-544`
 async fn handle_cancel_password(session: &mut ClientSession) -> anyhow::Result<()> {
     let world = session.world().clone();
     let sid = session.session_id();
@@ -903,8 +873,6 @@ async fn handle_cancel_password(session: &mut ClientSession) -> anyhow::Result<(
 }
 
 /// Handle VIP_ChangePassword (sub-opcode 10) -- change PIN.
-///
-/// C++ Reference: `VipWareHouse.cpp:545-567`
 async fn handle_change_password(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,
@@ -929,8 +897,6 @@ async fn handle_change_password(
 }
 
 /// Handle VIP_EnterPassword (sub-opcode 11) -- enter PIN to unlock.
-///
-/// C++ Reference: `VipWareHouse.cpp:568-641`
 async fn handle_enter_password(
     session: &mut ClientSession,
     reader: &mut PacketReader<'_>,

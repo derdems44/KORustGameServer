@@ -1,6 +1,4 @@
 //! Bot system repository — loading farm bots, merchant bots, rankings.
-//!
-//! C++ Reference: `CDBAgent::LoadBotTable()`, `CDBAgent::LoadBotHandlerMerchantTable()`
 
 use crate::models::bot_system::{
     BotHandlerFarmRow, BotHandlerMerchantRow, BotKnightsRankRow, BotMerchantDataRow,
@@ -21,7 +19,6 @@ impl<'a> BotSystemRepository<'a> {
 
     /// Load all farm bot records.
     ///
-    /// C++ Reference: `CDBAgent::LoadBotTable()` -> `LOAD_BOT_HANDLER` stored proc
     pub async fn load_all_farm_bots(&self) -> Result<Vec<BotHandlerFarmRow>, sqlx::Error> {
         sqlx::query_as::<_, BotHandlerFarmRow>(
             "SELECT id, str_user_id, nation, race, class, hair_rgb, level, face, \
@@ -36,7 +33,6 @@ impl<'a> BotSystemRepository<'a> {
 
     /// Load all merchant bot templates.
     ///
-    /// C++ Reference: `CDBAgent::LoadBotHandlerMerchantTable()` -> `LOAD_BOT_HANDLER_MERCHANT`
     pub async fn load_all_merchant_templates(
         &self,
     ) -> Result<Vec<BotHandlerMerchantRow>, sqlx::Error> {
@@ -51,7 +47,6 @@ impl<'a> BotSystemRepository<'a> {
 
     /// Load all pre-configured merchant bot stall data.
     ///
-    /// C++ Reference: `_BOT_SAVE_DATA` used in merchant bot spawning
     pub async fn load_all_merchant_data(&self) -> Result<Vec<BotMerchantDataRow>, sqlx::Error> {
         sqlx::query_as::<_, BotMerchantDataRow>(
             "SELECT n_index, advert_message, \
@@ -88,7 +83,6 @@ impl<'a> BotSystemRepository<'a> {
 
     /// Load all bot knights ranking rows.
     ///
-    /// C++ Reference: `GetBotRank()` for knights ranking
     pub async fn load_all_knights_ranks(&self) -> Result<Vec<BotKnightsRankRow>, sqlx::Error> {
         sqlx::query_as::<_, BotKnightsRankRow>(
             "SELECT sh_index, str_name, str_elmo_user_id, str_elmo_knights_name, \
@@ -102,7 +96,6 @@ impl<'a> BotSystemRepository<'a> {
 
     /// Load all bot personal ranking rows.
     ///
-    /// C++ Reference: `GetBotRank()` for personal ranking
     pub async fn load_all_personal_ranks(&self) -> Result<Vec<BotPersonalRankRow>, sqlx::Error> {
         sqlx::query_as::<_, BotPersonalRankRow>(
             "SELECT n_rank, str_rank_name, n_elmo_up, str_elmo_user_id, str_elmo_clan_name, \
@@ -117,7 +110,6 @@ impl<'a> BotSystemRepository<'a> {
 
     /// Update bot loyalty values (called when bot disconnects).
     ///
-    /// C++ Reference: `CDBAgent::UpdateBotUser()`
     pub async fn update_bot_loyalty(
         &self,
         str_user_id: &str,

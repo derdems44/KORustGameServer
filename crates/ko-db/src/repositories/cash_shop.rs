@@ -1,7 +1,5 @@
 //! Cash shop repository — loads PUS categories, items, and manages
 //! purchase/refund records from PostgreSQL.
-//!
-//! C++ Reference:
 //! - `ShoppingMallHandler.cpp` — PUS open/close flow
 //! - `DBAgent.cpp` — `LoadWebItemMall()`, `CreatePusSession()`
 
@@ -114,7 +112,6 @@ impl<'a> CashShopRepository<'a> {
 
     /// Load both KC (cash_point) and TL (bonus_cash_point) balances for an account.
     ///
-    /// C++ Reference: `CDBAgent::LoadKnightCash()` — `DBAgent.cpp:5280-5299`
     /// Selects `CashPoint, BonusCashPoint` from `TB_USER`.
     pub async fn load_kc_balances(&self, account_id: &str) -> Result<(i32, i32), sqlx::Error> {
         let row: (i32, Option<i32>) = sqlx::query_as(
@@ -129,7 +126,6 @@ impl<'a> CashShopRepository<'a> {
 
     /// Deduct amount from TL balance (bonus_cash_point).
     ///
-    /// C++ Reference: `CDBAgent::UpdateKnightCash()` — TL deduction path.
     /// Uses `bonus_cash_point` column for TL purchases.
     pub async fn deduct_tl_balance(
         &self,
@@ -149,7 +145,6 @@ impl<'a> CashShopRepository<'a> {
 
     /// Update both KC and TL balances for an account.
     ///
-    /// C++ Reference: `CDBAgent::UpdateAccountKnightCash()` — `DBAgent.cpp:5321-5334`
     /// Calls `UPDATE_BALANCE` stored procedure equivalent.
     pub async fn update_kc_balances(
         &self,
@@ -171,7 +166,6 @@ impl<'a> CashShopRepository<'a> {
 
     /// Delete a refund record after a successful item return.
     ///
-    /// C++ Reference: `CDBAgent::PusRefundItemDelete()` — `DBAgent.cpp:5572-5606`
     pub async fn delete_purchase(&self, account_id: &str, serial: i64) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM pus_refund WHERE account_id = $1 AND mserial = $2")
             .bind(account_id)

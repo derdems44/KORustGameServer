@@ -1,6 +1,4 @@
 //! NPC/Monster runtime types and packet builders.
-//!
-//! C++ Reference:
 //! - `GameServer/Npc.h` — CNpc class (runtime NPC instance)
 //! - `GameServer/NpcTable.h` — CNpcTable (static template data)
 //! - `GameServer/Npc.cpp:155-164` — GetInOut()
@@ -14,14 +12,10 @@ pub const NPC_IN: u8 = 0x01;
 pub const NPC_OUT: u8 = 0x02;
 
 /// Starting runtime ID for NPC instances.
-///
-/// C++ Reference: `#define NPC_BAND 10000` in the server code.
 /// NPC runtime IDs start at this value to avoid collision with session IDs.
 pub const NPC_BAND: u32 = 10000;
 
 /// NPC type sent for non-monster NPCs in GetNpcInfo.
-///
-/// C++ Reference had `NPC_SCARECROW = 171` for non-monster NPC type, but sniffer shows
 /// original server sends actual npc_type. Kept only for test/doc reference.
 #[allow(dead_code)]
 const NPC_SCARECROW: u8 = 171;
@@ -30,9 +24,6 @@ const NPC_SCARECROW: u8 = 171;
 pub type NpcId = u32;
 
 /// Static NPC/Monster template loaded from the database.
-///
-/// C++ Reference: `NpcTable.h` — CNpcTable
-///
 /// Contains all immutable stats and appearance data for an NPC type.
 /// Multiple NPC instances may share the same template.
 #[derive(Debug, Clone)]
@@ -73,115 +64,86 @@ pub struct NpcTemplate {
     pub ac: u16,
     /// Hit rate.
     ///
-    /// C++ Reference: `CNpcTable::m_sHitRate`
     pub hit_rate: u16,
     /// Evasion rate.
     ///
-    /// C++ Reference: `CNpcTable::m_sEvadeRate`
     pub evade_rate: u16,
     /// Damage value.
     ///
-    /// C++ Reference: `CNpcTable::m_sDamage`
     pub damage: u16,
     /// Attack delay in milliseconds.
     ///
-    /// C++ Reference: `CNpcTable::m_sAttackDelay`
     pub attack_delay: u16,
     /// Random movement speed.
     ///
-    /// C++ Reference: `CNpc::m_fSpeed_1`
     pub speed_1: u16,
     /// Chase/attack movement speed.
     ///
-    /// C++ Reference: `CNpc::m_fSpeed_2`
     pub speed_2: u16,
     /// Stand time (idle delay between actions) in milliseconds.
     ///
-    /// C++ Reference: `CNpc::m_sStandTime`
     pub stand_time: u16,
     /// Search range for enemy detection.
     ///
-    /// C++ Reference: `CNpc::m_bySearchRange`
     pub search_range: u8,
     /// Attack range (melee distance).
     ///
-    /// C++ Reference: `CNpc::m_byAttackRange`
     pub attack_range: u8,
     /// Direct attack type: 0=melee, 1=long-range, 2=magic.
     ///
-    /// C++ Reference: `CNpcTable::m_byDirectAttack`
     pub direct_attack: u8,
     /// Tracing range (extended chase range).
     ///
-    /// C++ Reference: `CNpcTable::m_byTracingRange`
     pub tracing_range: u8,
     /// Primary magic skill ID.
     ///
-    /// C++ Reference: `CNpcTable::m_iMagic1`
     pub magic_1: u32,
     /// Secondary magic skill ID.
     ///
-    /// C++ Reference: `CNpcTable::m_iMagic2`
     pub magic_2: u32,
     /// Healing magic skill ID (used by healer NPCs).
     ///
-    /// C++ Reference: `CNpcTable::m_iMagic3`
     pub magic_3: u32,
     /// Magic attack type — controls which class magic the NPC uses in combat.
     ///
-    /// C++ Reference: `CNpcTable::m_byMagicAttack`
     /// Values: 0=none, 2=melee+magic, 3=boss special, 4/5=magic primary, 6=heavy magic
     pub magic_attack: u8,
     /// Fire resistance.
     ///
-    /// C++ Reference: `CNpc::m_sFireR`
     pub fire_r: i16,
     /// Cold/ice resistance.
     ///
-    /// C++ Reference: `CNpc::m_sColdR`
     pub cold_r: i16,
     /// Lightning resistance.
     ///
-    /// C++ Reference: `CNpc::m_sLightningR`
     pub lightning_r: i16,
     /// Light magic resistance.
     ///
-    /// C++ Reference: `CNpc::m_sMagicR`
     pub magic_r: i16,
     /// Disease/curse resistance.
     ///
-    /// C++ Reference: `CNpc::m_sDiseaseR`
     pub disease_r: i16,
     /// Poison resistance.
     ///
-    /// C++ Reference: `CNpc::m_sPoisonR`
     pub poison_r: i16,
     /// Experience points awarded on kill.
     ///
-    /// C++ Reference: `CNpcTable::m_iExp`
     pub exp: u32,
     /// Loyalty (nation points) awarded on kill.
     ///
-    /// C++ Reference: `CNpcTable::m_iLoyalty`
     pub loyalty: u32,
     /// Gold amount dropped on kill.
     ///
-    /// C++ Reference: `CNpcTable::m_iMoney`
     pub money: u32,
     /// Item drop table index (references monster_item/npc_item table).
     ///
-    /// C++ Reference: `CNpcTable::m_iItem`
     pub item_table: i16,
     /// Area range for proximity effects (e.g. Santa death rewards).
     ///
-    /// C++ Reference: `CNpcTable::m_area_range`
     pub area_range: f32,
 }
 
 /// Runtime NPC instance in the game world.
-///
-/// C++ Reference: `Npc.h` — CNpc (simplified for static spawns)
-///
 /// Each instance represents a single NPC or monster placed in a zone.
 /// Multiple instances may share the same `NpcTemplate` (via `proto_id`).
 #[derive(Debug, Clone)]
@@ -214,55 +176,42 @@ pub struct NpcInstance {
     pub nation: u8,
     /// Special type from spawn data (e.g., 7 = CycleSpawn).
     ///
-    /// C++ Reference: `CNpc::m_bySpecialType`
     pub special_type: i16,
     /// Trap number for CycleSpawn NPCs (1-4).
     ///
-    /// C++ Reference: `CNpc::m_byTrapNumber`
     pub trap_number: i16,
     /// Event room ID (1-based). 0 = not in any event room.
     ///
-    /// C++ Reference: `CNpc::m_bEventRoom` in `Unit.h:554`
     /// Monster Stone rooms use `room_id + 1` (1-based).
     pub event_room: u16,
     /// Whether this NPC was spawned as an event NPC.
     ///
-    /// C++ Reference: `CNpc::m_bIsEventNpc` — set in `_AddNPC()`.
     /// Event NPCs get `m_bDelete = true` on death for cleanup.
     pub is_event_npc: bool,
     /// Summon type for event NPCs.
     ///
-    /// C++ Reference: `CNpc::e_stype` — `e_summontype` enum.
     /// 0 = none, 1 = Monster Stone boss, 2 = Juraid monster, 3 = FT monster.
     pub summon_type: u8,
 
     // ── Type 15 (barracks/pet) fields ─────────────────────────────
     /// Owner/user name for type 15 pet NPCs.
     ///
-    /// C++ Reference: `CNpc::m_strUserName` — set in `NpcThread.cpp:995`
     pub user_name: String,
     /// Pet name for type 15 pet NPCs.
     ///
-    /// C++ Reference: `CNpc::m_strPetName` — set in `NpcThread.cpp:994`
     pub pet_name: String,
     /// Clan name for type 15 proto 511 barracks NPCs.
     ///
-    /// C++ Reference: `pKnights->GetName()` in `Npc.cpp:292`
     pub clan_name: String,
     /// Clan ID for type 15 proto 511 barracks NPCs.
     ///
-    /// C++ Reference: `pKnights->GetID()` in `Npc.cpp:301`
     pub clan_id: u16,
     /// Clan mark version for type 15 proto 511 barracks NPCs.
     ///
-    /// C++ Reference: `pKnights->m_sMarkVersion` in `Npc.cpp:302`
     pub clan_mark_version: u16,
 }
 
 /// Build a `WIZ_NPC_INOUT` (0x0A) packet.
-///
-/// C++ Reference: `Npc.cpp:155-164` — `CNpc::GetInOut()`
-///
 /// Wire format:
 /// ```text
 /// [u8 type] [u32 npcId] [GetNpcInfo if type != OUT]
@@ -280,9 +229,6 @@ pub fn build_npc_inout(inout_type: u8, npc: &NpcInstance, template: &NpcTemplate
 }
 
 /// Write the GetNpcInfo block into a packet.
-///
-/// C++ Reference: `Npc.cpp:246-401` — `CNpc::GetNpcInfo()`
-///
 /// Dispatches to type-specific serialization for type 15 and type 191 NPCs.
 /// All other NPCs use the default 43-byte format.
 pub fn write_npc_info(pkt: &mut Packet, npc: &NpcInstance, tmpl: &NpcTemplate) {
@@ -294,15 +240,11 @@ pub fn write_npc_info(pkt: &mut Packet, npc: &NpcInstance, tmpl: &NpcTemplate) {
 }
 
 /// Write GetNpcInfo for **type 15** (barracks / pets).
-///
-/// C++ Reference: `Npc.cpp:250-334`
-///
 /// - Proto 511 (Barracks): includes clan name + NPC name strings, clan ID + mark version.
 /// - Other type 15 (Pets): SByte mode, includes user name + pet name strings.
 fn write_npc_info_type15(pkt: &mut Packet, npc: &NpcInstance, tmpl: &NpcTemplate) {
     if tmpl.s_sid == 511 {
         // === Type 15, Proto 511: Barracks ===
-        // C++ Reference: Npc.cpp:254-304
         pkt.write_u16(tmpl.s_sid);
         pkt.write_u8(2); // always NPC
         pkt.write_u16(tmpl.pid);
@@ -329,7 +271,6 @@ fn write_npc_info_type15(pkt: &mut Packet, npc: &NpcInstance, tmpl: &NpcTemplate
         pkt.write_i16(npc.direction as i16);
     } else {
         // === Type 15, non-511: Pets/Summons ===
-        // C++ Reference: Npc.cpp:307-331
         //
         // C++ calls `pkt.SByte()` which sets mode to u8-length-prefix for strings.
         // SByte() writes NOTHING — it only sets the mode flag (m_doubleByte=false).
@@ -360,9 +301,6 @@ fn write_npc_info_type15(pkt: &mut Packet, npc: &NpcInstance, tmpl: &NpcTemplate
 }
 
 /// Write GetNpcInfo for **type 191** (Guard Towers).
-///
-/// C++ Reference: `Npc.cpp:336-357`
-///
 /// Same binary layout as default (43 bytes) but always sends:
 /// - `uint8(2)` for isMonster flag (always NPC)
 /// - `GetType()` (191) instead of NPC_SCARECROW
@@ -388,8 +326,7 @@ fn write_npc_info_type191(pkt: &mut Packet, npc: &NpcInstance, tmpl: &NpcTemplat
     pkt.write_i16(npc.direction as i16);
 }
 
-/// Guard summon proto ID (C++ `Define.h:481` — `#define GUARD_SUMMON 8850`).
-///
+/// Guard summon proto ID (`Define.h:481` — `#define GUARD_SUMMON 8850`).
 /// Guard summons are special monster NPCs that retain their nation in packets,
 /// unlike regular monsters which always send nation=0.
 const GUARD_SUMMON: u16 = 8850;
@@ -397,17 +334,12 @@ const GUARD_SUMMON: u16 = 8850;
 use crate::npc_type_constants::{NPC_DESTROYED_ARTIFACT, NPC_GATE};
 
 /// Check if an NPC is a CSW door.
-///
-/// C++ Reference: `Npc.h:107-113` -- `isCswDoors()`
 /// CSW doors are proto IDs 561, 562, 563 with NPC_GATE type.
 fn is_csw_door(proto_id: u16, npc_type: u8) -> bool {
     matches!(proto_id, 561..=563) && npc_type == NPC_GATE
 }
 
 /// Write GetNpcInfo for **default** NPC types (all except 15 and 191).
-///
-/// C++ Reference: `Npc.cpp:359-401`
-///
 /// Wire format (43 bytes):
 /// ```text
 /// [u16 protoId] [u8 1=monster/2=npc] [u16 pictureId] [u32 sellingGroup]
@@ -429,7 +361,6 @@ fn write_npc_info_default(pkt: &mut Packet, npc: &NpcInstance, tmpl: &NpcTemplat
     pkt.write_u32(tmpl.selling_group);
 
     // NPC type — sniffer verified: original server sends actual npc_type for ALL NPCs.
-    // C++ Reference said NPC_SCARECROW (171) for non-monsters, but sniffer shows:
     //   guards=11, merchants=22, event=46, blacksmith=77, innhost=31, etc.
     // The npc_type determines client interaction menu (shop, quest, dialog, etc.)
     //
@@ -445,7 +376,7 @@ fn write_npc_info_default(pkt: &mut Packet, npc: &NpcInstance, tmpl: &NpcTemplat
     pkt.write_u32(tmpl.weapon_1);
     pkt.write_u32(tmpl.weapon_2);
 
-    // Nation determination — C++ Reference: `Npc.cpp:377-389`
+    // Nation determination
     //
     // ```cpp
     // if (isGuardSummon())
@@ -765,7 +696,6 @@ mod tests {
 
     #[test]
     fn test_type191_guard_tower_sends_actual_type() {
-        // C++ Reference: Npc.cpp:336-357 — type 191 sends GetType() (191), NOT NPC_SCARECROW
         let mut tmpl = test_template();
         tmpl.is_monster = false;
         tmpl.npc_type = 191;
@@ -826,7 +756,6 @@ mod tests {
 
     #[test]
     fn test_type15_barracks_proto511_packet_format() {
-        // C++ Reference: Npc.cpp:254-304 — type 15 proto 511 includes strings
         let mut tmpl = test_template();
         tmpl.is_monster = false;
         tmpl.npc_type = 15;
@@ -880,7 +809,6 @@ mod tests {
 
     #[test]
     fn test_type15_barracks_no_clan_empty_string() {
-        // C++ Reference: Npc.cpp:258-280 — no clan = empty string
         let mut tmpl = test_template();
         tmpl.is_monster = false;
         tmpl.npc_type = 15;
@@ -933,7 +861,6 @@ mod tests {
 
     #[test]
     fn test_type15_pet_packet_format() {
-        // C++ Reference: Npc.cpp:307-331 — pet format with SByte mode
         // C++ SByte() sets mode flag (writes nothing), then strings use u8-length-prefix.
         let mut tmpl = test_template();
         tmpl.is_monster = false;
@@ -1002,7 +929,6 @@ mod tests {
 
     #[test]
     fn test_destroyed_artifact_nation_override_to_zero() {
-        // C++ Reference: Npc.cpp:384-389 — NPC_DESTROYED_ARTIFACT always gets bNation=0
         // (when userClanID == 0, i.e., broadcast path)
         let mut tmpl = test_template();
         tmpl.is_monster = false;
@@ -1034,7 +960,6 @@ mod tests {
 
     #[test]
     fn test_csw_door_561_nation_override_to_zero() {
-        // C++ Reference: Npc.h:107-113 — isCswDoors() = proto 561/562/563 + NPC_GATE
         let mut tmpl = test_template();
         tmpl.is_monster = false;
         tmpl.npc_type = 50; // NPC_GATE
@@ -1246,7 +1171,6 @@ mod tests {
 
     #[test]
     fn test_guard_summon_keeps_nation_karus() {
-        // C++ Reference: Npc.cpp:379-380 — isGuardSummon() → bNation = GetNation()
         // Guard summon (proto 8850) is a monster but retains its nation.
         let mut tmpl = test_template();
         tmpl.is_monster = true;

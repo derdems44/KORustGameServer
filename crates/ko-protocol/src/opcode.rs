@@ -1,12 +1,9 @@
 //! Opcode definitions for Knight Online packets.
-//!
 //! Game Server opcodes correspond to `WIZ_*` constants,
 //! Login Server opcodes correspond to `LS_*` constants.
-//! See `KOOriginalGameServer/shared/packets.h` and
-//! `KOOriginalGameServer/LoginServer/LoginSession.h` for originals.
+//! See  and
 
 /// Enumeration of all known packet opcodes.
-///
 /// Opcodes are transmitted as a single byte in the packet header.
 /// Values are sourced from the C++ reference implementation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -139,15 +136,12 @@ pub enum Opcode {
     WizConcurrentUser = 0x36,
     /// User data periodic DB save request.
     ///
-    /// C++ Reference: `packets.h:57` — `#define WIZ_DATASAVE 0x37`
     WizDatasave = 0x37,
     /// Item durability change notification (server→client).
     ///
-    /// C++ Reference: `packets.h:58` — `#define WIZ_DURATION 0x38`
     WizDuration = 0x38,
     /// NPC repair/tinker shop open (server→client).
     ///
-    /// C++ Reference: `packets.h` — `WIZ_REPAIR_NPC = 0x3A`
     WizRepairNpc = 0x3A,
     /// Item repair processing.
     WizItemRepair = 0x3B,
@@ -173,13 +167,11 @@ pub enum Opcode {
     WizServerCheck = 0x43,
     /// Virtual server / channel change request.
     ///
-    /// C++ Reference: `packets.h:78` — `#define WIZ_VIRTUAL_SERVER 0x4C`
     WizVirtualServer = 0x4C,
     /// Warehouse open, in, out.
     WizWarehouse = 0x45,
     /// Report bug to the manager (no-op in C++).
     ///
-    /// C++ Reference: `packets.h:73` — `#define WIZ_REPORT_BUG 0x47`
     WizReportBug = 0x47,
     /// Come back home (return to town).
     WizHome = 0x48,
@@ -207,31 +199,25 @@ pub enum Opcode {
     WizNpcSay = 0x56,
     /// Battle event results (rankings, bulletin board).
     ///
-    /// C++ Reference: `packets.h:89` — `#define WIZ_BATTLE_EVENT 0x57`
     WizBattleEvent = 0x57,
     /// Authority / fame change broadcast (war commander, clan leader).
     ///
-    /// C++ Reference: `packets.h:90` — `#define WIZ_AUTHORITY_CHANGE 0x58`
     WizAuthorityChange = 0x58,
     /// Edit box / PPCard (product key redemption) system.
     ///
-    /// C++ Reference: `packets.h:91` — `#define WIZ_EDIT_BOX 0x59`
     WizEditBox = 0x59,
     /// Flying Santa Claus / Angel visual event.
     ///
-    /// C++ Reference: `packets.h:92` — `#define WIZ_SANTA 0x5A`
     WizSanta = 0x5A,
     /// Item upgrade.
     WizItemUpgrade = 0x5B,
     /// Zone ability — status effects (DOT cure, poison cure, etc.).
     ///
-    /// C++ Reference: `packets.h:96` — `#define WIZ_ZONEABILITY 0x5E`
     WizZoneability = 0x5E,
     /// Event system.
     WizEvent = 0x5F,
     /// Stealth state reset (server→client).
     ///
-    /// C++ Reference: `packets.h:98` — `#define WIZ_STEALTH 0x60`
     WizStealth = 0x60,
 
     // ---------------------------------------------------------------
@@ -279,11 +265,9 @@ pub enum Opcode {
     WizBifrost = 0x7B,
     /// Sheriff report system (WIZ_REPORT).
     ///
-    /// C++ Reference: `packets.h:126` -- `#define WIZ_REPORT 0x7C`
     WizReport = 0x7C,
     /// Logos shout / server-wide announcement with colors.
     ///
-    /// C++ Reference: `packets.h:127` — `#define WIZ_LOGOSSHOUT 0x7D`
     WizLogosshout = 0x7D,
 
     // ---------------------------------------------------------------
@@ -294,17 +278,14 @@ pub enum Opcode {
     WizRank = 0x80,
     /// Story / intro cutscene (server→client only).
     ///
-    /// C++ Reference: `packets.h:131` — `#define WIZ_STORY 0x81`
     WizStory = 0x81,
     /// Nation transfer.
     WizNationTransfer = 0x82,
     /// Terrain effects notification (server→client only).
     ///
-    /// C++ Reference: `packets.h:139` — `#define WIZ_TERRAIN_EFFECTS 0x83`
     WizTerrainEffects = 0x83,
     /// Moving tower (siege tower boarding/dismounting).
     ///
-    /// C++ Reference: `packets.h:140` — `#define WIZ_MOVING_TOWER 0x84`
     WizMovingTower = 0x84,
     /// Mining system.
     WizMining = 0x86,
@@ -312,7 +293,6 @@ pub enum Opcode {
     WizHelmet = 0x87,
     /// PVP rivalry system.
     ///
-    /// C++ Reference: `packets.h` — `#define WIZ_PVP 0x88`
     WizPvp = 0x88,
     /// Change hair/face at character select.
     WizChangeHair = 0x89,
@@ -338,23 +318,19 @@ pub enum Opcode {
     // ---------------------------------------------------------------
     /// Area sound effect (server→client).
     ///
-    /// C++ Reference: `packets.h:169` — `#define WIZ_SOUND 0xB5`
     WizSound = 0xB5,
     /// Wanted (Vanguard) event system.
     WizVanguard = 0xB6,
 
     /// Stat/Skill preset system (save/load stat and skill configurations).
     ///
-    /// C++ Reference: `packets.h:172` — `#define WIZ_PRESET 0xB9`
     WizPreset = 0xB9,
     /// Auto-loot / auto-drop configuration (client-sent, server ignores).
     ///
-    /// C++ Reference: `packets.h:217` — `AUTODROP = 0xBA`
     WizAutoDrop = 0xBA,
 
     /// Merchant search/list system — search for items being sold by merchants.
     ///
-    /// C++ Reference: `packets.h:220` — `MERCHANTLIST = 0xBD`
     WizMerchantList = 0xBD,
 
     // ---------------------------------------------------------------
@@ -388,7 +364,6 @@ pub enum Opcode {
     // ---------------------------------------------------------------
     /// Captcha verification (anti-bot check).
     ///
-    /// C++ Reference: `packets.h` — `WIZ_CAPTCHA = 0xC0`
     WizCaptcha = 0xC0,
     /// Daily ranking system.
     WizDailyRank = 0xC2,
@@ -398,7 +373,6 @@ pub enum Opcode {
     WizSoul = 0xC5,
     /// Daily quest (v2525 native — replaces ext_hook sub 0xD3 for >= v2369).
     ///
-    /// C++ Reference: `DailyQuest.cpp` — `#if(__VERSION < 2369)` uses ext_hook,
     /// v2525 uses this dedicated opcode.
     WizDailyQuest = 0xC7,
     /// Awakening system (v2525 native, inline handler).
@@ -417,7 +391,6 @@ pub enum Opcode {
     // ---------------------------------------------------------------
     /// Clan warehouse (shared bank) open, input, output, move.
     ///
-    /// C++ Reference: `packets.h:134` — `#define WIZ_CLAN_WAREHOUSE 0xD1`
     WizClanWarehouse = 0xD1,
     /// Rebirth system (v2525 native, inline handler).
     WizRebirth = 0xD3,
@@ -429,7 +402,6 @@ pub enum Opcode {
     WizSeason = 0xD7,
     /// Scrolling notice message (used for merchant wind notice, etc.).
     ///
-    /// C++ Reference: `packets.h:161` — `#define WIZ_ADD_MSG 0xDB`
     /// **WARNING**: Outside v2525 GameMain range (0x06-0xD7), silently dropped.
     WizAddMsg = 0xDB,
 
@@ -444,7 +416,6 @@ pub enum Opcode {
     WizPartyHp = 0xE8,
     /// Extended hook — opcode container for perks, death notice, KC, lottery, etc.
     ///
-    /// C++ Reference: `packets.h:182` — `#define WIZ_EXT_HOOK 0xE9`
     /// **WARNING**: Outside v2525 GameMain range (0x06-0xD7), silently dropped.
     /// S2C packets should use `Opcode::EXT_HOOK_S2C` (0x9C) instead.
     WizExtHook = 0xE9,
@@ -468,7 +439,6 @@ pub enum Opcode {
     WizClanPremium = 0x5C,
     /// Player state flag update (S2C only, v2525).
     ///
-    /// C++ Reference: `packets.h:95` — `#define WIZ_PACKET2 0x5D`
     /// No C++ server handler — client has real handler at `0x82E1E8`.
     /// Sets a byte flag at `player_object+0xB69` (visual/transform state).
     WizPacket2 = 0x5D,
@@ -737,8 +707,6 @@ impl Opcode {
 }
 
 /// Login Server opcodes.
-///
-/// C++ Reference: `KOOriginalGameServer/LoginServer/LoginSession.h` (LogonOpcodes enum)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum LoginOpcode {
