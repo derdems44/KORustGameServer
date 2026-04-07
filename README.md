@@ -1,9 +1,10 @@
 # Knight Online Rust Server
 
-A modern Knight Online game server implementation written in Rust from scratch,
-fully compatible with the v2603 client. This project replaces the original C++
-server with a safe, concurrent, and maintainable Rust codebase while preserving
-byte-perfect protocol compatibility with the unmodified game client.
+A clean-room game server implementation written in Rust, designed to be
+compatible with the v2603 Knight Online client. Built entirely from protocol
+analysis and publicly available documentation, without using any original
+server source code. The server maintains byte-perfect protocol compatibility
+with the unmodified game client.
 
 ## Features
 
@@ -47,7 +48,7 @@ byte-perfect protocol compatibility with the unmodified game client.
 
 ### NPC Dialog System
 - **Lua-scripted NPC dialogs** -- quest text, shop menus, warp lists
-- **Dialog builder tooling** -- automated Lua generation from sniffer captures
+- **Dialog builder tooling** -- automated Lua generation from packet captures
 - **Action-aware menus** -- shop, exchange, disassemble, special UI, warp, mall, quest
 
 ### Infrastructure
@@ -85,8 +86,8 @@ byte-perfect protocol compatibility with the unmodified game client.
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-org/KnightOnlineRustServer.git
-cd KnightOnlineRustServer
+git clone https://github.com/derdems44/KORustGameServer.git
+cd KORustGameServer
 ```
 
 2. Create your environment file:
@@ -192,10 +193,10 @@ protocol analysis. See [tools/README.md](tools/README.md) for detailed usage.
 
 Key tools:
 - **packet_analyzer.py** -- Session overview and opcode grouping
-- **dialog_builder.py** -- NPC dialog Lua script generator from sniffer data
+- **dialog_builder.py** -- NPC dialog Lua script generator from packet data
 - **quest_lua_gen.py** -- Quest script generator from TBL table data
 - **flow_analyzer.py** -- Multi-packet sequence tracing
-- **struct_extractor.py** -- Packet format reverse engineering helper
+- **struct_extractor.py** -- Packet format analysis helper
 
 ## Development
 
@@ -250,18 +251,28 @@ Contributions are welcome. Please follow these guidelines:
 ### Protocol Development Workflow
 
 When implementing a new packet handler:
-1. Analyze the client binary to understand the packet parse/build logic
-2. Capture the packet from a reference server using sniffer tools
-3. Cross-validate the binary analysis with captured bytes
-4. Implement the Rust handler matching both sources
-5. Write roundtrip tests verifying byte-perfect serialization
+1. Study the packet format from protocol documentation and community resources
+2. Implement the Rust struct with `binrw` and appropriate field types
+3. Write roundtrip tests verifying byte-perfect serialization
+4. Implement the handler logic with proper validation and error handling
+5. Run the full test suite to ensure no regressions
 
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
-## Acknowledgments
+## Disclaimer
 
-Knight Online is a registered trademark of NTTGame/MGame. This project is an
-independent server implementation for educational and private server purposes.
-It is not affiliated with or endorsed by the original game developers.
+This project is an independent, clean-room server implementation created for
+educational and research purposes. It was built entirely through protocol
+analysis and publicly available community documentation, without access to or
+use of any proprietary server source code.
+
+Knight Online is a registered trademark of NTTGame/MGame Corporation. This
+project is not affiliated with, endorsed by, or connected to the original game
+developers or publishers in any way.
+
+**This software is provided as-is for learning purposes.** Users are solely
+responsible for ensuring their use of this software complies with all
+applicable laws and terms of service. The authors assume no liability for any
+misuse of this software.

@@ -1,6 +1,6 @@
 # KO Packet Analysis & NPC Dialog Tools
 
-Reverse-engineering and development tools for Knight Online server protocol analysis.
+Development and protocol analysis tools for Knight Online server development.
 All tools share the `lib/` module for crypto, opcode lookup, and database access.
 
 ## Prerequisites
@@ -152,7 +152,7 @@ Built-in flow templates:
 
 ---
 
-### 3. struct_extractor.py -- Packet Format Reverse Engineering
+### 3. struct_extractor.py -- Packet Format Analysis
 
 Compares multiple instances of the same opcode to find field boundaries
 (constant vs variable bytes, likely field types).
@@ -423,7 +423,7 @@ Container requirement: `ko-postgres` Docker container running with `koserver` us
 1. Start sniffer       -> populates pkt.sessions, pkt.packets
 2. packet_analyzer.py  -> overview of what opcodes were captured
 3. flow_analyzer.py    -> trace specific protocol flows
-4. struct_extractor.py -> reverse-engineer unknown packet formats
+4. struct_extractor.py -> analyze unknown packet formats
 5. dialog_builder.py   -> generate NPC dialog Lua scripts
 6. dialog_monitor.py   -> live-track coverage while clicking NPCs
 7. session_diff.py     -> compare original vs custom server
